@@ -1,77 +1,108 @@
-# React + TypeScript + Vite
+# B-Visionn
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-Currently, two official plugins are available:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+B-Visionn
+Sistema web interno desenvolvido para gestão de boletos, pendências e contratos de representantes comerciais. Projeto real criado para resolver problemas do dia a dia em ambiente corporativo.
+ 
+ ![Tela Inicial](images/tela-inicial.png)
+ ![Tela Inicial](images/tela-inicio.png)
 
-## React Compiler
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+📋 Sobre o projeto
+Este sistema nasceu de uma necessidade real: melhorar a supervisão do setor financeiro de uma empresa, centralizando o controle de boletos a pagar, prorrogações e distribuição de tarefas entre a equipe.
+Antes do sistema, o controle era feito manualmente em planilhas, sem visibilidade em tempo real e sem rastreamento de responsabilidades.
 
-Note: This will impact Vite dev & build performances.
 
-## Expanding the ESLint configuration
+✨ Funcionalidades
+•	Dashboard com indicadores em tempo real 
+•	Prorrogação de boletos com registro de motivo e data
+•	Aba de pendências com atribuição por funcionária
+•	Controle de acesso por perfil (Supervisora e Funcionárias)
+•	Gerador de contratos de representantes comerciais
+•	Calendário de vencimentos
+•	Alertas de boletos próximos do vencimento
+•	Exportação para em PDF
+•	Modo escuro
+•	Design responsivo (desktop, tablet e mobile)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+🚀 Tecnologias utilizadas
+Tecnologia	    Uso
+React 18	    Interface e componentes
+Recharts	    Gráficos interativos
+SheetJS	        Exportação para Excel
+jsPDF	        Exportação para PDF
+Lucide Icons	Ícones modernos
+CSS Variables	Tema claro/escuro
+LocalStorage	Persistência de dados
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 
-```
+🔐 Perfis de acesso (RBAC)
+O sistema implementa controle de acesso baseado em papéis:
+Perfil	Permissões
+Supervisora	Acesso total: cadastro, prorrogação, atribuição, contratos
+Funcionária 1	Visualiza e atualiza apenas suas pendências
+Funcionária 2	Visualiza e atualiza apenas suas pendências
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+![Tela Inicial](images/tela-auditoria.png)
+![Tela Inicial](images/tela-pendencias.png)
+![Tela Inicial](images/tela-tarefas.png)
+![Tela Inicial](images/tela-calendario.png)
+![Tela Inicial](images/tela-modelodecontratosupervisor.png)
+![Tela Inicial](images/tela-impressao.png)
+![Tela Inicial](images/tela-configuracoes.png)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 
-```
+⚙️ Como rodar localmente
+# Clone o repositório
+git clone https://github.com/barbaratechdev/B-Visionn.git
+
+# Acesse a pasta
+cd B-Visionn
+
+# Instale as dependências
+npm install
+
+# Rode o projeto
+npm run dev
+Acesse em http://localhost:5173
+
+
+📁 Estrutura do projeto
+src/
+├── assets/
+├── App.css
+├── App.tsx
+├── index.css
+└── main.tsx
+
+public/
+
+images/
+
+package.json
+vite.config.ts
+tsconfig.json
+README.md
+
+
+
+🧠 Conceitos aplicados
+Este projeto foi desenvolvido como parte da minha jornada em Engenharia de Software e aplica na prática os seguintes conceitos:
+•	RBAC (Role-Based Access Control) — controle de permissões por perfil
+•	Audit log — histórico de alterações em boletos
+•	Component-driven development — interface construída em componentes reutilizáveis
+•	Estado global — gerenciamento de dados entre telas
+•	UX/UI — design orientado à experiência do usuário real
+
+
+👩💻 Autora
+Desenvolvido por Barbára Pinon 
+Estudante de Engenharia de Software.
+
+
+"Esse projeto resolve um problema real — e foi isso que me motivou a construí-lo."
+
