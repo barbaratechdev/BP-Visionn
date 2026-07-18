@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type CSSProperties } from "react";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, TrendingUp, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList } from "lucide-react";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, TrendingUp, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users } from "lucide-react";
 
-type User = { id:string; name:string; role:string; setor:string; initials:string; color:string; senha:string; };
+type User = { id:string; name:string; role:string; setor:string; initials:string; color:string; senha:string; photo?:string|null; email?:string; status?:"online"|"away"|"offline"; lastAccess?:string; };
 type Tarefa = { id:number; fornecedor:string; valor:number | string; vencimento:string; status:string; responsavel:string; obs:string; historico:Array<{data:string; novoVencimento:string; motivo:string}>; };
 type Contrato = { id:number; representante:string; cpfCnpj:string; porcentagem:string; email:string; telefone:string; dataInicio:string; tipo:string; status?:string; };
 type Prorrogacao = { id:number; fornecedor:string; nf:string; vencimento:string; estado:string; };
@@ -10,14 +10,14 @@ type Notif = { id:number; msg:string; time:string; read:boolean; };
 type AuditEntry = { id:number; tipo:string; tarefa:string; usuario:string; hora:string; detalhe:string; };
 
 const LIGHT = { bg:"#F8FAFC",white:"#FFFFFF",text:"#111827",muted:"#6B7280",border:"#E5E7EB",blue:"#2563EB",blueSoft:"#EFF6FF",blueText:"#1D4ED8",green:"#22C55E",greenSoft:"#F0FDF4",greenText:"#15803D",red:"#EF4444",redSoft:"#FEF2F2",redText:"#B91C1C",orange:"#F59E0B",orangeSoft:"#FFFBEB",orangeText:"#B45309",gray:"#E5E7EB",purple:"#8B5CF6",purpleSoft:"#F5F3FF",purpleText:"#6D28D9" };
-const DARK  = { bg:"#0F172A",white:"#1E293B",text:"#F1F5F9",muted:"#94A3B8",border:"#334155",blue:"#3B82F6",blueSoft:"#1E3A5F",blueText:"#93C5FD",green:"#22C55E",greenSoft:"#14532D",greenText:"#86EFAC",red:"#EF4444",redSoft:"#450A0A",redText:"#FCA5A5",orange:"#F59E0B",orangeSoft:"#431407",orangeText:"#FCD34D",gray:"#334155",purple:"#8B5CF6",purpleSoft:"#2E1065",purpleText:"#C4B5FD" };
+const DARK  = { bg:"#070A13",white:"#0F1526",text:"#F5F7FA",muted:"#8D99AE",border:"#212B42",blue:"#3E93FF",blueSoft:"#132B54",blueText:"#7EB8FF",green:"#22C55E",greenSoft:"#0F3D28",greenText:"#4ADE80",red:"#F0585F",redSoft:"#3A171A",redText:"#F79A9E",orange:"#EFA857",orangeSoft:"#3D2A12",orangeText:"#F7C888",gray:"#212B42",purple:"#A78BFA",purpleSoft:"#2A2059",purpleText:"#D3C2FB" };
 
 const USUARIOS = [
-  { id:"supervisora", name:"Bárbara",      role:"admin", setor:"Supervisão", initials:"BA", color:"#2563EB", senha:"adm123" },
-  { id:"Esmeralda",       name:"Esmeralda",        role:"func",  setor:"Financeiro", initials:"AD", color:"#8B5CF6", senha:"adm123" },
-  { id:"ana",         name:"Ana", role:"func",  setor:"Financeiro", initials:"AC", color:"#F59E0B", senha:"adm123"   },
-  { id:"Maria",      name:"Maria",       role:"func",  setor:"RH",         initials:"MA", color:"#22C55E", senha:"adm123"},
-  { id:"Victor",       name:"Victor",        role:"func",  setor:"Cadastro",   initials:"PA", color:"#EF4444", senha:"adm123" },
+  { id:"supervisora", name:"Bárbara",      role:"admin", setor:"Supervisão", initials:"BA", color:"#2563EB", senha:"adm123", email:"barbara@bvisionn.com", status:"online" as const },
+  { id:"Esmeralda",       name:"Esmeralda",        role:"func",  setor:"Financeiro", initials:"AD", color:"#8B5CF6", senha:"adm123", email:"esmeralda@bvisionn.com", status:"online" as const },
+  { id:"ana",         name:"Ana", role:"func",  setor:"Financeiro", initials:"AC", color:"#F59E0B", senha:"adm123", email:"ana@bvisionn.com", status:"online" as const   },
+  { id:"Maria",      name:"Maria",       role:"func",  setor:"RH",         initials:"MA", color:"#22C55E", senha:"adm123", email:"maria@bvisionn.com", status:"online" as const},
+  { id:"Victor",       name:"Victor",        role:"func",  setor:"Cadastro",   initials:"PA", color:"#EF4444", senha:"adm123", email:"victor@bvisionn.com", status:"online" as const },
 ];
 
 const hoje = new Date().toISOString().split("T")[0];
@@ -55,28 +55,82 @@ function fillTpl(tpl, d){
 function nowT(){ return new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}); }
 function nowF(){ return new Date().toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
 
+function loadTarefas(): Tarefa[] {
+  try {
+    const raw = localStorage.getItem("bvisionn_tarefas");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+const TIPOS_IMG_PERMITIDOS = ["image/png","image/jpeg"];
+const TAMANHO_MAX_IMG = 5*1024*1024;
+function validarImagem(file){
+  if(!TIPOS_IMG_PERMITIDOS.includes(file.type)) return {ok:false, erro:"Formato não suportado. Envie uma imagem PNG, JPG ou JPEG."};
+  if(file.size>TAMANHO_MAX_IMG) return {ok:false, erro:"Arquivo muito grande. O limite é 5MB."};
+  return {ok:true};
+}
+function lerComoDataURL(file){
+  return new Promise<string>((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>resolve(reader.result as string);
+    reader.onerror = ()=>reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 function Badge(p) {
   const m = { pendente:{label:"Pendente",bg:"#FFFBEB",c:"#B45309",dot:"#F59E0B"}, pago:{label:"Concluída",bg:"#F0FDF4",c:"#15803D",dot:"#22C55E"}, prorrogado:{label:"Prorrogado",bg:"#EFF6FF",c:"#1D4ED8",dot:"#2563EB"}, vencido:{label:"Urgente",bg:"#FEF2F2",c:"#B91C1C",dot:"#EF4444"} };
   const s = m[p.status] || m.pendente;
   return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:s.bg,color:s.c,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}><span style={{width:5,height:5,borderRadius:"50%",background:s.dot}}></span>{s.label}</span>;
 }
 
+const STATUS_COR = { online:"#22C55E", away:"#F59E0B", offline:"#94A3B8" };
 function Av(p) {
   const size = p.size || 36;
   const color = p.color || "#2563EB";
-  return <div style={{width:size,height:size,borderRadius:"50%",background:color+"33",color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:size*0.36,flexShrink:0,border:"1.5px solid "+color+"55"}}>{p.initials||getIn(p.name)}</div>;
+  const D = p.D;
+  const statusCor = p.status && (D ? {online:D.green,away:D.orange,offline:D.muted}[p.status] : STATUS_COR[p.status]);
+  const nucleo = p.photo
+    ? <img src={p.photo} alt={p.name||"Foto de perfil"} style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",flexShrink:0,border:"1.5px solid "+color+"55",boxShadow:"0 2px 8px rgba(15,23,42,0.12)"}}/>
+    : <div style={{width:size,height:size,borderRadius:"50%",background:color+"33",color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:size*0.36,flexShrink:0,border:"1.5px solid "+color+"55"}}>{p.initials||getIn(p.name)}</div>;
+  if(!statusCor) return nucleo;
+  return (
+    <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
+      {nucleo}
+      <span style={{position:"absolute",right:-1,bottom:-1,width:Math.max(9,size*0.28),height:Math.max(9,size*0.28),borderRadius:"50%",background:statusCor,border:"2px solid "+(p.ringColor||"#fff")}}></span>
+    </div>
+  );
 }
 
 function MCard(p) {
   return (
-    <div style={{background:p.D.white,borderRadius:14,border:"1.5px solid "+(p.highlight||p.D.border),padding:"1.25rem",display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{display:"flex",justifyContent:"space-between"}}>
-        <div style={{width:40,height:40,borderRadius:10,background:p.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><p.Icon size={20} color={p.color}/></div>
-        <TrendingUp size={14} color={p.D.muted}/>
+    <div className="bv-stat-card" style={{background:p.D.white,borderRadius:18,border:"1.5px solid "+(p.highlight||p.D.border),padding:"1.6rem",display:"flex",flexDirection:"column",gap:16,boxShadow:"0 1px 2px rgba(15,23,42,0.04), 0 12px 28px rgba(15,23,42,0.06)"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{width:46,height:46,borderRadius:13,background:p.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><p.Icon size={22} color={p.color}/></div>
+        <div style={{width:26,height:26,borderRadius:"50%",background:p.D.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><TrendingUp size={13} color={p.D.muted}/></div>
       </div>
-      <div style={{fontSize:28,fontWeight:700,color:p.highlight||p.D.text,lineHeight:1}}>{p.value}</div>
+      <div style={{fontSize:32,fontWeight:700,color:p.highlight||p.D.text,lineHeight:1,letterSpacing:"-0.5px"}}>{p.value}</div>
       <div style={{fontSize:13,color:p.D.muted}}>{p.label}</div>
     </div>
+  );
+}
+
+function Donut(p) {
+  const size = p.size||140, stroke=16, r=(size-stroke)/2, c=2*Math.PI*r;
+  const total = p.data.reduce((s,d)=>s+d.value,0);
+  let offset = 0;
+  return (
+    <svg width={size} height={size} viewBox={"0 0 "+size+" "+size}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={p.D.gray} strokeWidth={stroke}/>
+      {total>0 && p.data.filter(d=>d.value>0).map(d=>{
+        const len = (d.value/total)*c;
+        const seg = <circle key={d.label} cx={size/2} cy={size/2} r={r} fill="none" stroke={d.color} strokeWidth={stroke} strokeDasharray={len+" "+(c-len)} strokeDashoffset={-offset} transform={"rotate(-90 "+size/2+" "+size/2+")"} style={{transition:"stroke-dasharray .4s ease"}}/>;
+        offset += len;
+        return seg;
+      })}
+    </svg>
   );
 }
 
@@ -142,7 +196,7 @@ function Calendario(p) {
         <button style={st.btn} onClick={nextM}>›</button>
         <button style={{...st.btn,fontSize:12,padding:"6px 12px"}} onClick={()=>{setMes(hd.getMonth());setAno(hd.getFullYear());}}>Hoje</button>
       </div>
-      <div style={{...st.card,padding:"1rem",marginBottom:16}}>
+      <div className="bv-card" style={{...st.card,padding:"1rem",marginBottom:16}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
           {DSEM.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:600,color:D.muted,padding:"6px 0"}}>{d}</div>)}
           {cells.map((d,i)=>{
@@ -161,7 +215,7 @@ function Calendario(p) {
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <div style={st.card}>
+        <div className="bv-card" style={st.card}>
           <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:12}}>{diaSel?"Dia "+diaSel+" de "+MESES[mes]:"Selecione um dia"}</div>
           {diaSel&&(()=>{
             const evs=doDia(diaSel);
@@ -214,7 +268,7 @@ function Calendario(p) {
           )}
           {!form&&diaSel&&<button style={{...st.btn,marginTop:12,fontSize:12,width:"100%",justifyContent:"center"}} onClick={()=>setForm(true)}><Plus size={13}/>Adicionar evento</button>}
         </div>
-        <div style={st.card}>
+        <div className="bv-card" style={st.card}>
           <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:12}}>Próximos eventos</div>
           {prox.length===0&&<div style={{color:D.muted,fontSize:13,textAlign:"center",padding:"1rem 0"}}>Nenhum evento próximo.</div>}
           {prox.map(ev=>{
@@ -239,15 +293,95 @@ function Calendario(p) {
   );
 }
 
+function MiniCalendario(p) {
+  const D = p.D; const st = p.st;
+  const hd = new Date();
+  const mes = hd.getMonth(); const ano = hd.getFullYear();
+  const prim = new Date(ano, mes, 1).getDay();
+  const ndias = new Date(ano, mes+1, 0).getDate();
+  const m2 = String(mes+1).padStart(2,"0");
+  const mStr = ano+"-"+m2;
+  const diasComEvento = new Set(
+    p.tarefas.filter(t=>t.vencimento && t.vencimento.indexOf(mStr)===0).map(t=>Number(t.vencimento.split("-")[2]))
+  );
+  const cells = [];
+  for(let i=0;i<prim;i++) cells.push(null);
+  for(let d=1;d<=ndias;d++) cells.push(d);
+
+  return (
+    <div className="bv-card" style={st.card}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{fontWeight:600,fontSize:14,color:D.text}}>Calendário</div>
+        <span style={{fontSize:12,color:D.muted,fontWeight:500}}>{MESES[mes]} {ano}</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2}}>
+        {DSEM.map(d=><div key={d} style={{textAlign:"center",fontSize:10,fontWeight:600,color:D.muted,padding:"2px 0"}}>{d[0]}</div>)}
+        {cells.map((d,i)=>{
+          if(!d) return <div key={"e"+i}/>;
+          const isH = d===hd.getDate();
+          const has = diasComEvento.has(d);
+          return (
+            <div key={"d"+d} style={{textAlign:"center",fontSize:11,padding:"5px 0",borderRadius:6,fontWeight:isH?700:400,color:isH?D.blue:D.text,background:isH?D.blueSoft:"transparent",position:"relative"}}>
+              {d}
+              {has&&!isH&&<span style={{position:"absolute",bottom:1,left:"50%",transform:"translateX(-50%)",width:4,height:4,borderRadius:"50%",background:D.orange}}/>}
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={()=>p.setTab("calendario")} style={{marginTop:10,padding:"10px 0 0",borderTop:"1px solid "+D.border,borderLeft:"none",borderRight:"none",borderBottom:"none",width:"100%",background:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",color:D.blue,fontSize:12,fontWeight:600}}>Ver calendário completo<ChevronRight size={14}/></button>
+    </div>
+  );
+}
+
+function StatusDonutCard(p) {
+  const D = p.D; const st = p.st;
+  const tarefas = p.tarefas;
+  const statusData = [
+    {label:"Pendente",   value:tarefas.filter(t=>t.status==="pendente").length,   color:D.orange},
+    {label:"Vencido",    value:tarefas.filter(t=>t.status==="vencido").length,    color:D.red},
+    {label:"Prorrogado", value:tarefas.filter(t=>t.status==="prorrogado").length, color:D.blue},
+    {label:"Concluída",  value:tarefas.filter(t=>t.status==="pago").length,       color:D.green},
+  ];
+  return (
+    <div className="bv-card" style={{...st.card,marginBottom:20}}>
+      <div style={{fontWeight:600,fontSize:14,color:D.text}}>{p.title||"Tarefas por status"}</div>
+      <div style={{fontSize:12,color:D.muted,marginBottom:16}}>{p.subtitle||"Distribuição atual"}</div>
+      {tarefas.length===0?(
+        <div style={{textAlign:"center",padding:"1.5rem 0",color:D.muted,fontSize:13}}>Nenhuma tarefa cadastrada.</div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
+          <div style={{position:"relative",width:140,height:140}}>
+            <Donut D={D} size={140} data={statusData}/>
+            <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+              <div style={{fontSize:26,fontWeight:700,color:D.text}}>{tarefas.length}</div>
+              <div style={{fontSize:10,color:D.muted}}>Total</div>
+            </div>
+          </div>
+          <div style={{width:"100%",display:"flex",flexDirection:"column",gap:9}}>
+            {statusData.map(d=>(
+              <div key={d.label} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:D.muted}}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:d.color,flexShrink:0}}></span>
+                <span style={{flex:1}}>{d.label}</span>
+                <span style={{fontWeight:600,color:D.text}}>{d.value} ({tarefas.length>0?Math.round((d.value/tarefas.length)*1000)/10:0}%)</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <button onClick={()=>p.setTab("pendencias")} style={{marginTop:16,padding:"14px 0 0",borderTop:"1px solid "+D.border,borderLeft:"none",borderRight:"none",borderBottom:"none",width:"100%",background:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",color:D.blue,fontSize:12,fontWeight:600}}>Ver todas as pendências<ChevronRight size={14}/></button>
+    </div>
+  );
+}
+
 export default function App() {
   const [dark, setDark] = useState(false);
   const D = dark ? DARK : LIGHT;
   const st: AppStyles = {
-    inp:{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1px solid "+D.border,fontSize:14,background:dark?"#0f172a":D.white,color:D.text,outline:"none",boxShadow:"inset 0 1px 2px rgba(15,23,42,0.04)"},
+    inp:{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1px solid "+D.border,fontSize:14,background:dark?D.bg:D.white,color:D.text,outline:"none",boxShadow:"inset 0 1px 2px rgba(15,23,42,0.04)",transition:"border-color .15s ease, box-shadow .15s ease"},
     lbl:{fontSize:12,color:D.muted,display:"block",marginBottom:5,fontWeight:500},
-    btn:{padding:"8px 16px",borderRadius:10,border:"1px solid "+D.border,background:dark?"#111827":D.white,cursor:"pointer",fontSize:13,color:D.text,display:"inline-flex",alignItems:"center",gap:6,fontWeight:500,boxShadow:"0 2px 8px rgba(15,23,42,0.04)"},
-    btnBlue:{padding:"9px 18px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:13,color:"#fff",display:"inline-flex",alignItems:"center",gap:6,fontWeight:600,boxShadow:"0 10px 24px rgba(37, 99, 235, 0.24)"},
-    card:{background:dark?"#111827":D.white,borderRadius:18,border:"1px solid "+D.border,padding:"1.25rem 1.35rem",marginBottom:12,boxShadow:"0 16px 40px rgba(15,23,42,0.07)"},
+    btn:{padding:"8px 16px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:13,color:D.text,display:"inline-flex",alignItems:"center",gap:6,fontWeight:500,boxShadow:"0 2px 8px rgba(15,23,42,0.04)",transition:"transform .15s ease, box-shadow .15s ease, background-color .15s ease"},
+    btnBlue:{padding:"9px 18px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:13,color:"#fff",display:"inline-flex",alignItems:"center",gap:6,fontWeight:600,boxShadow:"0 10px 24px rgba(37, 99, 235, 0.24)",transition:"transform .15s ease, box-shadow .15s ease, filter .15s ease"},
+    card:{background:D.white,borderRadius:20,border:"1px solid "+D.border,padding:"1.4rem 1.5rem",marginBottom:12,boxShadow:"0 1px 2px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)",transition:"transform .18s ease, box-shadow .18s ease"},
   };
 
   const [users, setUsers] = useState<User[]>(USUARIOS.map(u=>({...u})));
@@ -256,16 +390,14 @@ export default function App() {
   const [loginSenha, setLoginSenha] = useState("");
   const [senhaVis, setSenhaVis] = useState(false);
   const [loginErr, setLoginErr] = useState("");
+  const [lembrar, setLembrar] = useState(true);
   const [tab, setTab] = useState("painel");
-  const [tarefas, setTarefas] = useState<Tarefa[]>([
-    {id:1,fornecedor:"Fornecedor Exemplo",valor:0,vencimento:hoje,status:"pendente",responsavel:"adria",obs:"",historico:[]},
-    {id:2,fornecedor:"Outro Fornecedor",valor:1500,vencimento:hoje,status:"pendente",responsavel:"ana",obs:"",historico:[]},
-  ]);
+  const [tarefas, setTarefas] = useState<Tarefa[]>(loadTarefas);
   const [contratos, setContratos] = useState<Contrato[]>([{id:1,representante:"Representante Exemplo",cpfCnpj:"",porcentagem:"0",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"}]);
   const [modelos, setModelos] = useState({...MODELOS_INIT});
   const [prorrogacoes, setProrrogacoes] = useState([]);
   const [eventos, setEventos] = useState([]);
-  const [notifs, setNotifs] = useState([{id:1,msg:"Bem-vinda ao B-Visionn!",time:"00:00",read:false}]);
+  const [notifs, setNotifs] = useState([{id:1,msg:"Bem-vinda ao BP-Visionn!",time:"00:00",read:false}]);
   const [showNotif, setShowNotif] = useState(false);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([{id:1,tipo:"Tarefa criada",tarefa:"Sistema",usuario:"Bárbara",hora:"Início",detalhe:"Sistema iniciado."}]);
   const [filtroAudit, setFiltroAudit] = useState("todos");
@@ -281,14 +413,20 @@ export default function App() {
   const [modEdit, setModEdit] = useState("");
   const [search, setSearch] = useState("");
   const [fStatus, setFStatus] = useState("todos");
-  const [newT, setNewT] = useState({fornecedor:"",valor:"",vencimento:"",responsavel:"adria",obs:""});
+  const [newT, setNewT] = useState({fornecedor:"",valor:"",vencimento:"",responsavel:"Esmeralda",obs:""});
   const [newC, setNewC] = useState({representante:"",cpfCnpj:"",porcentagem:"",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"});
   const [newPr, setNewPr] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Aguardando retorno"});
   const [prorr, setProrr] = useState({novoVencimento:"",motivo:""});
+  const [prorrErr, setProrrErr] = useState("");
   const [editU, setEditU] = useState<string | null>(null);
   const [editN, setEditN] = useState("");
   const [editS, setEditS] = useState("");
   const [confirm, setConfirm] = useState<number | null>(null);
+  const [confirmDel, setConfirmDel] = useState<number | null>(null);
+  const [editT, setEditT] = useState<number | null>(null);
+  const [editTData, setEditTData] = useState({fornecedor:"",valor:"" as number | string,vencimento:"",responsavel:"",obs:""});
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoErr, setPhotoErr] = useState("");
   const notifRef = useRef<HTMLDivElement | null>(null);
 
   const isAdmin = user && user.role==="admin";
@@ -306,6 +444,10 @@ export default function App() {
     return ()=>document.removeEventListener("mousedown",h);
   },[]);
 
+  useEffect(()=>{
+    localStorage.setItem("bvisionn_tarefas", JSON.stringify(tarefas));
+  },[tarefas]);
+
   function addN(msg){ setNotifs(p=>[{id:Date.now(),msg,time:nowT(),read:false},...p].slice(0,20)); }
   function addA(tipo,tarefa,detalhe){ setAuditLog(p=>[{id:Date.now(),tipo,tarefa,usuario:user?user.name:"",hora:nowF(),detalhe},...p]); }
   function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.blueSoft,c:D.blueText},"Aprovado":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
@@ -313,8 +455,35 @@ export default function App() {
   function doLogin(){
     const f=users.find(u=>u.id===loginId);
     if(!f||f.senha!==loginSenha){setLoginErr("Usuário ou senha incorretos.");return;}
-    setUser(f); setLoginErr(""); setLoginSenha("");
+    const fotoSalva = localStorage.getItem("bvisionn_photo_"+f.id);
+    const logado = {...f, photo: fotoSalva!==null?fotoSalva:f.photo, lastAccess: nowF()};
+    setUsers(prev=>prev.map(u=>u.id===f.id?logado:u));
+    setUser(logado); setLoginErr(""); setLoginSenha("");
     setTab(f.role==="admin"?"painel":"tarefas");
+  }
+
+  function salvarFoto(){
+    if(!photoPreview||!user) return;
+    localStorage.setItem("bvisionn_photo_"+user.id, photoPreview);
+    setUsers(prev=>prev.map(u=>u.id===user.id?{...u,photo:photoPreview}:u));
+    setUser(u=>u?{...u,photo:photoPreview}:u);
+    setPhotoPreview(null); setPhotoErr("");
+  }
+
+  function removerFoto(){
+    if(!user) return;
+    localStorage.removeItem("bvisionn_photo_"+user.id);
+    setUsers(prev=>prev.map(u=>u.id===user.id?{...u,photo:null}:u));
+    setUser(u=>u?{...u,photo:null}:u);
+    setPhotoPreview(null); setPhotoErr("");
+  }
+
+  async function onFotoSelecionada(file){
+    if(!file) return;
+    const v = validarImagem(file);
+    if(!v.ok){ setPhotoErr(v.erro); setPhotoPreview(null); return; }
+    setPhotoErr("");
+    setPhotoPreview(await lerComoDataURL(file));
   }
 
   function concluir(id){
@@ -332,12 +501,12 @@ export default function App() {
   }
 
   function prorrogar(id){
-    if(!prorr.novoVencimento||!prorr.motivo) return;
+    if(!prorr.novoVencimento||!prorr.motivo){ setProrrErr("Preencha o novo vencimento e o motivo."); return; }
     const t=tarefas.find(x=>x.id===id);
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,vencimento:prorr.novoVencimento,status:"prorrogado",historico:(x.historico||[]).concat([{data:hoje,...prorr}])}:x));
     addN("Prorrogação: "+(t?t.fornecedor:""));
     addA("Prorrogação",t?t.fornecedor:"","Novo vencimento: "+prorr.novoVencimento);
-    setShowProrr(null); setProrr({novoVencimento:"",motivo:""});
+    setShowProrr(null); setProrr({novoVencimento:"",motivo:""}); setProrrErr("");
   }
 
   function addTarefa(){
@@ -345,7 +514,7 @@ export default function App() {
     const resp=users.find(u=>u.id===newT.responsavel);
     setTarefas(prev=>prev.concat([{...newT,id:Date.now(),status:newT.vencimento<hoje?"vencido":"pendente",historico:[]}]));
     addN("Nova tarefa: "+newT.fornecedor); addA("Tarefa criada",newT.fornecedor,"Atribuída a "+(resp?resp.name:""));
-    setNewT({fornecedor:"",valor:"",vencimento:"",responsavel:"adria",obs:""}); setShowTForm(false);
+    setNewT({fornecedor:"",valor:"",vencimento:"",responsavel:"Esmeralda",obs:""}); setShowTForm(false);
   }
 
   function mudaResp(id,nid){
@@ -354,6 +523,26 @@ export default function App() {
     const nov=users.find(u=>u.id===nid);
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,responsavel:nid}:x));
     addA("Responsável alterado",t?t.fornecedor:"",(ant?ant.name:"?")+" → "+(nov?nov.name:"?"));
+  }
+
+  function abrirEditT(t){
+    setEditT(t.id);
+    setEditTData({fornecedor:t.fornecedor,valor:t.valor,vencimento:t.vencimento,responsavel:t.responsavel,obs:t.obs});
+  }
+
+  function salvarEditT(){
+    if(!editTData.fornecedor||!editTData.vencimento) return;
+    setTarefas(prev=>prev.map(x=>x.id===editT?{...x,...editTData,status:x.status==="pago"?"pago":(editTData.vencimento<hoje?"vencido":"pendente")}:x));
+    addA("Tarefa editada",editTData.fornecedor,"Dados atualizados por "+(user?user.name:""));
+    setEditT(null);
+  }
+
+  function excluirTarefa(id){
+    const t=tarefas.find(x=>x.id===id);
+    setTarefas(prev=>prev.filter(x=>x.id!==id));
+    addA("Tarefa excluída",t?t.fornecedor:"","Removida por "+(user?user.name:""));
+    addN("🗑️ Tarefa excluída: "+(t?t.fornecedor:""));
+    setConfirmDel(null);
   }
 
   function addContrato(){
@@ -384,7 +573,7 @@ export default function App() {
     const titulo=(TIPO_MOD[c.tipo]?TIPO_MOD[c.tipo].label:"Documento");
     const conteudo=txt!==undefined?txt:fillTpl(modelos[c.tipo||"vendedor"],c);
     const w=window.open("","_blank");
-    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><title>"+titulo+"</title><style>@page{margin:2.5cm}body{font-family:'Times New Roman',serif;font-size:12pt;color:#111;line-height:1.8}pre{font-family:inherit;white-space:pre-wrap;font-size:12pt;margin:0}.r{margin-top:48px;font-size:10pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:10px}@media print{button{display:none}}</style></head><body><pre>"+conteudo+"</pre><div class='r'>Documento gerado pelo B-Visionn — "+new Date().toLocaleDateString("pt-BR")+"</div><script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script></body></html>");
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><title>"+titulo+"</title><style>@page{margin:2.5cm}body{font-family:'Times New Roman',serif;font-size:12pt;color:#111;line-height:1.8}pre{font-family:inherit;white-space:pre-wrap;font-size:12pt;margin:0}.r{margin-top:48px;font-size:10pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:10px}@media print{button{display:none}}</style></head><body><pre>"+conteudo+"</pre><div class='r'>Documento gerado pelo BP-Visionn — "+new Date().toLocaleDateString("pt-BR")+"</div><script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script></body></html>");
     w.document.close();
     addA("Exportação PDF",c.representante,titulo+" exportado"); addN("PDF: "+titulo+" — "+c.representante);
   }
@@ -407,57 +596,90 @@ export default function App() {
   ].filter(n=>n.show);
 
   if(!user) return (
-    <div style={{minHeight:"100vh",background: dark ? "linear-gradient(135deg, #0f172a 0%, #111827 100%)" : "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:"2rem"}}>
-      <div style={{background:dark?"#111827":D.white,borderRadius:24,border:"1px solid "+D.border,padding:"2.5rem",width:420,boxSizing:"border-box",boxShadow:"0 30px 80px rgba(15,23,42,0.22)"}}>
-        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
-          <button onClick={()=>setDark(p=>!p)} style={{...st.btn,padding:"6px 10px",border:"none",background:D.bg}}>{dark?<Sun size={16} color={D.orange}/>:<Moon size={16} color={D.muted}/>}</button>
-        </div>
-        <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{width:52,height:52,borderRadius:14,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><Lock size={24} color={D.blue}/></div>
-          <div style={{fontSize:22,fontWeight:700,color:D.blue,letterSpacing:"-0.5px"}}>B-Visionn</div>
-          <div style={{fontSize:13,color:D.muted,marginTop:4}}>Acesse com seu login e senha</div>
-        </div>
-        <label style={st.lbl}>Usuário</label>
-        <select value={loginId} onChange={e=>{setLoginId(e.target.value);setLoginErr("");}} style={{...st.inp,marginBottom:14}}>
-          {users.map(u=><option key={u.id} value={u.id}>{u.name} — {u.setor}</option>)}
-        </select>
-        {users.filter(u=>u.id===loginId).map(u=>(
-          <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:D.bg,borderRadius:10,marginBottom:14,border:"1px solid "+D.border}}>
-            <Av name={u.name} initials={u.initials} color={u.color} size={32}/>
-            <div><div style={{fontWeight:600,fontSize:13,color:D.text}}>{u.name}</div><div style={{fontSize:11,color:D.muted}}>{u.setor}</div></div>
+    <div className="bv-login-wrap" style={{background: dark ? "radial-gradient(circle at 15% 15%, rgba(62,147,255,0.12), transparent 45%), radial-gradient(circle at 85% 85%, rgba(62,147,255,0.10), transparent 45%), linear-gradient(160deg, #05070D 0%, #0A0F1E 100%)" : "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)"}}>
+      <div className="bv-modal-card bv-login-card" style={{boxShadow: dark ? "0 30px 90px rgba(0,0,0,0.55)" : "0 30px 80px rgba(15,23,42,0.18)", border:"1px solid "+(dark?"rgba(62,147,255,0.18)":D.border)}}>
+        {/* PAINEL DE MARCA */}
+        <div className="bv-login-brand" style={{background:"radial-gradient(circle at 25% 15%, rgba(62,147,255,0.22), transparent 45%), radial-gradient(circle at 80% 88%, rgba(62,147,255,0.14), transparent 50%), linear-gradient(165deg, #060912 0%, #0B1226 100%)"}}>
+          <svg viewBox="0 0 400 600" preserveAspectRatio="none" style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0.5,pointerEvents:"none"}}>
+            <path d="M-20,120 C80,60 160,180 260,110 S420,40 460,100" stroke="#3E93FF" strokeWidth="1.2" fill="none" opacity="0.35"/>
+            <path d="M-20,260 C90,210 170,320 270,250 S430,190 470,240" stroke="#3E93FF" strokeWidth="1" fill="none" opacity="0.25"/>
+            <path d="M-20,420 C100,370 180,470 280,400 S440,340 480,390" stroke="#3E93FF" strokeWidth="1" fill="none" opacity="0.2"/>
+            <circle cx="40" cy="500" r="1.5" fill="#3E93FF" opacity="0.5"/>
+            <circle cx="70" cy="530" r="1" fill="#3E93FF" opacity="0.4"/>
+            <circle cx="30" cy="560" r="1.2" fill="#3E93FF" opacity="0.4"/>
+          </svg>
+          <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",height:"100%"}}>
+            <div style={{width:60,height:60,borderRadius:16,background:"rgba(62,147,255,0.12)",border:"1px solid rgba(62,147,255,0.35)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 30px rgba(62,147,255,0.25)"}}><Lock size={26} color="#5FA8FF"/></div>
+            <div style={{fontSize:26,fontWeight:800,color:"#fff",marginTop:22,letterSpacing:"-0.5px"}}>BP-Visionn</div>
+            <div style={{fontSize:14,color:"#9FB0D0",marginTop:8,lineHeight:1.5}}>Gestão inteligente<br/>financeira e operacional</div>
+            <div style={{width:38,height:3,borderRadius:2,background:"#3E93FF",margin:"20px 0"}}/>
+            <div style={{fontSize:13,color:"#7C8AAE",lineHeight:1.7,maxWidth:230}}>Solução completa para supervisão e controle de pendências, contratos e boletos.</div>
           </div>
-        ))}
-        <label style={st.lbl}>Senha</label>
-        <div style={{position:"relative",marginBottom:6}}>
-          <input type={senhaVis?"text":"password"} placeholder="Digite sua senha" value={loginSenha} onChange={e=>{setLoginSenha(e.target.value);setLoginErr("");}} onKeyDown={e=>e.key==="Enter"&&doLogin()} style={{...st.inp,paddingRight:40}}/>
-          <button onClick={()=>setSenhaVis(p=>!p)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",border:"none",background:"none",cursor:"pointer",color:D.muted,display:"flex"}}>{senhaVis?<EyeOff size={16}/>:<Eye size={16}/>}</button>
         </div>
-        {loginErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:10,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{loginErr}</div>}
-        <button style={{...st.btnBlue,width:"100%",justifyContent:"center",padding:"11px",marginTop:8}} onClick={doLogin}>Entrar <ArrowRight size={15}/></button>
-        <div style={{marginTop:12,fontSize:11,color:D.muted,textAlign:"center"}}>Senha padrão: adm123</div>
+
+        {/* PAINEL DE LOGIN */}
+        <div className="bv-login-form" style={{background:dark?D.bg:D.white}}>
+          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:18}}>
+            <button onClick={()=>setDark(p=>!p)} style={{...st.btn,padding:"8px 14px",fontSize:12.5}}>{dark?<><Sun size={15} color={D.orange}/>Modo claro</>:<><Moon size={15} color={D.muted}/>Modo escuro</>}</button>
+          </div>
+          <div style={{fontSize:24,fontWeight:800,color:D.text}}>Bem-vinda de volta! 👋</div>
+          <div style={{fontSize:13.5,color:D.muted,marginTop:6,marginBottom:26}}>Faça login para acessar sua conta</div>
+
+          <label style={st.lbl}>Usuário</label>
+          <div style={{position:"relative",marginBottom:12}}>
+            <User size={15} color={D.muted} style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
+            <select value={loginId} onChange={e=>{setLoginId(e.target.value);setLoginErr("");}} style={{...st.inp,paddingLeft:36,paddingRight:34,appearance:"none",WebkitAppearance:"none"}}>
+              {users.map(u=><option key={u.id} value={u.id}>{u.name} — {u.setor}</option>)}
+            </select>
+            <ChevronDown size={15} color={D.muted} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
+          </div>
+          {users.filter(u=>u.id===loginId).map(u=>(
+            <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:dark?D.white:D.bg,borderRadius:10,marginBottom:16,border:"1px solid "+D.border}}>
+              <Av name={u.name} initials={u.initials} color={u.color} size={32}/>
+              <div><div style={{fontWeight:600,fontSize:13,color:D.text}}>{u.name}</div><div style={{fontSize:11,color:D.muted}}>{u.setor}</div></div>
+            </div>
+          ))}
+
+          <label style={st.lbl}>Senha</label>
+          <div style={{position:"relative",marginBottom:12}}>
+            <input type={senhaVis?"text":"password"} placeholder="Digite sua senha" value={loginSenha} onChange={e=>{setLoginSenha(e.target.value);setLoginErr("");}} onKeyDown={e=>e.key==="Enter"&&doLogin()} style={{...st.inp,paddingRight:40}}/>
+            <button onClick={()=>setSenhaVis(p=>!p)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",border:"none",background:"none",cursor:"pointer",color:D.muted,display:"flex"}}>{senhaVis?<EyeOff size={16}/>:<Eye size={16}/>}</button>
+          </div>
+
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18,fontSize:12.5,flexWrap:"wrap",gap:8}}>
+            <label style={{display:"flex",alignItems:"center",gap:7,color:D.muted,cursor:"pointer"}}>
+              <input type="checkbox" checked={lembrar} onChange={e=>setLembrar(e.target.checked)} style={{accentColor:D.blue,width:14,height:14,cursor:"pointer"}}/>
+              Lembrar deste dispositivo
+            </label>
+            <span style={{color:D.blue,fontWeight:600,cursor:"pointer"}}>Esqueci minha senha</span>
+          </div>
+
+          {loginErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{loginErr}</div>}
+
+          <button style={{...st.btnBlue,width:"100%",justifyContent:"center",padding:"12px"}} onClick={doLogin}>Entrar <ArrowRight size={15}/></button>
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div style={{minHeight:"100vh",background: dark ? "linear-gradient(135deg, #0f172a 0%, #111827 100%)" : "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)",padding:"24px",boxSizing:"border-box"}}>
-      <div style={{maxWidth:1600,margin:"0 auto",minHeight:"calc(100vh - 48px)",background:dark?"#0f172a":D.white,borderRadius:28,overflow:"hidden",boxShadow:"0 24px 70px rgba(15,23,42,0.16)",border:"1px solid "+D.border,display:"flex",flexDirection:"column"}}>
+    <div style={{minHeight:"100vh",background: dark ? "linear-gradient(135deg, "+D.bg+" 0%, "+D.white+" 100%)" : "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)",padding:"24px",boxSizing:"border-box"}}>
+      <div style={{maxWidth:1600,margin:"0 auto",minHeight:"calc(100vh - 48px)",background:dark?D.bg:D.white,borderRadius:28,overflow:"hidden",boxShadow:"0 24px 70px rgba(15,23,42,0.16)",border:"1px solid "+D.border,display:"flex",flexDirection:"column"}}>
         {/* HEADER */}
-      <div style={{background:dark?"#111827":D.white,borderBottom:"1px solid "+D.border,padding:"0 28px",height:78,display:"flex",alignItems:"center",justifyContent:"space-between",gap:18,flexShrink:0}}>
+      <div style={{background:D.white,borderBottom:"1px solid "+D.border,padding:"0 28px",height:78,display:"flex",alignItems:"center",justifyContent:"space-between",gap:18,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:32,height:32,borderRadius:8,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center"}}><Receipt size={16} color={D.blue}/></div>
-          <span style={{fontWeight:700,fontSize:15,color:D.blue,letterSpacing:"-0.3px"}}>B-Visionn</span>
+          <span style={{fontWeight:700,fontSize:15,color:D.blue,letterSpacing:"-0.3px"}}>BP-Visionn</span>
         </div>
         <div style={{flex:1,maxWidth:420,position:"relative"}}>
           <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
           <input placeholder="Buscar..." value={search} onChange={e=>setSearch(e.target.value)} style={{...st.inp,paddingLeft:32,fontSize:13,background:D.bg}}/>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <button onClick={()=>setDark(p=>!p)} style={{...st.btn,padding:"7px 10px",border:"none",background:D.bg}}>{dark?<Sun size={16} color={D.orange}/>:<Moon size={16} color={D.muted}/>}</button>
           <div style={{position:"relative"}} ref={notifRef}>
             <button onClick={()=>{setShowNotif(p=>!p);setNotifs(p=>p.map(n=>({...n,read:true})));}} style={{...st.btn,padding:"7px 10px",border:"none",background:D.bg,position:"relative"}}>
               <Bell size={17} color={unread>0?D.blue:D.muted}/>
-              {unread>0&&<span style={{position:"absolute",top:4,right:4,width:8,height:8,borderRadius:"50%",background:D.red,border:"2px solid "+D.white}}></span>}
+              {unread>0&&<span style={{position:"absolute",top:-3,right:-3,minWidth:16,height:16,borderRadius:20,background:D.blue,color:"#fff",border:"2px solid "+D.white,fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{unread}</span>}
             </button>
             {showNotif&&(
               <div style={{position:"absolute",right:0,top:44,width:300,background:D.white,borderRadius:14,border:"1px solid "+D.border,boxShadow:"0 8px 30px rgba(0,0,0,0.12)",zIndex:100,overflow:"hidden"}}>
@@ -472,7 +694,7 @@ export default function App() {
               </div>
             )}
           </div>
-          <Av name={user.name} initials={user.initials} color={user.color} size={32}/>
+          <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={D.white} size={32}/>
           <div><div style={{fontSize:13,fontWeight:600,color:D.text}}>{user.name}</div><div style={{fontSize:11,color:D.muted}}>{user.setor}</div></div>
           <button style={{...st.btn,padding:"6px 10px",border:"none",background:D.bg}} onClick={()=>{setUser(null);setLoginSenha("");}}><LogOut size={15} color={D.muted}/></button>
         </div>
@@ -480,16 +702,32 @@ export default function App() {
 
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {/* SIDEBAR */}
-        <div style={{width:250,background:dark?"#111827":"#f8fafc",borderRight:"1px solid "+D.border,padding:"1.15rem 0.9rem",flexShrink:0,overflowY:"auto"}}>
+        <div style={{width:250,background:dark?D.white:"#f8fafc",borderRight:"1px solid "+D.border,padding:"1.15rem 0.9rem",flexShrink:0,overflowY:"auto",display:"flex",flexDirection:"column"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 4px",marginBottom:16}}>
+            <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={dark?D.white:"#f8fafc"} size={36}/>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600,color:D.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Olá, {user.name}!</div>
+              <div style={{fontSize:11,color:D.muted}}>{user.role==="admin"?"Supervisora":"Funcionária"}</div>
+            </div>
+          </div>
           {NAV.map(n=>(
-            <button key={n.id} onClick={()=>setTab(n.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:5,background:tab===n.id?D.blueSoft:"transparent",color:tab===n.id?D.blue:D.muted,fontWeight:tab===n.id?600:500,fontSize:13,boxShadow:tab===n.id?"0 8px 20px rgba(37,99,235,0.12)":"none"}}>
+            <button key={n.id} className={"bv-nav-item"+(tab===n.id?" active":"")} onClick={()=>setTab(n.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:5,position:"relative",background:tab===n.id?D.blueSoft:"transparent",color:tab===n.id?D.blue:D.muted,fontWeight:tab===n.id?600:500,fontSize:13,boxShadow:tab===n.id?"0 8px 20px rgba(37,99,235,0.12)":"none"}}>
               <n.Icon size={16}/>{n.label}
               {n.id==="pendencias"&&pendsVis.length>0&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{pendsVis.length}</span>}
             </button>
           ))}
+
+          <div style={{marginTop:"auto",paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
+            <button onClick={()=>setDark(p=>!p)} style={{...st.btn,width:"100%",justifyContent:"space-between",background:dark?D.bg:"#fff"}}>
+              <span style={{display:"flex",alignItems:"center",gap:8}}>{dark?<Moon size={15} color={D.blue}/>:<Sun size={15} color={D.orange}/>}Modo escuro</span>
+              <span className={"bv-switch"+(dark?" on":"")}><span className="bv-switch-knob"/></span>
+            </button>
+            <button onClick={()=>{setUser(null);setLoginSenha("");}} style={{...st.btn,width:"100%",justifyContent:"center",color:D.redText,background:dark?D.bg:"#fff"}}><LogOut size={15}/>Sair</button>
+            <div style={{fontSize:10,color:D.muted,textAlign:"center",marginTop:4}}>© 2026 BP-Visionn<br/>Todos os direitos reservados.</div>
+          </div>
         </div>
 
-        <div style={{flex:1,padding:"1.9rem 2.2rem",overflowY:"auto",background:dark?"#0f172a":"#f8fafc"}}>
+        <div style={{flex:1,padding:"1.9rem 2.2rem",overflowY:"auto",background:D.bg}}>
 
           {/* DASHBOARD */}
           {tab==="painel"&&isAdmin&&(
@@ -501,32 +739,48 @@ export default function App() {
                 <MCard D={D} label="Concluídas" value={tarefas.filter(t=>t.status==="pago").length} Icon={CheckCircle} bg={D.greenSoft} color={D.green} highlight={D.green+"66"}/>
                 <MCard D={D} label="Total"      value={tarefas.length} Icon={Receipt} bg={D.blueSoft} color={D.blue}/>
               </div>
-              <div style={{...st.card,marginBottom:20}}>
-                <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Equipe</div>
+              <div className="bv-dash-grid">
+              <div>
+              <div className="bv-card" style={{...st.card,marginBottom:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:32,height:32,borderRadius:9,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center"}}><Users size={16} color={D.blue}/></div>
+                    <span style={{fontWeight:600,fontSize:14,color:D.text}}>Produtividade da equipe</span>
+                  </div>
+                  <button style={{...st.btn,padding:"5px 12px",fontSize:12}} onClick={()=>setTab("tarefas")}>Ver todos</button>
+                </div>
                 {users.filter(u=>u.role==="func").map(fn=>{
                   const m=tarefas.filter(t=>t.responsavel===fn.id);
                   const pd=m.filter(t=>t.status!=="pago").length;
                   const ug=m.filter(t=>t.status==="vencido").length;
                   const pc=m.length>0?Math.round((m.filter(t=>t.status==="pago").length/m.length)*100):0;
+                  const pCor = pc>60?D.green:pc>30?D.orange:D.red;
                   return (
-                    <div key={fn.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-                      <Av name={fn.name} initials={fn.initials} color={fn.color} size={34}/>
-                      <div style={{flex:1}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                          <span style={{fontSize:13,fontWeight:500,color:D.text}}>{fn.name}</span>
-                          <div style={{display:"flex",gap:5}}>
-                            <span style={{fontSize:11,color:D.orangeText,background:D.orangeSoft,borderRadius:10,padding:"1px 7px"}}>{pd} pend.</span>
-                            {ug>0&&<span style={{fontSize:11,color:D.redText,background:D.redSoft,borderRadius:10,padding:"1px 7px"}}>{ug} urg.</span>}
-                          </div>
-                        </div>
-                        <div style={{height:5,background:D.gray,borderRadius:4,marginTop:6}}><div style={{height:5,background:pc>60?D.green:pc>30?D.orange:D.red,borderRadius:4,width:pc+"%"}}></div></div>
-                        <div style={{fontSize:11,color:D.muted,marginTop:3}}>{pc}% concluído</div>
+                    <div key={fn.id} style={{display:"flex",alignItems:"center",gap:14,marginBottom:18,flexWrap:"wrap"}}>
+                      <Av name={fn.name} initials={fn.initials} color={fn.color} photo={fn.photo} size={40}/>
+                      <div style={{minWidth:110}}>
+                        <div style={{fontSize:13,fontWeight:600,color:D.text}}>{fn.name}</div>
+                        <div style={{fontSize:11,color:D.muted}}>{fn.role==="admin"?"Supervisora":"Funcionária"}</div>
+                      </div>
+                      <div style={{flex:1,minWidth:130,display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{flex:1,height:8,background:D.gray,borderRadius:20,overflow:"hidden"}}><div className="bv-progress-fill" style={{height:"100%",background:"linear-gradient(90deg, "+pCor+"cc, "+pCor+")",borderRadius:20,width:pc+"%"}}></div></div>
+                        <span style={{fontSize:13,fontWeight:700,color:pCor,minWidth:36,textAlign:"right"}}>{pc}%</span>
+                      </div>
+                      <div style={{textAlign:"center",minWidth:56}}>
+                        <div style={{fontSize:15,fontWeight:700,color:D.text}}>{m.length}</div>
+                        <div style={{fontSize:10,color:D.muted}}>Tarefas</div>
+                      </div>
+                      <div style={{textAlign:"center",minWidth:70}}>
+                        <div style={{fontSize:15,fontWeight:700,color:D.text}}>{pd}</div>
+                        <div style={{fontSize:10,color:D.muted}}>{pd===1?"Pendência":"Pendências"}</div>
+                        {ug>0&&<div style={{fontSize:9,color:D.redText,fontWeight:600,marginTop:1}}>{ug} urgente{ug>1?"s":""}</div>}
                       </div>
                     </div>
                   );
                 })}
+                <div style={{fontSize:11,color:D.muted,marginTop:4,paddingTop:12,borderTop:"1px solid "+D.border}}>Dados atualizados em tempo real</div>
               </div>
-              <div style={{...st.card,marginBottom:20}}>
+              <div className="bv-card" style={{...st.card,marginBottom:20}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                   <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
                   <button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>
@@ -571,7 +825,7 @@ export default function App() {
                   </table>
                 )}
               </div>
-              <div style={st.card}>
+              <div className="bv-card" style={st.card}>
                 <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Tarefas recentes</div>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                   <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","Vencimento","Responsável","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
@@ -588,6 +842,33 @@ export default function App() {
                     );
                   })}</tbody>
                 </table>
+              </div>
+              </div>
+
+              <div>
+                <MiniCalendario D={D} st={st} tarefas={tarefas} setTab={setTab}/>
+                <StatusDonutCard D={D} st={st} tarefas={tarefas} setTab={setTab}/>
+
+                <div className="bv-card" style={st.card}>
+                  <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Atividades recentes</div>
+                  {auditLog.length===0?(
+                    <div style={{textAlign:"center",padding:"1.5rem 0",color:D.muted,fontSize:13}}>Nenhuma atividade ainda.</div>
+                  ):(
+                    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                      {auditLog.slice(0,5).map(a=>(
+                        <div key={a.id} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                          <div style={{width:30,height:30,borderRadius:9,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{AUDIT_IC[a.tipo]||"📝"}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12.5,fontWeight:500,color:D.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.tipo}{a.tarefa?" — "+a.tarefa:""}</div>
+                            <div style={{fontSize:11,color:D.muted,marginTop:1}}>{a.hora}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               </div>
             </div>
           )}
@@ -613,13 +894,24 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                  {isFin&&prorrogacoes.length>0&&(
-                    <div style={st.card}>
-                      <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:12}}>📋 Prorrogação de Boletos</div>
-                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                        <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado"].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-                        <tbody>{prorrogacoes.map(pr=>{const ec=eCor(pr.estado);return(<tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}><td style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td><td style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td><td style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td><td style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,borderRadius:20,padding:"3px 10px"}}>{pr.estado}</span></td></tr>);})}</tbody>
-                      </table>
+                  {isFin&&prorrogacoes.length>0?(
+                    <div className="bv-dash-grid">
+                      <div className="bv-card" style={st.card}>
+                        <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:12}}>📋 Prorrogação de Boletos</div>
+                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                          <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado"].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+                          <tbody>{prorrogacoes.map(pr=>{const ec=eCor(pr.estado);return(<tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}><td style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td><td style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td><td style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td><td style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,borderRadius:20,padding:"3px 10px"}}>{pr.estado}</span></td></tr>);})}</tbody>
+                        </table>
+                      </div>
+                      <div>
+                        <MiniCalendario D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab}/>
+                        <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab} title="Minhas tarefas por status"/>
+                      </div>
+                    </div>
+                  ):(
+                    <div className="bv-dash-grid">
+                      <MiniCalendario D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab}/>
+                      <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab} title="Minhas tarefas por status"/>
                     </div>
                   )}
                 </div>
@@ -634,7 +926,7 @@ export default function App() {
                 </div>
               </div>
               {showTForm&&(
-                <div style={{...st.card,borderColor:D.blue,marginBottom:16}}>
+                <div className="bv-card" style={{...st.card,borderColor:D.blue,marginBottom:16}}>
                   <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Nova Tarefa</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                     <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newT.fornecedor} onChange={e=>setNewT(p=>({...p,fornecedor:e.target.value}))}/></div>
@@ -654,7 +946,7 @@ export default function App() {
               {tVis.map(t=>{
                 const fn=users.find(u=>u.id===t.responsavel);
                 return (
-                  <div key={t.id} style={{...st.card,borderLeft:t.status==="pago"?"3px solid "+D.green:t.status==="vencido"?"3px solid "+D.red:"none",borderRadius:t.status==="pago"||t.status==="vencido"?"0 14px 14px 0":14}}>
+                  <div className="bv-card" key={t.id} style={{...st.card,border:undefined,borderTop:"1px solid "+D.border,borderRight:"1px solid "+D.border,borderBottom:"1px solid "+D.border,borderLeft:t.status==="pago"?"3px solid "+D.green:t.status==="vencido"?"3px solid "+D.red:"1px solid "+D.border,borderRadius:t.status==="pago"||t.status==="vencido"?"0 14px 14px 0":14}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
                       <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
                         <div style={{width:40,height:40,borderRadius:10,background:D.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"1px solid "+D.border}}><Receipt size={18} color={D.muted}/></div>
@@ -678,23 +970,40 @@ export default function App() {
                     <div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}}>
                       {isAdmin&&t.status!=="pago"&&(
                         <>
-                          <button style={{...st.btn,color:D.orangeText,borderColor:D.orange+"55"}} onClick={()=>setShowProrr(t.id)}><Calendar size={13}/>Prorrogar</button>
+                          <button style={{...st.btn,color:D.orangeText,borderColor:D.orange+"55"}} onClick={()=>{setShowProrr(t.id);setProrr({novoVencimento:"",motivo:""});setProrrErr("");}}><Calendar size={13}/>Prorrogar</button>
                           <button style={{...st.btn,color:D.greenText,borderColor:D.green+"55"}} onClick={()=>setConfirm(t.id)}><CheckCircle size={13}/>Concluir</button>
                         </>
                       )}
                       {isAdmin&&t.status==="pago"&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"55"}} onClick={()=>reabrir(t.id)}><AlertCircle size={13}/>Reabrir</button>}
+                      {isAdmin&&<button style={st.btn} onClick={()=>abrirEditT(t)}><Edit3 size={13}/>Editar</button>}
+                      {isAdmin&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"55"}} onClick={()=>setConfirmDel(t.id)}><X size={13}/>Excluir</button>}
                       {!isAdmin&&t.status!=="pago"&&(
-                        <button style={{padding:"9px 18px",borderRadius:8,border:"none",background:"#22C55E",cursor:"pointer",fontSize:13,color:"#ffffff",fontWeight:600,display:"inline-flex",alignItems:"center",gap:8}} onClick={()=>setConfirm(t.id)}>
+                        <button style={{padding:"9px 18px",borderRadius:10,border:"none",background:D.green,cursor:"pointer",fontSize:13,color:"#ffffff",fontWeight:600,display:"inline-flex",alignItems:"center",gap:8}} onClick={()=>setConfirm(t.id)}>
                           <CheckCircle size={15}/>Concluir Tarefa
                         </button>
                       )}
-                      {!isAdmin&&t.status==="pago"&&<div style={{padding:"7px 14px",background:"#F0FDF4",borderRadius:8,fontSize:12,color:"#15803D",display:"inline-flex",alignItems:"center",gap:6,fontWeight:500}}><CheckCircle size={13}/>Concluída</div>}
+                      {!isAdmin&&t.status==="pago"&&<div style={{padding:"7px 14px",background:D.greenSoft,borderRadius:10,fontSize:12,color:D.greenText,display:"inline-flex",alignItems:"center",gap:6,fontWeight:500}}><CheckCircle size={13}/>Concluída</div>}
                     </div>
                     {showProrr===t.id&&(
                       <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                         <div><label style={st.lbl}>Novo vencimento</label><input type="date" style={st.inp} value={prorr.novoVencimento} onChange={e=>setProrr(p=>({...p,novoVencimento:e.target.value}))}/></div>
                         <div><label style={st.lbl}>Motivo</label><input style={st.inp} value={prorr.motivo} onChange={e=>setProrr(p=>({...p,motivo:e.target.value}))}/></div>
-                        <div style={{gridColumn:"1/-1",display:"flex",gap:8}}><button style={st.btnBlue} onClick={()=>prorrogar(t.id)}>Confirmar</button><button style={st.btn} onClick={()=>setShowProrr(null)}>Cancelar</button></div>
+                        {prorrErr&&<div style={{gridColumn:"1/-1",fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{prorrErr}</div>}
+                        <div style={{gridColumn:"1/-1",display:"flex",gap:8}}><button style={st.btnBlue} onClick={()=>prorrogar(t.id)}>Confirmar</button><button style={st.btn} onClick={()=>{setShowProrr(null);setProrrErr("");}}>Cancelar</button></div>
+                      </div>
+                    )}
+                    {editT===t.id&&(
+                      <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                        <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editTData.fornecedor} onChange={e=>setEditTData(p=>({...p,fornecedor:e.target.value}))}/></div>
+                        <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editTData.valor} onChange={e=>setEditTData(p=>({...p,valor:e.target.value}))}/></div>
+                        <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editTData.vencimento} onChange={e=>setEditTData(p=>({...p,vencimento:e.target.value}))}/></div>
+                        <div><label style={st.lbl}>Responsável</label>
+                          <select style={st.inp} value={editTData.responsavel} onChange={e=>setEditTData(p=>({...p,responsavel:e.target.value}))}>
+                            {users.filter(u=>u.role==="func").map(u=><option key={u.id} value={u.id}>{u.name} — {u.setor}</option>)}
+                          </select>
+                        </div>
+                        <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Observação</label><input style={st.inp} value={editTData.obs} onChange={e=>setEditTData(p=>({...p,obs:e.target.value}))}/></div>
+                        <div style={{gridColumn:"1/-1",display:"flex",gap:8}}><button style={st.btnBlue} onClick={salvarEditT}><Save size={13}/>Salvar</button><button style={st.btn} onClick={()=>setEditT(null)}>Cancelar</button></div>
                       </div>
                     )}
                   </div>
@@ -709,7 +1018,7 @@ export default function App() {
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Pendências</div><div style={{fontSize:13,color:D.muted}}>{pendsVis.length} em aberto</div></div>
               {pendsVis.length===0&&<div style={{textAlign:"center",padding:"3rem"}}><CheckCircle size={40} color={D.green} style={{display:"block",margin:"0 auto 10px"}}/><div style={{color:D.muted}}>Nenhuma pendência!</div></div>}
               {pendsVis.map(t=>(
-                <div key={t.id} style={{...st.card,borderLeft:"3px solid "+(t.status==="vencido"?D.red:D.orange),borderRadius:"0 14px 14px 0"}}>
+                <div className="bv-card" key={t.id} style={{...st.card,border:undefined,borderTop:"1px solid "+D.border,borderRight:"1px solid "+D.border,borderBottom:"1px solid "+D.border,borderLeft:"3px solid "+(t.status==="vencido"?D.red:D.orange),borderRadius:"0 14px 14px 0"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
                     <div><div style={{fontWeight:600,color:D.text}}>{t.fornecedor}</div><div style={{fontSize:13,color:D.muted,marginTop:3}}>{t.vencimento}{isAdmin&&" · "+(users.find(u=>u.id===t.responsavel)||{name:""}).name}</div></div>
                     <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -737,7 +1046,7 @@ export default function App() {
               {abaC==="lista"&&(
                 <div>
                   {showCForm&&(
-                    <div style={{...st.card,borderColor:D.blue,marginBottom:16}}>
+                    <div className="bv-card" style={{...st.card,borderColor:D.blue,marginBottom:16}}>
                       <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Novo contrato</div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                         <div><label style={st.lbl}>Tipo</label><select style={st.inp} value={newC.tipo} onChange={e=>setNewC(p=>({...p,tipo:e.target.value}))}>{Object.keys(TIPO_MOD).map(k=><option key={k} value={k}>{TIPO_MOD[k].emoji} {TIPO_MOD[k].label}</option>)}</select></div>
@@ -754,7 +1063,7 @@ export default function App() {
                   {contratos.length===0&&<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum contrato.</div>}
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12}}>
                     {contratos.map(c=>(
-                      <div key={c.id} style={st.card}>
+                      <div className="bv-card" key={c.id} style={st.card}>
                         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
                           <Av name={c.representante} initials={getIn(c.representante)} color={D.purple} size={42}/>
                           <div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,color:D.text}}>{c.representante}</div><div style={{fontSize:11,color:D.muted,marginTop:2}}>{TIPO_MOD[c.tipo]?TIPO_MOD[c.tipo].emoji:""} {TIPO_MOD[c.tipo]?TIPO_MOD[c.tipo].label:""}</div></div>
@@ -773,7 +1082,7 @@ export default function App() {
                 <div>
                   <div style={{fontSize:13,color:D.muted,marginBottom:16}}>Use <code style={{background:D.bg,padding:"1px 6px",borderRadius:4,color:D.blue}}>{"{{nome}}"}</code> etc. como variáveis.</div>
                   {Object.keys(TIPO_MOD).map(key=>(
-                    <div key={key} style={st.card}>
+                    <div className="bv-card" key={key} style={st.card}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                         <div style={{fontWeight:600,fontSize:15,color:D.text}}>{TIPO_MOD[key].emoji} {TIPO_MOD[key].label}</div>
                         {editMod===key?(
@@ -840,7 +1149,7 @@ export default function App() {
                 ))}
               </div>
               {(filtroAudit==="todos"?auditLog:auditLog.filter(a=>a.tipo===filtroAudit)).map(a=>(
-                <div key={a.id} style={{...st.card,display:"flex",gap:14,alignItems:"flex-start"}}>
+                <div className="bv-card" key={a.id} style={{...st.card,display:"flex",gap:14,alignItems:"flex-start"}}>
                   <div style={{width:38,height:38,borderRadius:10,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{AUDIT_IC[a.tipo]||"📝"}</div>
                   <div style={{flex:1}}>
                     <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}><div><span style={{fontWeight:600,fontSize:14,color:D.text}}>{a.tipo}</span><span style={{fontSize:13,color:D.muted,marginLeft:8}}>— {a.tarefa}</span></div><span style={{fontSize:11,color:D.muted,background:D.bg,padding:"2px 8px",borderRadius:20}}>{a.hora}</span></div>
@@ -860,7 +1169,30 @@ export default function App() {
             <div>
               <div style={{fontSize:20,fontWeight:700,color:D.text,marginBottom:6}}>Configurações</div>
               <div style={{fontSize:13,color:D.muted,marginBottom:20}}>Gerencie usuários e senhas</div>
-              <div style={st.card}>
+
+              <div className="bv-card" style={{...st.card,display:"flex",gap:28,flexWrap:"wrap",alignItems:"flex-start"}}>
+                <div style={{fontWeight:600,fontSize:14,color:D.text,width:"100%"}}>Meu Perfil</div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,minWidth:160}}>
+                  <div className="bv-avatar-photo">
+                    <Av name={user.name} initials={user.initials} color={user.color} photo={photoPreview||user.photo} status={user.status||"online"} D={D} ringColor={D.white} size={96}/>
+                  </div>
+                  <input id="bv-foto-input" type="file" accept="image/png,image/jpeg" style={{display:"none"}} onChange={e=>{onFotoSelecionada(e.target.files&&e.target.files[0]); e.target.value="";}}/>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
+                    <label htmlFor="bv-foto-input" style={{...st.btn,cursor:"pointer"}}><Edit3 size={13}/>Alterar Foto</label>
+                    {(photoPreview||user.photo)&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"44"}} onClick={removerFoto}><X size={13}/>Remover Foto</button>}
+                  </div>
+                  {photoErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"6px 10px",display:"flex",alignItems:"center",gap:6,textAlign:"center"}}><AlertCircle size={13}/>{photoErr}</div>}
+                  {photoPreview&&<button style={{...st.btnBlue,width:"100%",justifyContent:"center"}} onClick={salvarFoto}><Save size={13}/>Salvar</button>}
+                </div>
+                <div style={{flex:1,minWidth:220}}>
+                  <div style={{fontWeight:700,fontSize:18,color:D.text}}>{user.name}</div>
+                  <div style={{fontSize:13,color:D.muted,marginTop:2}}>{user.setor} · {user.role==="admin"?"Supervisora":"Funcionária"}</div>
+                  <div style={{fontSize:13,color:D.muted,marginTop:12}}>{user.email||"E-mail não informado"}</div>
+                  <div style={{fontSize:12,color:D.muted,marginTop:12}}>Último acesso: {user.lastAccess||"—"}</div>
+                </div>
+              </div>
+
+              <div className="bv-card" style={st.card}>
                 <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:16}}>Equipe</div>
                 {users.map(u=>(
                   <div key={u.id} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 0",borderBottom:"1px solid "+D.border}}>
@@ -899,15 +1231,31 @@ export default function App() {
 
       {/* MODAL CONFIRMAR */}
       {confirm!==null&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500}} onClick={()=>setConfirm(null)}>
-          <div style={{background:D.white,borderRadius:16,padding:"2rem",maxWidth:380,width:"90%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)"}} onClick={e=>e.stopPropagation()}>
-            <div style={{width:48,height:48,borderRadius:12,background:"#F0FDF4",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><CheckCircle size={26} color="#22C55E"/></div>
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500}} onClick={()=>setConfirm(null)}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:380,width:"90%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:48,height:48,borderRadius:12,background:D.greenSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><CheckCircle size={26} color={D.green}/></div>
             <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Concluir tarefa?</div>
             <div style={{fontSize:14,color:D.text,textAlign:"center",fontWeight:500,marginBottom:6}}>"{(tarefas.find(t=>t.id===confirm)||{fornecedor:""}).fornecedor}"</div>
             <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:24}}>Essa ação ficará registrada na auditoria.</div>
             <div style={{display:"flex",gap:10}}>
-              <button style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setConfirm(null)}>Cancelar</button>
-              <button style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#22C55E",cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={()=>concluir(confirm)}>Concluir</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setConfirm(null)}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.green,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={()=>concluir(confirm)}>Concluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EXCLUIR */}
+      {confirmDel!==null&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500}} onClick={()=>setConfirmDel(null)}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:380,width:"90%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:48,height:48,borderRadius:12,background:D.redSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><X size={26} color={D.red}/></div>
+            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Excluir tarefa?</div>
+            <div style={{fontSize:14,color:D.text,textAlign:"center",fontWeight:500,marginBottom:6}}>"{(tarefas.find(t=>t.id===confirmDel)||{fornecedor:""}).fornecedor}"</div>
+            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:24}}>Essa ação não pode ser desfeita.</div>
+            <div style={{display:"flex",gap:10}}>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setConfirmDel(null)}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.red,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={()=>excluirTarefa(confirmDel)}>Excluir</button>
             </div>
           </div>
         </div>
