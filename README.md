@@ -18,6 +18,10 @@ Em constante evolução.
 
 ## 📸 Telas do Sistema
 
+![Login (modo claro)](images/tela-login-modoclaro.png)
+
+![Login (modo escuro)](images/tela-login-modoescuro.png)
+
 ![Dashboard](images/tela-inicial.png)
 
 ![Tela Inicial](images/tela-inicio.png)
