@@ -1,23 +1,20 @@
 import { useState, useRef, useEffect, type CSSProperties } from "react";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, TrendingUp, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users } from "lucide-react";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, TrendingUp, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail } from "lucide-react";
 
 type User = { id:string; name:string; role:string; setor:string; initials:string; color:string; senha:string; photo?:string|null; email?:string; status?:"online"|"away"|"offline"; lastAccess?:string; };
 type Tarefa = { id:number; fornecedor:string; valor:number | string; vencimento:string; status:string; responsavel:string; obs:string; historico:Array<{data:string; novoVencimento:string; motivo:string}>; };
 type Contrato = { id:number; representante:string; cpfCnpj:string; porcentagem:string; email:string; telefone:string; dataInicio:string; tipo:string; status?:string; };
-type Prorrogacao = { id:number; fornecedor:string; nf:string; vencimento:string; estado:string; };
-type Evento = { id:string; data:string; titulo:string; tipo:string; hora:string; responsavel:string; descricao:string; auto:boolean; };
-type Notif = { id:number; msg:string; time:string; read:boolean; };
 type AuditEntry = { id:number; tipo:string; tarefa:string; usuario:string; hora:string; detalhe:string; };
 
 const LIGHT = { bg:"#F8FAFC",white:"#FFFFFF",text:"#111827",muted:"#6B7280",border:"#E5E7EB",blue:"#2563EB",blueSoft:"#EFF6FF",blueText:"#1D4ED8",green:"#22C55E",greenSoft:"#F0FDF4",greenText:"#15803D",red:"#EF4444",redSoft:"#FEF2F2",redText:"#B91C1C",orange:"#F59E0B",orangeSoft:"#FFFBEB",orangeText:"#B45309",gray:"#E5E7EB",purple:"#8B5CF6",purpleSoft:"#F5F3FF",purpleText:"#6D28D9" };
 const DARK  = { bg:"#070A13",white:"#0F1526",text:"#F5F7FA",muted:"#8D99AE",border:"#212B42",blue:"#3E93FF",blueSoft:"#132B54",blueText:"#7EB8FF",green:"#22C55E",greenSoft:"#0F3D28",greenText:"#4ADE80",red:"#F0585F",redSoft:"#3A171A",redText:"#F79A9E",orange:"#EFA857",orangeSoft:"#3D2A12",orangeText:"#F7C888",gray:"#212B42",purple:"#A78BFA",purpleSoft:"#2A2059",purpleText:"#D3C2FB" };
 
 const USUARIOS = [
-  { id:"supervisora", name:"Bárbara",      role:"admin", setor:"Supervisão", initials:"BA", color:"#2563EB", senha:"adm123", email:"barbara@bvisionn.com", status:"online" as const },
-  { id:"Esmeralda",       name:"Esmeralda",        role:"func",  setor:"Financeiro", initials:"AD", color:"#8B5CF6", senha:"adm123", email:"esmeralda@bvisionn.com", status:"online" as const },
-  { id:"ana",         name:"Ana", role:"func",  setor:"Financeiro", initials:"AC", color:"#F59E0B", senha:"adm123", email:"ana@bvisionn.com", status:"online" as const   },
-  { id:"Maria",      name:"Maria",       role:"func",  setor:"RH",         initials:"MA", color:"#22C55E", senha:"adm123", email:"maria@bvisionn.com", status:"online" as const},
-  { id:"Victor",       name:"Victor",        role:"func",  setor:"Cadastro",   initials:"PA", color:"#EF4444", senha:"adm123", email:"victor@bvisionn.com", status:"online" as const },
+  { id:"supervisora", name:"Bárbara",      role:"admin", setor:"Supervisão", initials:"BA", color:"#2563EB", senha:"adm123", email:"barbara@bp-visionn.com", status:"online" as const },
+  { id:"Esmeralda",       name:"Esmeralda",        role:"func",  setor:"Financeiro", initials:"AD", color:"#8B5CF6", senha:"adm123", email:"esmeralda@bp-visionn.com", status:"online" as const },
+  { id:"ana",         name:"Ana", role:"func",  setor:"Financeiro", initials:"AC", color:"#F59E0B", senha:"adm123", email:"ana@bp-visionn.com", status:"online" as const   },
+  { id:"Maria",      name:"Maria",       role:"func",  setor:"RH",         initials:"MA", color:"#22C55E", senha:"adm123", email:"maria@bp-visionn.com", status:"online" as const},
+  { id:"Victor",       name:"Victor",        role:"func",  setor:"Cadastro",   initials:"PA", color:"#EF4444", senha:"adm123", email:"victor@bp-visionn.com", status:"online" as const },
 ];
 
 const hoje = new Date().toISOString().split("T")[0];
@@ -31,7 +28,7 @@ const MODELOS_INIT = {
   recibo:"RECIBO DE PAGAMENTO\n\nNome: {{nome}}\nCPF/CNPJ: {{cpfCnpj}}\nComissão: {{porcentagem}}%\nData: {{dataInicio}}\n\nDeclaro ter recebido o valor referente à comissão sobre vendas realizadas no período.\n\n___________________________     ___________________________\nContratante                       Representante",
 };
 const TIPO_MOD = { supervisor:{label:"Contrato de Supervisor",emoji:"📄"}, vendedor:{label:"Contrato de Vendedor",emoji:"📄"}, recibo:{label:"Recibo",emoji:"🧾"} };
-const AUDIT_IC = { "Tarefa criada":"✅","Status alterado":"🔄","Responsável alterado":"👤","Prorrogação":"📅","NF incluída":"📋","Contrato criado":"📄","Tarefa concluída":"✔️","Edição de informações":"✏️","Exportação PDF":"📥" };
+const AUDIT_IC = { "Tarefa criada":"✅","Status alterado":"🔄","Responsável alterado":"👤","Prorrogação":"📅","NF incluída":"📋","Contrato criado":"📄","Tarefa concluída":"✔️","Edição de informações":"✏️","Exportação PDF":"📥","Usuário criado":"🧑‍💼" };
 
 type AppStyles = {
   inp: CSSProperties;
@@ -391,6 +388,13 @@ export default function App() {
   const [senhaVis, setSenhaVis] = useState(false);
   const [loginErr, setLoginErr] = useState("");
   const [lembrar, setLembrar] = useState(true);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotStep, setForgotStep] = useState<"email"|"nova"|"ok">("email");
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotErr, setForgotErr] = useState("");
+  const [novaSenha1, setNovaSenha1] = useState("");
+  const [novaSenha2, setNovaSenha2] = useState("");
+  const [showGoogle, setShowGoogle] = useState(false);
   const [tab, setTab] = useState("painel");
   const [tarefas, setTarefas] = useState<Tarefa[]>(loadTarefas);
   const [contratos, setContratos] = useState<Contrato[]>([{id:1,representante:"Representante Exemplo",cpfCnpj:"",porcentagem:"0",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"}]);
@@ -421,6 +425,10 @@ export default function App() {
   const [editU, setEditU] = useState<string | null>(null);
   const [editN, setEditN] = useState("");
   const [editS, setEditS] = useState("");
+  const [editSetor, setEditSetor] = useState("");
+  const [showNewU, setShowNewU] = useState(false);
+  const [newU, setNewU] = useState({name:"",setor:"",role:"func",email:"",senha:""});
+  const [newUErr, setNewUErr] = useState("");
   const [confirm, setConfirm] = useState<number | null>(null);
   const [confirmDel, setConfirmDel] = useState<number | null>(null);
   const [editT, setEditT] = useState<number | null>(null);
@@ -460,6 +468,36 @@ export default function App() {
     setUsers(prev=>prev.map(u=>u.id===f.id?logado:u));
     setUser(logado); setLoginErr(""); setLoginSenha("");
     setTab(f.role==="admin"?"painel":"tarefas");
+  }
+
+  function abrirForgot(){
+    setShowForgot(true); setForgotStep("email"); setForgotEmail(""); setForgotErr(""); setNovaSenha1(""); setNovaSenha2("");
+  }
+
+  function fecharForgot(){
+    setShowForgot(false); setForgotStep("email"); setForgotEmail(""); setForgotErr(""); setNovaSenha1(""); setNovaSenha2("");
+  }
+
+  function confirmarEmailForgot(){
+    const f = users.find(u=>u.id===loginId);
+    if(!f||!f.email||f.email.toLowerCase()!==forgotEmail.trim().toLowerCase()){
+      setForgotErr("E-mail não corresponde ao usuário selecionado.");
+      return;
+    }
+    setForgotErr(""); setForgotStep("nova");
+  }
+
+  function salvarNovaSenhaForgot(){
+    if(novaSenha1.length<4){ setForgotErr("A senha deve ter ao menos 4 caracteres."); return; }
+    if(novaSenha1!==novaSenha2){ setForgotErr("As senhas não coincidem."); return; }
+    setUsers(prev=>prev.map(u=>u.id===loginId?{...u,senha:novaSenha1}:u));
+    setForgotErr(""); setForgotStep("ok");
+  }
+
+  function loginComGoogle(id){
+    const f=users.find(u=>u.id===id);
+    if(!f) return;
+    setLoginId(f.id); setLoginErr(""); setLoginSenha(""); setShowGoogle(false);
   }
 
   function salvarFoto(){
@@ -573,16 +611,53 @@ export default function App() {
     const titulo=(TIPO_MOD[c.tipo]?TIPO_MOD[c.tipo].label:"Documento");
     const conteudo=txt!==undefined?txt:fillTpl(modelos[c.tipo||"vendedor"],c);
     const w=window.open("","_blank");
-    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><title>"+titulo+"</title><style>@page{margin:2.5cm}body{font-family:'Times New Roman',serif;font-size:12pt;color:#111;line-height:1.8}pre{font-family:inherit;white-space:pre-wrap;font-size:12pt;margin:0}.r{margin-top:48px;font-size:10pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:10px}@media print{button{display:none}}</style></head><body><pre>"+conteudo+"</pre><div class='r'>Documento gerado pelo BP-Visionn — "+new Date().toLocaleDateString("pt-BR")+"</div><script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}<\/script></body></html>");
+    if(!w) return;
+    w.opener=null;
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{margin:2.5cm}body{font-family:'Times New Roman',serif;font-size:12pt;color:#111;line-height:1.8}pre{font-family:inherit;white-space:pre-wrap;font-size:12pt;margin:0}.r{margin-top:48px;font-size:10pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:10px}@media print{button{display:none}}</style></head><body></body></html>");
     w.document.close();
+    w.document.title=titulo;
+    const pre=w.document.createElement("pre");
+    pre.textContent=conteudo;
+    const rodape=w.document.createElement("div");
+    rodape.className="r";
+    rodape.textContent="Documento gerado pelo BP-Visionn — "+new Date().toLocaleDateString("pt-BR");
+    w.document.body.appendChild(pre);
+    w.document.body.appendChild(rodape);
+    w.print();
+    w.onafterprint=function(){w.close();};
     addA("Exportação PDF",c.representante,titulo+" exportado"); addN("PDF: "+titulo+" — "+c.representante);
   }
 
   function saveU(id){
-    if(!editN.trim()) return;
-    const up=users.map(u=>u.id===id?{...u,name:editN.trim(),initials:getIn(editN.trim()),senha:editS||u.senha}:u);
+    if(!editN.trim()||!editSetor.trim()) return;
+    const up=users.map(u=>u.id===id?{...u,name:editN.trim(),initials:getIn(editN.trim()),senha:editS||u.senha,setor:editSetor.trim()}:u);
     setUsers(up); if(user&&user.id===id) setUser(up.find(u=>u.id===id));
-    setEditU(null); setEditN(""); setEditS("");
+    setEditU(null); setEditN(""); setEditS(""); setEditSetor("");
+  }
+
+  function abrirNewU(){
+    setShowNewU(true); setNewU({name:"",setor:"",role:"func",email:"",senha:""}); setNewUErr("");
+  }
+
+  function fecharNewU(){
+    setShowNewU(false); setNewUErr("");
+  }
+
+  function criarUsuario(){
+    const nome = newU.name.trim();
+    const setor = newU.setor.trim();
+    if(!nome){ setNewUErr("Informe o nome."); return; }
+    if(!setor){ setNewUErr("Informe o setor."); return; }
+    if(newU.senha.length<4){ setNewUErr("A senha deve ter ao menos 4 caracteres."); return; }
+    const base = nome.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"") || "usuario";
+    let id = base, n = 1;
+    while(users.some(u=>u.id===id)){ id = base+n; n++; }
+    const cores = ["#2563EB","#8B5CF6","#F59E0B","#22C55E","#EF4444"];
+    const novo: User = { id, name:nome, role:newU.role, setor, initials:getIn(nome), color:cores[users.length%cores.length], senha:newU.senha, email:newU.email.trim()||undefined, status:"offline" };
+    setUsers(prev=>[...prev, novo]);
+    addA("Usuário criado", nome, "Novo usuário adicionado à equipe ("+setor+")");
+    addN("Novo usuário cadastrado: "+nome);
+    setShowNewU(false); setNewUErr("");
   }
 
   const NAV=[
@@ -651,14 +726,93 @@ export default function App() {
               <input type="checkbox" checked={lembrar} onChange={e=>setLembrar(e.target.checked)} style={{accentColor:D.blue,width:14,height:14,cursor:"pointer"}}/>
               Lembrar deste dispositivo
             </label>
-            <span style={{color:D.blue,fontWeight:600,cursor:"pointer"}}>Esqueci minha senha</span>
+            <span onClick={abrirForgot} style={{color:D.blue,fontWeight:600,cursor:"pointer"}}>Esqueci minha senha</span>
           </div>
 
           {loginErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{loginErr}</div>}
 
           <button style={{...st.btnBlue,width:"100%",justifyContent:"center",padding:"12px"}} onClick={doLogin}>Entrar <ArrowRight size={15}/></button>
+
+          <div style={{display:"flex",alignItems:"center",gap:12,margin:"14px 0 10px"}}>
+            <div style={{flex:1,height:1,background:D.border}}/>
+            <span style={{fontSize:12,color:D.muted}}>ou</span>
+            <div style={{flex:1,height:1,background:D.border}}/>
+          </div>
+
+          <button onClick={()=>setShowGoogle(true)} style={{...st.btn,width:"100%",justifyContent:"center",padding:"11px",background:dark?D.bg:D.white}}>
+            <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
+            Entrar com Google
+          </button>
         </div>
       </div>
+
+      {showForgot&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={fecharForgot}>
+          <div className="bv-modal-card" style={{background:dark?D.bg:D.white,borderRadius:18,padding:"2rem",maxWidth:380,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
+            {forgotStep==="email"&&(
+              <>
+                <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Mail size={24} color={D.blue}/></div>
+                <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Esqueci minha senha</div>
+                <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>Confirme o e-mail cadastrado de <b>{(users.find(u=>u.id===loginId)||{name:""}).name}</b> para criar uma nova senha.</div>
+                <label style={st.lbl}>E-mail</label>
+                <input type="email" placeholder="seu.email@bp-visionn.com" value={forgotEmail} onChange={e=>{setForgotEmail(e.target.value);setForgotErr("");}} onKeyDown={e=>e.key==="Enter"&&confirmarEmailForgot()} style={{...st.inp,marginBottom:12}} autoFocus/>
+                {forgotErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{forgotErr}</div>}
+                <div style={{display:"flex",gap:10}}>
+                  <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:dark?D.bg:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharForgot}>Cancelar</button>
+                  <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={confirmarEmailForgot}>Continuar</button>
+                </div>
+              </>
+            )}
+            {forgotStep==="nova"&&(
+              <>
+                <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Lock size={24} color={D.blue}/></div>
+                <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Crie uma nova senha</div>
+                <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>Escolha uma nova senha para sua conta.</div>
+                <label style={st.lbl}>Nova senha</label>
+                <input type="password" placeholder="Nova senha" value={novaSenha1} onChange={e=>{setNovaSenha1(e.target.value);setForgotErr("");}} style={{...st.inp,marginBottom:12}} autoFocus/>
+                <label style={st.lbl}>Confirmar nova senha</label>
+                <input type="password" placeholder="Confirme a nova senha" value={novaSenha2} onChange={e=>{setNovaSenha2(e.target.value);setForgotErr("");}} onKeyDown={e=>e.key==="Enter"&&salvarNovaSenhaForgot()} style={{...st.inp,marginBottom:12}}/>
+                {forgotErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{forgotErr}</div>}
+                <div style={{display:"flex",gap:10}}>
+                  <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:dark?D.bg:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharForgot}>Cancelar</button>
+                  <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={salvarNovaSenhaForgot}>Salvar senha</button>
+                </div>
+              </>
+            )}
+            {forgotStep==="ok"&&(
+              <>
+                <div style={{width:48,height:48,borderRadius:12,background:D.greenSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><CheckCircle size={26} color={D.green}/></div>
+                <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Senha alterada!</div>
+                <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:24}}>Sua senha foi atualizada com sucesso. Você já pode entrar com a nova senha.</div>
+                <button style={{width:"100%",padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={fecharForgot}>Fazer login</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showGoogle&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={()=>setShowGoogle(false)}>
+          <div className="bv-modal-card" style={{background:"#fff",borderRadius:18,padding:"0",maxWidth:400,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+            <div style={{padding:"28px 24px 16px",textAlign:"center"}}>
+              <svg width="36" height="36" viewBox="0 0 48 48" style={{margin:"0 auto 14px"}}><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
+              <div style={{fontWeight:600,fontSize:16,color:"#202124"}}>Escolha uma conta</div>
+              <div style={{fontSize:13,color:"#5f6368",marginTop:4}}>para continuar no BP-Visionn</div>
+            </div>
+            <div style={{borderTop:"1px solid #e8eaed"}}>
+              {users.map(u=>(
+                <div key={u.id} onClick={()=>loginComGoogle(u.id)} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 24px",cursor:"pointer",transition:"background-color .12s ease"}} onMouseEnter={e=>e.currentTarget.style.background="#f8f9fa"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <Av name={u.name} initials={u.initials} color={u.color} size={36}/>
+                  <div><div style={{fontWeight:500,fontSize:14,color:"#202124"}}>{u.name}</div><div style={{fontSize:12,color:"#5f6368"}}>{u.setor}</div></div>
+                </div>
+              ))}
+            </div>
+            <div style={{padding:"14px 24px",borderTop:"1px solid #e8eaed"}}>
+              <button style={{width:"100%",padding:"9px",borderRadius:8,border:"1px solid #dadce0",background:"#fff",cursor:"pointer",fontSize:13,color:"#5f6368",fontWeight:500}} onClick={()=>setShowGoogle(false)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -1032,7 +1186,7 @@ export default function App() {
           )}
 
           {/* CONTRATOS */}
-          {tab==="contratos"&&(
+          {tab==="contratos"&&(isAdmin||isFin)&&(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
                 <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Contratos</div><div style={{fontSize:13,color:D.muted}}>{contratos.length} representante(s)</div></div>
@@ -1193,7 +1347,10 @@ export default function App() {
               </div>
 
               <div className="bv-card" style={st.card}>
-                <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:16}}>Equipe</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                  <div style={{fontWeight:600,fontSize:14,color:D.text}}>Equipe</div>
+                  <button style={{...st.btnBlue,padding:"7px 12px",fontSize:12.5}} onClick={abrirNewU}><Plus size={13}/>Novo usuário</button>
+                </div>
                 {users.map(u=>(
                   <div key={u.id} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 0",borderBottom:"1px solid "+D.border}}>
                     <Av name={u.name} initials={u.initials} color={u.color} size={38}/>
@@ -1201,10 +1358,11 @@ export default function App() {
                       {editU===u.id?(
                         <div style={{display:"flex",flexDirection:"column",gap:8}}>
                           <input autoFocus placeholder="Nome" style={{...st.inp,padding:"6px 10px",maxWidth:200}} value={editN} onChange={e=>setEditN(e.target.value)}/>
+                          <input placeholder="Setor" style={{...st.inp,padding:"6px 10px",maxWidth:200}} value={editSetor} onChange={e=>setEditSetor(e.target.value)}/>
                           <input placeholder="Nova senha (em branco = manter)" type="password" style={{...st.inp,padding:"6px 10px",maxWidth:260}} value={editS} onChange={e=>setEditS(e.target.value)}/>
                           <div style={{display:"flex",gap:8}}>
                             <button style={{...st.btnBlue,padding:"6px 12px",fontSize:12}} onClick={()=>saveU(u.id)}><Check size={13}/>Salvar</button>
-                            <button style={{...st.btn,padding:"6px 12px",fontSize:12}} onClick={()=>{setEditU(null);setEditN("");setEditS("");}}><X size={13}/>Cancelar</button>
+                            <button style={{...st.btn,padding:"6px 12px",fontSize:12}} onClick={()=>{setEditU(null);setEditN("");setEditS("");setEditSetor("");}}><X size={13}/>Cancelar</button>
                           </div>
                         </div>
                       ):(
@@ -1217,7 +1375,7 @@ export default function App() {
                     {editU!==u.id&&(
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <span style={{fontSize:12,background:u.role==="admin"?D.blueSoft:D.bg,color:u.role==="admin"?D.blueText:D.muted,borderRadius:20,padding:"3px 10px",fontWeight:500}}>{u.setor}</span>
-                        <button style={{...st.btn,padding:"6px 8px"}} onClick={()=>{setEditU(u.id);setEditN(u.name);setEditS("");}}><Pencil size={13} color={D.muted}/></button>
+                        <button style={{...st.btn,padding:"6px 8px"}} onClick={()=>{setEditU(u.id);setEditN(u.name);setEditS("");setEditSetor(u.setor);}}><Pencil size={13} color={D.muted}/></button>
                       </div>
                     )}
                   </div>
@@ -1256,6 +1414,34 @@ export default function App() {
             <div style={{display:"flex",gap:10}}>
               <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setConfirmDel(null)}>Cancelar</button>
               <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.red,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={()=>excluirTarefa(confirmDel)}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NOVO USUÁRIO */}
+      {showNewU&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={fecharNewU}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:420,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Users size={22} color={D.blue}/></div>
+            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Novo usuário</div>
+            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>Cadastre um novo membro da equipe.</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome</label><input autoFocus style={st.inp} value={newU.name} onChange={e=>{setNewU(p=>({...p,name:e.target.value}));setNewUErr("");}}/></div>
+              <div><label style={st.lbl}>Setor</label><input style={st.inp} placeholder="Ex.: Financeiro" value={newU.setor} onChange={e=>{setNewU(p=>({...p,setor:e.target.value}));setNewUErr("");}}/></div>
+              <div><label style={st.lbl}>Cargo</label>
+                <select style={st.inp} value={newU.role} onChange={e=>setNewU(p=>({...p,role:e.target.value}))}>
+                  <option value="func">Funcionária</option>
+                  <option value="admin">Supervisora</option>
+                </select>
+              </div>
+              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>E-mail</label><input type="email" style={st.inp} placeholder="nome@bp-visionn.com" value={newU.email} onChange={e=>setNewU(p=>({...p,email:e.target.value}))}/></div>
+              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Senha inicial</label><input type="password" style={st.inp} value={newU.senha} onChange={e=>{setNewU(p=>({...p,senha:e.target.value}));setNewUErr("");}} onKeyDown={e=>e.key==="Enter"&&criarUsuario()}/></div>
+            </div>
+            {newUErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",margin:"12px 0 0",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{newUErr}</div>}
+            <div style={{display:"flex",gap:10,marginTop:20}}>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharNewU}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={criarUsuario}>Criar usuário</button>
             </div>
           </div>
         </div>
