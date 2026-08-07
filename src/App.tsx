@@ -1,374 +1,16 @@
-import { useState, useRef, useEffect, type CSSProperties } from "react";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, TrendingUp, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail } from "lucide-react";
-
-type User = { id:string; name:string; role:string; setor:string; initials:string; color:string; senha:string; photo?:string|null; email?:string; status?:"online"|"away"|"offline"; lastAccess?:string; };
-type Tarefa = { id:number; fornecedor:string; valor:number | string; vencimento:string; status:string; responsavel:string; obs:string; historico:Array<{data:string; novoVencimento:string; motivo:string}>; };
-type Contrato = { id:number; representante:string; cpfCnpj:string; porcentagem:string; email:string; telefone:string; dataInicio:string; tipo:string; status?:string; };
-type AuditEntry = { id:number; tipo:string; tarefa:string; usuario:string; hora:string; detalhe:string; };
-
-const LIGHT = { bg:"#F8FAFC",white:"#FFFFFF",text:"#111827",muted:"#6B7280",border:"#E5E7EB",blue:"#2563EB",blueSoft:"#EFF6FF",blueText:"#1D4ED8",green:"#22C55E",greenSoft:"#F0FDF4",greenText:"#15803D",red:"#EF4444",redSoft:"#FEF2F2",redText:"#B91C1C",orange:"#F59E0B",orangeSoft:"#FFFBEB",orangeText:"#B45309",gray:"#E5E7EB",purple:"#8B5CF6",purpleSoft:"#F5F3FF",purpleText:"#6D28D9" };
-const DARK  = { bg:"#070A13",white:"#0F1526",text:"#F5F7FA",muted:"#8D99AE",border:"#212B42",blue:"#3E93FF",blueSoft:"#132B54",blueText:"#7EB8FF",green:"#22C55E",greenSoft:"#0F3D28",greenText:"#4ADE80",red:"#F0585F",redSoft:"#3A171A",redText:"#F79A9E",orange:"#EFA857",orangeSoft:"#3D2A12",orangeText:"#F7C888",gray:"#212B42",purple:"#A78BFA",purpleSoft:"#2A2059",purpleText:"#D3C2FB" };
-
-const USUARIOS = [
-  { id:"supervisora", name:"Bárbara",      role:"admin", setor:"Supervisão", initials:"BA", color:"#2563EB", senha:"adm123", email:"barbara@bp-visionn.com", status:"online" as const },
-  { id:"Esmeralda",       name:"Esmeralda",        role:"func",  setor:"Financeiro", initials:"AD", color:"#8B5CF6", senha:"adm123", email:"esmeralda@bp-visionn.com", status:"online" as const },
-  { id:"ana",         name:"Ana", role:"func",  setor:"Financeiro", initials:"AC", color:"#F59E0B", senha:"adm123", email:"ana@bp-visionn.com", status:"online" as const   },
-  { id:"Maria",      name:"Maria",       role:"func",  setor:"RH",         initials:"MA", color:"#22C55E", senha:"adm123", email:"maria@bp-visionn.com", status:"online" as const},
-  { id:"Victor",       name:"Victor",        role:"func",  setor:"Cadastro",   initials:"PA", color:"#EF4444", senha:"adm123", email:"victor@bp-visionn.com", status:"online" as const },
-];
-
-const hoje = new Date().toISOString().split("T")[0];
-const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-const DSEM  = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-const TIPO_EV = { tarefa:{label:"Tarefa",cor:"#2563EB",bg:"#EFF6FF"}, vencimento:{label:"Vencimento",cor:"#EF4444",bg:"#FEF2F2"}, reuniao:{label:"Reunião",cor:"#8B5CF6",bg:"#F5F3FF"}, lembrete:{label:"Lembrete",cor:"#F59E0B",bg:"#FFFBEB"} };
-
-const MODELOS_INIT = {
-  supervisor:"CONTRATO DE SUPERVISÃO COMERCIAL\n\nSupervisor: {{nome}}\nCPF/CNPJ: {{cpfCnpj}}\nE-mail: {{email}}\nTelefone: {{telefone}}\nData de Início: {{dataInicio}}\nComissão: {{porcentagem}}%\n\nCLÁUSULA 1 — DO OBJETO\nO Supervisor coordenará e supervisionará a equipe de vendas.\n\nCLÁUSULA 2 — DA REMUNERAÇÃO\nReceberá {{porcentagem}}% sobre as vendas totais da equipe, pagos mensalmente.\n\nCLÁUSULA 3 — DA VIGÊNCIA\nPrazo indeterminado, rescindível com aviso prévio de 30 dias.\n\n___________________________     ___________________________\nContratante                       Supervisor",
-  vendedor:"CONTRATO DE REPRESENTAÇÃO COMERCIAL\n\nRepresentante: {{nome}}\nCPF/CNPJ: {{cpfCnpj}}\nE-mail: {{email}}\nTelefone: {{telefone}}\nData de Início: {{dataInicio}}\nComissão: {{porcentagem}}%\n\nCLÁUSULA 1 — DO OBJETO\nAtuará como agente comercial autônomo.\n\nCLÁUSULA 2 — DA REMUNERAÇÃO\nReceberá {{porcentagem}}% sobre vendas concretizadas, pagos mensalmente.\n\nCLÁUSULA 3 — DA VIGÊNCIA\nPrazo indeterminado, rescindível com aviso prévio de 30 dias.\n\n___________________________     ___________________________\nContratante                       Representante",
-  recibo:"RECIBO DE PAGAMENTO\n\nNome: {{nome}}\nCPF/CNPJ: {{cpfCnpj}}\nComissão: {{porcentagem}}%\nData: {{dataInicio}}\n\nDeclaro ter recebido o valor referente à comissão sobre vendas realizadas no período.\n\n___________________________     ___________________________\nContratante                       Representante",
-};
-const TIPO_MOD = { supervisor:{label:"Contrato de Supervisor",emoji:"📄"}, vendedor:{label:"Contrato de Vendedor",emoji:"📄"}, recibo:{label:"Recibo",emoji:"🧾"} };
-const AUDIT_IC = { "Tarefa criada":"✅","Status alterado":"🔄","Responsável alterado":"👤","Prorrogação":"📅","NF incluída":"📋","Contrato criado":"📄","Tarefa concluída":"✔️","Edição de informações":"✏️","Exportação PDF":"📥","Usuário criado":"🧑‍💼" };
-
-type AppStyles = {
-  inp: CSSProperties;
-  lbl: CSSProperties;
-  btn: CSSProperties;
-  btnBlue: CSSProperties;
-  card: CSSProperties;
-};
-
-function getIn(n){ return n.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
-function fBRL(v){ return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
-function fillTpl(tpl, d){
-  return tpl
-    .replace(/\{\{nome\}\}/g, d.representante||"")
-    .replace(/\{\{cpfCnpj\}\}/g, d.cpfCnpj||"")
-    .replace(/\{\{email\}\}/g, d.email||"")
-    .replace(/\{\{telefone\}\}/g, d.telefone||"")
-    .replace(/\{\{dataInicio\}\}/g, d.dataInicio||"")
-    .replace(/\{\{porcentagem\}\}/g, d.porcentagem||"");
-}
-function nowT(){ return new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}); }
-function nowF(){ return new Date().toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
-
-function loadTarefas(): Tarefa[] {
-  try {
-    const raw = localStorage.getItem("bvisionn_tarefas");
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-const TIPOS_IMG_PERMITIDOS = ["image/png","image/jpeg"];
-const TAMANHO_MAX_IMG = 5*1024*1024;
-function validarImagem(file){
-  if(!TIPOS_IMG_PERMITIDOS.includes(file.type)) return {ok:false, erro:"Formato não suportado. Envie uma imagem PNG, JPG ou JPEG."};
-  if(file.size>TAMANHO_MAX_IMG) return {ok:false, erro:"Arquivo muito grande. O limite é 5MB."};
-  return {ok:true};
-}
-function lerComoDataURL(file){
-  return new Promise<string>((resolve,reject)=>{
-    const reader = new FileReader();
-    reader.onload = ()=>resolve(reader.result as string);
-    reader.onerror = ()=>reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-function Badge(p) {
-  const m = { pendente:{label:"Pendente",bg:"#FFFBEB",c:"#B45309",dot:"#F59E0B"}, pago:{label:"Concluída",bg:"#F0FDF4",c:"#15803D",dot:"#22C55E"}, prorrogado:{label:"Prorrogado",bg:"#EFF6FF",c:"#1D4ED8",dot:"#2563EB"}, vencido:{label:"Urgente",bg:"#FEF2F2",c:"#B91C1C",dot:"#EF4444"} };
-  const s = m[p.status] || m.pendente;
-  return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:s.bg,color:s.c,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}><span style={{width:5,height:5,borderRadius:"50%",background:s.dot}}></span>{s.label}</span>;
-}
-
-const STATUS_COR = { online:"#22C55E", away:"#F59E0B", offline:"#94A3B8" };
-function Av(p) {
-  const size = p.size || 36;
-  const color = p.color || "#2563EB";
-  const D = p.D;
-  const statusCor = p.status && (D ? {online:D.green,away:D.orange,offline:D.muted}[p.status] : STATUS_COR[p.status]);
-  const nucleo = p.photo
-    ? <img src={p.photo} alt={p.name||"Foto de perfil"} style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",flexShrink:0,border:"1.5px solid "+color+"55",boxShadow:"0 2px 8px rgba(15,23,42,0.12)"}}/>
-    : <div style={{width:size,height:size,borderRadius:"50%",background:color+"33",color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:size*0.36,flexShrink:0,border:"1.5px solid "+color+"55"}}>{p.initials||getIn(p.name)}</div>;
-  if(!statusCor) return nucleo;
-  return (
-    <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
-      {nucleo}
-      <span style={{position:"absolute",right:-1,bottom:-1,width:Math.max(9,size*0.28),height:Math.max(9,size*0.28),borderRadius:"50%",background:statusCor,border:"2px solid "+(p.ringColor||"#fff")}}></span>
-    </div>
-  );
-}
-
-function MCard(p) {
-  return (
-    <div className="bv-stat-card" style={{background:p.D.white,borderRadius:18,border:"1.5px solid "+(p.highlight||p.D.border),padding:"1.6rem",display:"flex",flexDirection:"column",gap:16,boxShadow:"0 1px 2px rgba(15,23,42,0.04), 0 12px 28px rgba(15,23,42,0.06)"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <div style={{width:46,height:46,borderRadius:13,background:p.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><p.Icon size={22} color={p.color}/></div>
-        <div style={{width:26,height:26,borderRadius:"50%",background:p.D.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><TrendingUp size={13} color={p.D.muted}/></div>
-      </div>
-      <div style={{fontSize:32,fontWeight:700,color:p.highlight||p.D.text,lineHeight:1,letterSpacing:"-0.5px"}}>{p.value}</div>
-      <div style={{fontSize:13,color:p.D.muted}}>{p.label}</div>
-    </div>
-  );
-}
-
-function Donut(p) {
-  const size = p.size||140, stroke=16, r=(size-stroke)/2, c=2*Math.PI*r;
-  const total = p.data.reduce((s,d)=>s+d.value,0);
-  let offset = 0;
-  return (
-    <svg width={size} height={size} viewBox={"0 0 "+size+" "+size}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={p.D.gray} strokeWidth={stroke}/>
-      {total>0 && p.data.filter(d=>d.value>0).map(d=>{
-        const len = (d.value/total)*c;
-        const seg = <circle key={d.label} cx={size/2} cy={size/2} r={r} fill="none" stroke={d.color} strokeWidth={stroke} strokeDasharray={len+" "+(c-len)} strokeDashoffset={-offset} transform={"rotate(-90 "+size/2+" "+size/2+")"} style={{transition:"stroke-dasharray .4s ease"}}/>;
-        offset += len;
-        return seg;
-      })}
-    </svg>
-  );
-}
-
-function Calendario(p) {
-  const D = p.D; const st = p.st;
-  const [mes, setMes] = useState(new Date().getMonth());
-  const [ano, setAno] = useState(new Date().getFullYear());
-  const [diaSel, setDiaSel] = useState<number | null>(null);
-  const [form, setForm] = useState(false);
-  const [nTit, setNTit] = useState("");
-  const [nTipo, setNTipo] = useState("tarefa");
-  const [nHora, setNHora] = useState("");
-  const [nResp, setNResp] = useState("");
-  const [nDesc, setNDesc] = useState("");
-
-  const hd = new Date();
-  const prim = new Date(ano, mes, 1).getDay();
-  const ndias = new Date(ano, mes+1, 0).getDate();
-  const m2 = String(mes+1).padStart(2,"0");
-  const mStr = ano+"-"+m2;
-
-  const evT = p.tarefas
-    .filter(t => { const pt = t.vencimento.split("-"); return Number(pt[0])===ano && Number(pt[1])-1===mes; })
-    .map(t => { const fu = p.users.find(u => u.id===t.responsavel); return {id:"t"+t.id,data:t.vencimento,titulo:t.fornecedor,tipo:"vencimento",responsavel:fu?fu.name:"",descricao:"Status: "+t.status,hora:"",auto:true}; });
-
-  const evP = p.prorrogacoes
-    .filter(pr => pr.vencimento && pr.vencimento.indexOf(mStr)===0)
-    .map(pr => ({id:"p"+pr.id,data:pr.vencimento,titulo:"NF "+pr.nf+" - "+pr.fornecedor,tipo:"lembrete",responsavel:"",descricao:"Estado: "+pr.estado,hora:"",auto:true}));
-
-  const evM = p.eventos.filter(e => e.data.indexOf(mStr)===0);
-  const todos = evT.concat(evP).concat(evM);
-
-  function doDia(d) {
-    const ds = ano+"-"+m2+"-"+String(d).padStart(2,"0");
-    return todos.filter(e => e.data===ds);
-  }
-
-  function prevM() { if(mes===0){setMes(11);setAno(a=>a-1);}else{setMes(m=>m-1);} }
-  function nextM() { if(mes===11){setMes(0);setAno(a=>a+1);}else{setMes(m=>m+1);} }
-
-  function salvar() {
-    if(!nTit||!diaSel) return;
-    const ds = ano+"-"+m2+"-"+String(diaSel).padStart(2,"0");
-    p.setEventos(prev => prev.concat([{id:"ev"+Date.now(),data:ds,titulo:nTit,tipo:nTipo,hora:nHora,responsavel:nResp,descricao:nDesc,auto:false}]));
-    setNTit(""); setNTipo("tarefa"); setNHora(""); setNResp(""); setNDesc(""); setForm(false);
-  }
-
-  const cells = [];
-  for(let i=0;i<prim;i++) cells.push(null);
-  for(let d=1;d<=ndias;d++) cells.push(d);
-  while(cells.length%7!==0) cells.push(null);
-  const prox = todos.slice().sort((a,b)=>a.data>b.data?1:-1).slice(0,6);
-
-  return (
-    <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
-        <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Calendário</div><div style={{fontSize:13,color:D.muted}}>Vencimentos e eventos</div></div>
-        <button style={st.btnBlue} onClick={()=>{setDiaSel(hd.getDate());setForm(true);}}><Plus size={15}/>Novo evento</button>
-      </div>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-        <button style={st.btn} onClick={prevM}>‹</button>
-        <span style={{fontWeight:600,fontSize:16,color:D.text,minWidth:160,textAlign:"center"}}>{MESES[mes]} {ano}</span>
-        <button style={st.btn} onClick={nextM}>›</button>
-        <button style={{...st.btn,fontSize:12,padding:"6px 12px"}} onClick={()=>{setMes(hd.getMonth());setAno(hd.getFullYear());}}>Hoje</button>
-      </div>
-      <div className="bv-card" style={{...st.card,padding:"1rem",marginBottom:16}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-          {DSEM.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:600,color:D.muted,padding:"6px 0"}}>{d}</div>)}
-          {cells.map((d,i)=>{
-            if(!d) return <div key={"e"+i}/>;
-            const evs=doDia(d);
-            const isH=d===hd.getDate()&&mes===hd.getMonth()&&ano===hd.getFullYear();
-            const isS=d===diaSel;
-            return (
-              <div key={"d"+d} onClick={()=>{setDiaSel(d);setForm(false);}} style={{minHeight:60,borderRadius:8,padding:4,cursor:"pointer",border:"1.5px solid "+(isS?D.blue:isH?D.orange:D.border),background:isS?D.blueSoft:isH?D.orangeSoft:D.white}}>
-                <div style={{fontSize:12,fontWeight:isH||isS?700:400,color:isS?D.blue:isH?D.orange:D.text,marginBottom:2}}>{d}</div>
-                {evs.slice(0,2).map(ev=>{ const tc=TIPO_EV[ev.tipo]||TIPO_EV.tarefa; return <div key={ev.id} style={{fontSize:9,background:tc.bg,color:tc.cor,borderRadius:3,padding:"1px 3px",marginBottom:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{ev.titulo}</div>; })}
-                {evs.length>2&&<div style={{fontSize:9,color:D.muted}}>+{evs.length-2}</div>}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <div className="bv-card" style={st.card}>
-          <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:12}}>{diaSel?"Dia "+diaSel+" de "+MESES[mes]:"Selecione um dia"}</div>
-          {diaSel&&(()=>{
-            const evs=doDia(diaSel);
-            if(evs.length===0) return <div style={{color:D.muted,fontSize:13,textAlign:"center",padding:"1rem 0"}}>Nenhum evento.</div>;
-            return evs.map(ev=>{
-              const tc=TIPO_EV[ev.tipo]||TIPO_EV.tarefa;
-              return (
-                <div key={ev.id} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"8px 0",borderBottom:"1px solid "+D.border}}>
-                  <div style={{width:8,height:8,borderRadius:"50%",background:tc.cor,flexShrink:0,marginTop:4}}></div>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:500,fontSize:13,color:D.text}}>{ev.titulo}</div>
-                    <div style={{fontSize:11,color:D.muted,marginTop:2}}>
-                      <span style={{background:tc.bg,color:tc.cor,borderRadius:10,padding:"1px 7px",fontWeight:600}}>{tc.label}</span>
-                      {ev.hora&&<span style={{marginLeft:6}}>{ev.hora}</span>}
-                      {ev.responsavel&&<span style={{marginLeft:6}}>· {ev.responsavel}</span>}
-                    </div>
-                    {ev.descricao&&<div style={{fontSize:11,color:D.muted,marginTop:2,fontStyle:"italic"}}>{ev.descricao}</div>}
-                  </div>
-                  {!ev.auto&&<button style={{...st.btn,padding:"2px 6px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>p.setEventos(prev=>prev.filter(x=>x.id!==ev.id))}><X size={11}/></button>}
-                </div>
-              );
-            });
-          })()}
-          {form&&diaSel&&(
-            <div style={{marginTop:12,padding:12,background:D.bg,borderRadius:10}}>
-              <div style={{fontWeight:500,fontSize:13,color:D.text,marginBottom:10}}>Novo evento — dia {diaSel}</div>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                <div><label style={st.lbl}>Título</label><input style={st.inp} value={nTit} onChange={e=>setNTit(e.target.value)}/></div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  <div><label style={st.lbl}>Tipo</label>
-                    <select style={st.inp} value={nTipo} onChange={e=>setNTipo(e.target.value)}>
-                      {Object.keys(TIPO_EV).map(k=><option key={k} value={k}>{TIPO_EV[k].label}</option>)}
-                    </select>
-                  </div>
-                  <div><label style={st.lbl}>Hora</label><input type="time" style={st.inp} value={nHora} onChange={e=>setNHora(e.target.value)}/></div>
-                </div>
-                <div><label style={st.lbl}>Responsável</label>
-                  <select style={st.inp} value={nResp} onChange={e=>setNResp(e.target.value)}>
-                    <option value="">— Selecione —</option>
-                    {p.users.map(u=><option key={u.id} value={u.name}>{u.name}</option>)}
-                  </select>
-                </div>
-                <div><label style={st.lbl}>Descrição</label><input style={st.inp} value={nDesc} onChange={e=>setNDesc(e.target.value)}/></div>
-              </div>
-              <div style={{display:"flex",gap:8,marginTop:10}}>
-                <button style={st.btnBlue} onClick={salvar}><Check size={13}/>Salvar</button>
-                <button style={st.btn} onClick={()=>setForm(false)}>Cancelar</button>
-              </div>
-            </div>
-          )}
-          {!form&&diaSel&&<button style={{...st.btn,marginTop:12,fontSize:12,width:"100%",justifyContent:"center"}} onClick={()=>setForm(true)}><Plus size={13}/>Adicionar evento</button>}
-        </div>
-        <div className="bv-card" style={st.card}>
-          <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:12}}>Próximos eventos</div>
-          {prox.length===0&&<div style={{color:D.muted,fontSize:13,textAlign:"center",padding:"1rem 0"}}>Nenhum evento próximo.</div>}
-          {prox.map(ev=>{
-            const tc=TIPO_EV[ev.tipo]||TIPO_EV.tarefa;
-            const dd=ev.data.split("-")[2];
-            return (
-              <div key={ev.id} style={{display:"flex",gap:10,alignItems:"center",padding:"7px 0",borderBottom:"1px solid "+D.border}}>
-                <div style={{width:34,height:34,borderRadius:8,background:tc.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <span style={{fontSize:13,fontWeight:700,color:tc.cor}}>{+dd}</span>
-                </div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:500,color:D.text}}>{ev.titulo}</div>
-                  <div style={{fontSize:11,color:D.muted}}>{ev.data}{ev.responsavel&&" · "+ev.responsavel}</div>
-                </div>
-                <span style={{fontSize:10,background:tc.bg,color:tc.cor,borderRadius:10,padding:"2px 8px",fontWeight:600}}>{tc.label}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MiniCalendario(p) {
-  const D = p.D; const st = p.st;
-  const hd = new Date();
-  const mes = hd.getMonth(); const ano = hd.getFullYear();
-  const prim = new Date(ano, mes, 1).getDay();
-  const ndias = new Date(ano, mes+1, 0).getDate();
-  const m2 = String(mes+1).padStart(2,"0");
-  const mStr = ano+"-"+m2;
-  const diasComEvento = new Set(
-    p.tarefas.filter(t=>t.vencimento && t.vencimento.indexOf(mStr)===0).map(t=>Number(t.vencimento.split("-")[2]))
-  );
-  const cells = [];
-  for(let i=0;i<prim;i++) cells.push(null);
-  for(let d=1;d<=ndias;d++) cells.push(d);
-
-  return (
-    <div className="bv-card" style={st.card}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div style={{fontWeight:600,fontSize:14,color:D.text}}>Calendário</div>
-        <span style={{fontSize:12,color:D.muted,fontWeight:500}}>{MESES[mes]} {ano}</span>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2}}>
-        {DSEM.map(d=><div key={d} style={{textAlign:"center",fontSize:10,fontWeight:600,color:D.muted,padding:"2px 0"}}>{d[0]}</div>)}
-        {cells.map((d,i)=>{
-          if(!d) return <div key={"e"+i}/>;
-          const isH = d===hd.getDate();
-          const has = diasComEvento.has(d);
-          return (
-            <div key={"d"+d} style={{textAlign:"center",fontSize:11,padding:"5px 0",borderRadius:6,fontWeight:isH?700:400,color:isH?D.blue:D.text,background:isH?D.blueSoft:"transparent",position:"relative"}}>
-              {d}
-              {has&&!isH&&<span style={{position:"absolute",bottom:1,left:"50%",transform:"translateX(-50%)",width:4,height:4,borderRadius:"50%",background:D.orange}}/>}
-            </div>
-          );
-        })}
-      </div>
-      <button onClick={()=>p.setTab("calendario")} style={{marginTop:10,padding:"10px 0 0",borderTop:"1px solid "+D.border,borderLeft:"none",borderRight:"none",borderBottom:"none",width:"100%",background:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",color:D.blue,fontSize:12,fontWeight:600}}>Ver calendário completo<ChevronRight size={14}/></button>
-    </div>
-  );
-}
-
-function StatusDonutCard(p) {
-  const D = p.D; const st = p.st;
-  const tarefas = p.tarefas;
-  const statusData = [
-    {label:"Pendente",   value:tarefas.filter(t=>t.status==="pendente").length,   color:D.orange},
-    {label:"Vencido",    value:tarefas.filter(t=>t.status==="vencido").length,    color:D.red},
-    {label:"Prorrogado", value:tarefas.filter(t=>t.status==="prorrogado").length, color:D.blue},
-    {label:"Concluída",  value:tarefas.filter(t=>t.status==="pago").length,       color:D.green},
-  ];
-  return (
-    <div className="bv-card" style={{...st.card,marginBottom:20}}>
-      <div style={{fontWeight:600,fontSize:14,color:D.text}}>{p.title||"Tarefas por status"}</div>
-      <div style={{fontSize:12,color:D.muted,marginBottom:16}}>{p.subtitle||"Distribuição atual"}</div>
-      {tarefas.length===0?(
-        <div style={{textAlign:"center",padding:"1.5rem 0",color:D.muted,fontSize:13}}>Nenhuma tarefa cadastrada.</div>
-      ):(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
-          <div style={{position:"relative",width:140,height:140}}>
-            <Donut D={D} size={140} data={statusData}/>
-            <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-              <div style={{fontSize:26,fontWeight:700,color:D.text}}>{tarefas.length}</div>
-              <div style={{fontSize:10,color:D.muted}}>Total</div>
-            </div>
-          </div>
-          <div style={{width:"100%",display:"flex",flexDirection:"column",gap:9}}>
-            {statusData.map(d=>(
-              <div key={d.label} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:D.muted}}>
-                <span style={{width:8,height:8,borderRadius:"50%",background:d.color,flexShrink:0}}></span>
-                <span style={{flex:1}}>{d.label}</span>
-                <span style={{fontWeight:600,color:D.text}}>{d.value} ({tarefas.length>0?Math.round((d.value/tarefas.length)*1000)/10:0}%)</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      <button onClick={()=>p.setTab("pendencias")} style={{marginTop:16,padding:"14px 0 0",borderTop:"1px solid "+D.border,borderLeft:"none",borderRight:"none",borderBottom:"none",width:"100%",background:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",color:D.blue,fontSize:12,fontWeight:600}}>Ver todas as pendências<ChevronRight size={14}/></button>
-    </div>
-  );
-}
+import { useState, useRef, useEffect } from "react";
+import { supabase } from "./lib/supabase";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail } from "lucide-react";
+import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
+import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
+import { getIn, fBRL, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, validarImagem, lerComoDataURL } from "./lib/helpers";
+import Badge from "./components/Badge";
+import Av from "./components/Av";
+import MCard from "./components/MCard";
+import Calendario from "./components/Calendario";
+import MiniCalendario from "./components/MiniCalendario";
+import StatusDonutCard from "./components/StatusDonutCard";
+import GoogleIcon from "./components/GoogleIcon";
 
 export default function App() {
   const [dark, setDark] = useState(false);
@@ -381,23 +23,36 @@ export default function App() {
     card:{background:D.white,borderRadius:20,border:"1px solid "+D.border,padding:"1.4rem 1.5rem",marginBottom:12,boxShadow:"0 1px 2px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)",transition:"transform .18s ease, box-shadow .18s ease"},
   };
 
-  const [users, setUsers] = useState<User[]>(USUARIOS.map(u=>({...u})));
-  const [user, setUser]   = useState<User | null>(null);
-  const [loginId, setLoginId] = useState("supervisora");
+  const [users, setUsers] = useState<UserType[]>([]);
+  const [user, setUser]   = useState<UserType | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
   const [loginSenha, setLoginSenha] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
   const [senhaVis, setSenhaVis] = useState(false);
   const [loginErr, setLoginErr] = useState("");
   const [lembrar, setLembrar] = useState(true);
   const [showForgot, setShowForgot] = useState(false);
-  const [forgotStep, setForgotStep] = useState<"email"|"nova"|"ok">("email");
+  const [forgotStep, setForgotStep] = useState<"email"|"sent">("email");
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotErr, setForgotErr] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
   const [novaSenha1, setNovaSenha1] = useState("");
   const [novaSenha2, setNovaSenha2] = useState("");
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [showGoogle, setShowGoogle] = useState(false);
   const [tab, setTab] = useState("painel");
-  const [tarefas, setTarefas] = useState<Tarefa[]>(loadTarefas);
-  const [contratos, setContratos] = useState<Contrato[]>([{id:1,representante:"Representante Exemplo",cpfCnpj:"",porcentagem:"0",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"}]);
+  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [contratos, setContratos] = useState<Contrato[]>([]);
+  const [representantes, setRepresentantes] = useState([]);
+  const [showRepForm, setShowRepForm] = useState(false);
+  const [repForm, setRepForm] = useState({id:null,nome:"",cpf:"",regiao:"Pará",supervisorId:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:""});
+  const [repFormErr, setRepFormErr] = useState("");
+  const [repSearch, setRepSearch] = useState("");
+  const [repFiltroRegiao, setRepFiltroRegiao] = useState("todos");
+  const [repFiltroStatus, setRepFiltroStatus] = useState("todos");
+  const [repFiltroSupervisor, setRepFiltroSupervisor] = useState("todos");
   const [modelos, setModelos] = useState({...MODELOS_INIT});
   const [prorrogacoes, setProrrogacoes] = useState([]);
   const [eventos, setEventos] = useState([]);
@@ -407,7 +62,7 @@ export default function App() {
   const [filtroAudit, setFiltroAudit] = useState("todos");
   const [showTForm, setShowTForm] = useState(false);
   const [showCForm, setShowCForm] = useState(false);
-  const [showProrr, setShowProrr] = useState<number | null>(null);
+  const [showProrr, setShowProrr] = useState<string | null>(null);
   const [showProrrForm, setShowProrrForm] = useState(false);
   const [showContrato, setShowContrato] = useState<Contrato | null>(null);
   const [editDoc, setEditDoc] = useState(false);
@@ -417,8 +72,8 @@ export default function App() {
   const [modEdit, setModEdit] = useState("");
   const [search, setSearch] = useState("");
   const [fStatus, setFStatus] = useState("todos");
-  const [newT, setNewT] = useState({fornecedor:"",valor:"",vencimento:"",responsavel:"Esmeralda",obs:""});
-  const [newC, setNewC] = useState({representante:"",cpfCnpj:"",porcentagem:"",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"});
+  const [newT, setNewT] = useState({fornecedor:"",valor:"",vencimento:"",responsavel:"",obs:""});
+  const [newC, setNewC] = useState({representanteId:"",cpfCnpj:"",porcentagem:"",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"});
   const [newPr, setNewPr] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Aguardando retorno"});
   const [prorr, setProrr] = useState({novoVencimento:"",motivo:""});
   const [prorrErr, setProrrErr] = useState("");
@@ -429,9 +84,10 @@ export default function App() {
   const [showNewU, setShowNewU] = useState(false);
   const [newU, setNewU] = useState({name:"",setor:"",role:"func",email:"",senha:""});
   const [newUErr, setNewUErr] = useState("");
-  const [confirm, setConfirm] = useState<number | null>(null);
-  const [confirmDel, setConfirmDel] = useState<number | null>(null);
-  const [editT, setEditT] = useState<number | null>(null);
+  const [newULoading, setNewULoading] = useState(false);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [editT, setEditT] = useState<string | null>(null);
   const [editTData, setEditTData] = useState({fornecedor:"",valor:"" as number | string,vencimento:"",responsavel:"",obs:""});
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoErr, setPhotoErr] = useState("");
@@ -445,6 +101,14 @@ export default function App() {
   const pends    = tarefas.filter(t=>t.status==="pendente"||t.status==="vencido");
   const pendsVis = isAdmin ? pends : pends.filter(t=>t.responsavel===(user&&user.id));
   const unread   = notifs.filter(n=>!n.read).length;
+  const responsavelPadrao = (users.find(u=>u.role==="func")||users[0]||{id:""}).id;
+  const representantesAtivos = representantes.filter(r=>r.status==="Ativo");
+  const representantesVisiveis = representantes.filter(r=>
+    (repFiltroRegiao==="todos"||r.regiao===repFiltroRegiao) &&
+    (repFiltroStatus==="todos"||r.status===repFiltroStatus) &&
+    (repFiltroSupervisor==="todos"||r.supervisorId===repFiltroSupervisor) &&
+    (!repSearch || r.nome.toLowerCase().includes(repSearch.toLowerCase()) || (r.cpf&&r.cpf.includes(repSearch)))
+  );
 
   useEffect(()=>{
     function h(e){ if(notifRef.current&&!notifRef.current.contains(e.target)) setShowNotif(false); }
@@ -452,65 +116,171 @@ export default function App() {
     return ()=>document.removeEventListener("mousedown",h);
   },[]);
 
+
   useEffect(()=>{
-    localStorage.setItem("bvisionn_tarefas", JSON.stringify(tarefas));
-  },[tarefas]);
+    let ativo = true;
+
+    // Diretório público (nome/setor/avatar), visível mesmo sem login — alimenta
+    // o seletor de conta e o preview da tela de login. Só preenche se "users"
+    // ainda estiver vazio, pra nunca sobrescrever a lista completa já carregada.
+    async function carregarDiretorioPublico(){
+      const { data, error } = await supabase.rpc("profiles_publico");
+      if(!ativo||error||!data) return;
+      setUsers(prev=>prev.length?prev:data.map(mapDiretorioRow));
+    }
+
+    // Lista completa (todos os campos), exige usuário autenticado — é o que
+    // alimenta Configurações > Equipe, os seletores de responsável etc.
+    async function sincronizarUsuarios(userId){
+      const { data, error } = await supabase.from("profiles").select("*").order("name");
+      if(!ativo) return null;
+      if(error||!data){ return null; }
+      const lista = data.map(mapProfileRow);
+      setUsers(lista);
+      const atual = lista.find(u=>u.id===userId) || null;
+      setUser(atual);
+      return atual;
+    }
+
+    function marcarOnline(userId){
+      supabase.from("profiles").update({ status:"online", last_access: new Date().toISOString() }).eq("id", userId);
+    }
+
+    // Todas as tarefas (RLS já filtra: admin vê tudo, funcionária só as suas),
+    // com o histórico de prorrogações trazido junto numa única consulta.
+    async function carregarTarefas(){
+      const { data, error } = await supabase.from("tarefas").select("*, tarefas_historico(id, novo_vencimento, motivo, created_at)").order("vencimento");
+      if(!ativo||error||!data) return;
+      setTarefas(data.map(mapTarefaRow));
+    }
+
+    // Pendências (NFs em negociação com fornecedores). RLS restringe a
+    // admin/Financeiro — para as demais funções a consulta retorna vazio.
+    async function carregarPendencias(){
+      const { data, error } = await supabase.from("pendencias").select("*").order("created_at",{ascending:false});
+      if(!ativo||error||!data) return;
+      setProrrogacoes(data.map(mapPendenciaRow));
+    }
+
+    // Contratos, já com o nome do representante trazido via representante_id
+    // (mesmo esquema de join usado em tarefas_historico).
+    async function carregarContratos(){
+      const { data, error } = await supabase.from("contratos").select("*, representantes(nome)").order("created_at",{ascending:false});
+      if(!ativo||error||!data) return;
+      setContratos(data.map(mapContratoRow));
+    }
+
+    async function carregarRepresentantes(){
+      const { data, error } = await supabase.from("representantes").select("*").order("nome");
+      if(!ativo||error||!data) return;
+      setRepresentantes(data.map(mapRepresentanteRow));
+    }
+
+    carregarDiretorioPublico();
+
+    supabase.auth.getSession().then(async ({data})=>{
+      if(!ativo) return;
+      if(data.session&&data.session.user){
+        marcarOnline(data.session.user.id);
+        const logado = await sincronizarUsuarios(data.session.user.id) || fallbackProfile(data.session.user);
+        if(!ativo) return;
+        setUser(logado);
+        setTab(logado.role==="admin"?"painel":"tarefas");
+        carregarTarefas();
+        carregarPendencias();
+        carregarContratos();
+        carregarRepresentantes();
+      }
+      setAuthLoading(false);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, novaSessao)=>{
+      setAuthLoading(false);
+      if(event==="PASSWORD_RECOVERY") setPasswordRecovery(true);
+      if(event==="SIGNED_OUT") setUser(null);
+      if((event==="SIGNED_IN"||event==="USER_UPDATED")&&novaSessao&&novaSessao.user){
+        if(event==="SIGNED_IN") marcarOnline(novaSessao.user.id);
+        sincronizarUsuarios(novaSessao.user.id).then(logado=>{
+          if(!ativo) return;
+          if(!logado) setUser(fallbackProfile(novaSessao.user));
+          if(event==="SIGNED_IN") setTab((logado||fallbackProfile(novaSessao.user)).role==="admin"?"painel":"tarefas");
+        });
+        if(event==="SIGNED_IN"){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarRepresentantes(); }
+      }
+    });
+
+    return ()=>{ ativo=false; sub.subscription.unsubscribe(); };
+  },[]);
 
   function addN(msg){ setNotifs(p=>[{id:Date.now(),msg,time:nowT(),read:false},...p].slice(0,20)); }
   function addA(tipo,tarefa,detalhe){ setAuditLog(p=>[{id:Date.now(),tipo,tarefa,usuario:user?user.name:"",hora:nowF(),detalhe},...p]); }
   function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.blueSoft,c:D.blueText},"Aprovado":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
 
-  function doLogin(){
-    const f=users.find(u=>u.id===loginId);
-    if(!f||f.senha!==loginSenha){setLoginErr("Usuário ou senha incorretos.");return;}
-    const fotoSalva = localStorage.getItem("bvisionn_photo_"+f.id);
-    const logado = {...f, photo: fotoSalva!==null?fotoSalva:f.photo, lastAccess: nowF()};
-    setUsers(prev=>prev.map(u=>u.id===f.id?logado:u));
-    setUser(logado); setLoginErr(""); setLoginSenha("");
-    setTab(f.role==="admin"?"painel":"tarefas");
+  async function doLogin(){
+    const email = loginEmail.trim();
+    if(!email||!loginSenha){ setLoginErr("Informe e-mail e senha."); return; }
+    setLoginErr(""); setLoginLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password: loginSenha });
+    setLoginLoading(false);
+    if(error){ setLoginErr("E-mail ou senha incorretos."); return; }
+    setLoginSenha("");
+  }
+
+  function doLogout(){
+    if(user) supabase.from("profiles").update({ status:"offline" }).eq("id", user.id);
+    setUser(null); setLoginSenha("");
+    supabase.auth.signOut();
   }
 
   function abrirForgot(){
-    setShowForgot(true); setForgotStep("email"); setForgotEmail(""); setForgotErr(""); setNovaSenha1(""); setNovaSenha2("");
+    setShowForgot(true); setForgotStep("email"); setForgotEmail(loginEmail); setForgotErr("");
   }
 
   function fecharForgot(){
-    setShowForgot(false); setForgotStep("email"); setForgotEmail(""); setForgotErr(""); setNovaSenha1(""); setNovaSenha2("");
+    setShowForgot(false); setForgotStep("email"); setForgotEmail(""); setForgotErr("");
   }
 
-  function confirmarEmailForgot(){
-    const f = users.find(u=>u.id===loginId);
-    if(!f||!f.email||f.email.toLowerCase()!==forgotEmail.trim().toLowerCase()){
-      setForgotErr("E-mail não corresponde ao usuário selecionado.");
-      return;
+  async function enviarRecuperacao(){
+    const email = forgotEmail.trim();
+    if(!email){ setForgotErr("Informe o e-mail."); return; }
+    setForgotErr(""); setForgotLoading(true);
+    try{
+      await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+    } finally {
+      setForgotLoading(false);
+      setForgotStep("sent");
     }
-    setForgotErr(""); setForgotStep("nova");
   }
 
-  function salvarNovaSenhaForgot(){
-    if(novaSenha1.length<4){ setForgotErr("A senha deve ter ao menos 4 caracteres."); return; }
+  async function definirNovaSenha(){
+    if(novaSenha1.length<6){ setForgotErr("A senha deve ter ao menos 6 caracteres."); return; }
     if(novaSenha1!==novaSenha2){ setForgotErr("As senhas não coincidem."); return; }
-    setUsers(prev=>prev.map(u=>u.id===loginId?{...u,senha:novaSenha1}:u));
-    setForgotErr(""); setForgotStep("ok");
+    setForgotErr(""); setRecoveryLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: novaSenha1 });
+    setRecoveryLoading(false);
+    if(error){ setForgotErr("Não foi possível alterar a senha. Tente novamente."); return; }
+    setPasswordRecovery(false); setNovaSenha1(""); setNovaSenha2("");
   }
 
-  function loginComGoogle(id){
+  function preencherEmailGoogle(id){
     const f=users.find(u=>u.id===id);
-    if(!f) return;
-    setLoginId(f.id); setLoginErr(""); setLoginSenha(""); setShowGoogle(false);
+    if(!f||!f.email) return;
+    setLoginEmail(f.email); setLoginErr(""); setLoginSenha(""); setShowGoogle(false);
   }
 
-  function salvarFoto(){
+  async function salvarFoto(){
     if(!photoPreview||!user) return;
-    localStorage.setItem("bvisionn_photo_"+user.id, photoPreview);
+    const { error } = await supabase.from("profiles").update({ photo_url: photoPreview }).eq("id", user.id);
+    if(error){ setPhotoErr("Não foi possível salvar a foto. Tente novamente."); return; }
     setUsers(prev=>prev.map(u=>u.id===user.id?{...u,photo:photoPreview}:u));
     setUser(u=>u?{...u,photo:photoPreview}:u);
     setPhotoPreview(null); setPhotoErr("");
   }
 
-  function removerFoto(){
+  async function removerFoto(){
     if(!user) return;
-    localStorage.removeItem("bvisionn_photo_"+user.id);
+    const { error } = await supabase.from("profiles").update({ photo_url: null }).eq("id", user.id);
+    if(error){ setPhotoErr("Não foi possível remover a foto. Tente novamente."); return; }
     setUsers(prev=>prev.map(u=>u.id===user.id?{...u,photo:null}:u));
     setUser(u=>u?{...u,photo:null}:u);
     setPhotoPreview(null); setPhotoErr("");
@@ -524,41 +294,62 @@ export default function App() {
     setPhotoPreview(await lerComoDataURL(file));
   }
 
-  function concluir(id){
+  async function concluir(id){
     const t=tarefas.find(x=>x.id===id); if(!t) return;
+    const { error } = await supabase.from("tarefas").update({ status:"pago" }).eq("id", id);
+    if(error) return;
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,status:"pago"}:x));
     addN("🔔 "+(user?user.name:"")+" concluiu \""+t.fornecedor+"\".");
     addA("Tarefa concluída",t.fornecedor,"Concluída por "+(user?user.name:"")+" em "+nowF());
     setConfirm(null);
   }
 
-  function reabrir(id){
+  async function reabrir(id){
     const t=tarefas.find(x=>x.id===id); if(!t) return;
+    const { error } = await supabase.from("tarefas").update({ status:"pendente" }).eq("id", id);
+    if(error) return;
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,status:"pendente"}:x));
     addA("Status alterado",t.fornecedor,"Concluída → Pendente");
   }
 
-  function prorrogar(id){
+  async function prorrogar(id){
     if(!prorr.novoVencimento||!prorr.motivo){ setProrrErr("Preencha o novo vencimento e o motivo."); return; }
     const t=tarefas.find(x=>x.id===id);
+    const { error: errUpd } = await supabase.from("tarefas").update({ vencimento:prorr.novoVencimento, status:"prorrogado" }).eq("id", id);
+    if(errUpd){ setProrrErr("Não foi possível salvar a prorrogação. Tente novamente."); return; }
+    const { error: errHist } = await supabase.from("tarefas_historico").insert({ tarefa_id:id, novo_vencimento:prorr.novoVencimento, motivo:prorr.motivo, criado_por:user?user.id:null });
+    if(errHist){ setProrrErr("Vencimento salvo, mas o histórico não pôde ser registrado."); return; }
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,vencimento:prorr.novoVencimento,status:"prorrogado",historico:(x.historico||[]).concat([{data:hoje,...prorr}])}:x));
     addN("Prorrogação: "+(t?t.fornecedor:""));
     addA("Prorrogação",t?t.fornecedor:"","Novo vencimento: "+prorr.novoVencimento);
     setShowProrr(null); setProrr({novoVencimento:"",motivo:""}); setProrrErr("");
   }
 
-  function addTarefa(){
-    if(!newT.fornecedor||!newT.vencimento) return;
-    const resp=users.find(u=>u.id===newT.responsavel);
-    setTarefas(prev=>prev.concat([{...newT,id:Date.now(),status:newT.vencimento<hoje?"vencido":"pendente",historico:[]}]));
+  async function addTarefa(){
+    const responsavelId = newT.responsavel || responsavelPadrao;
+    if(!newT.fornecedor||!newT.vencimento||!responsavelId) return;
+    const resp=users.find(u=>u.id===responsavelId);
+    const status = newT.vencimento<hoje?"vencido":"pendente";
+    const { data, error } = await supabase.from("tarefas").insert({
+      fornecedor: newT.fornecedor,
+      valor: newT.valor===""?null:Number(newT.valor),
+      vencimento: newT.vencimento,
+      responsavel_id: responsavelId,
+      observacao: newT.obs,
+      status,
+    }).select().single();
+    if(error||!data) return;
+    setTarefas(prev=>prev.concat([mapTarefaRow(data)]));
     addN("Nova tarefa: "+newT.fornecedor); addA("Tarefa criada",newT.fornecedor,"Atribuída a "+(resp?resp.name:""));
-    setNewT({fornecedor:"",valor:"",vencimento:"",responsavel:"Esmeralda",obs:""}); setShowTForm(false);
+    setNewT({fornecedor:"",valor:"",vencimento:"",responsavel:"",obs:""}); setShowTForm(false);
   }
 
-  function mudaResp(id,nid){
+  async function mudaResp(id,nid){
     const t=tarefas.find(x=>x.id===id);
     const ant=users.find(u=>u.id===(t?t.responsavel:""));
     const nov=users.find(u=>u.id===nid);
+    const { error } = await supabase.from("tarefas").update({ responsavel_id:nid }).eq("id", id);
+    if(error) return;
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,responsavel:nid}:x));
     addA("Responsável alterado",t?t.fornecedor:"",(ant?ant.name:"?")+" → "+(nov?nov.name:"?"));
   }
@@ -568,43 +359,127 @@ export default function App() {
     setEditTData({fornecedor:t.fornecedor,valor:t.valor,vencimento:t.vencimento,responsavel:t.responsavel,obs:t.obs});
   }
 
-  function salvarEditT(){
+  async function salvarEditT(){
     if(!editTData.fornecedor||!editTData.vencimento) return;
-    setTarefas(prev=>prev.map(x=>x.id===editT?{...x,...editTData,status:x.status==="pago"?"pago":(editTData.vencimento<hoje?"vencido":"pendente")}:x));
+    const atual = tarefas.find(x=>x.id===editT);
+    const status = atual&&atual.status==="pago" ? "pago" : (editTData.vencimento<hoje?"vencido":"pendente");
+    const { error } = await supabase.from("tarefas").update({
+      fornecedor: editTData.fornecedor,
+      valor: editTData.valor===""?null:Number(editTData.valor),
+      vencimento: editTData.vencimento,
+      responsavel_id: editTData.responsavel,
+      observacao: editTData.obs,
+      status,
+    }).eq("id", editT);
+    if(error) return;
+    setTarefas(prev=>prev.map(x=>x.id===editT?{...x,...editTData,status}:x));
     addA("Tarefa editada",editTData.fornecedor,"Dados atualizados por "+(user?user.name:""));
     setEditT(null);
   }
 
-  function excluirTarefa(id){
+  async function excluirTarefa(id){
     const t=tarefas.find(x=>x.id===id);
+    const { error } = await supabase.from("tarefas").delete().eq("id", id);
+    if(error) return;
     setTarefas(prev=>prev.filter(x=>x.id!==id));
     addA("Tarefa excluída",t?t.fornecedor:"","Removida por "+(user?user.name:""));
     addN("🗑️ Tarefa excluída: "+(t?t.fornecedor:""));
     setConfirmDel(null);
   }
 
-  function addContrato(){
-    const representante = (newC.representante || "").trim();
+  function abrirNovoRep(){
+    setRepForm({id:null,nome:"",cpf:"",regiao:"Pará",supervisorId:user?user.id:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:""});
+    setRepFormErr(""); setShowRepForm(true);
+  }
+
+  function abrirEditarRep(r){
+    setRepForm({id:r.id,nome:r.nome,cpf:r.cpf,regiao:r.regiao,supervisorId:r.supervisorId,status:r.status,dataEntrada:r.dataEntrada,dataSaida:r.dataSaida,motivoSaida:r.motivoSaida});
+    setRepFormErr(""); setShowRepForm(true);
+  }
+
+  function fecharRepForm(){
+    setShowRepForm(false); setRepFormErr("");
+  }
+
+  async function salvarRepresentante(){
+    const nome = repForm.nome.trim();
+    if(!nome){ setRepFormErr("Informe o nome."); return; }
+    if(repForm.status==="Inativo"&&!repForm.dataSaida){ setRepFormErr("Informe a data de saída."); return; }
+    const payload = {
+      nome,
+      cpf: repForm.cpf.trim()||null,
+      regiao: repForm.regiao,
+      supervisor_id: repForm.supervisorId||null,
+      status: repForm.status,
+      data_entrada: repForm.dataEntrada||hoje,
+      data_saida: repForm.status==="Inativo" ? (repForm.dataSaida||null) : null,
+      motivo_saida: repForm.status==="Inativo" ? (repForm.motivoSaida.trim()||null) : null,
+    };
+    if(repForm.id){
+      const { data, error } = await supabase.from("representantes").update(payload).eq("id",repForm.id).select("*").single();
+      if(error||!data){ setRepFormErr("Não foi possível salvar as alterações."); return; }
+      const atualizado = mapRepresentanteRow(data);
+      setRepresentantes(prev=>prev.map(r=>r.id===atualizado.id?atualizado:r).sort((a,b)=>a.nome.localeCompare(b.nome)));
+      addA("Edição de informações",nome,"Representante atualizado por "+(user?user.name:""));
+    } else {
+      const { data, error } = await supabase.from("representantes").insert(payload).select("*").single();
+      if(error||!data){ setRepFormErr("Não foi possível criar o representante."); return; }
+      const novo = mapRepresentanteRow(data);
+      setRepresentantes(prev=>[...prev, novo].sort((a,b)=>a.nome.localeCompare(b.nome)));
+      setNewC(p=>({...p, representanteId:novo.id}));
+      addN("Novo representante: "+nome); addA("Representante criado",nome,"Região: "+novo.regiao);
+    }
+    setShowRepForm(false); setRepFormErr("");
+  }
+
+  async function addContrato(){
+    const representanteId = newC.representanteId;
     const porcentagem = (newC.porcentagem || "").toString().trim();
+    const porcentagemNum = Number(porcentagem);
     const cpfCnpj = (newC.cpfCnpj || "").trim();
     const email = (newC.email || "").trim();
     const telefone = (newC.telefone || "").trim();
     const dataInicio = newC.dataInicio || hoje;
     const tipo = newC.tipo || "vendedor";
 
-    if(!representante || !porcentagem){ return; }
+    if(!representanteId || !porcentagem || isNaN(porcentagemNum) || porcentagemNum<0 || porcentagemNum>100){ return; }
 
-    const contrato = { representante, cpfCnpj, porcentagem, email, telefone, dataInicio, tipo, id:Date.now(), status:"ativo" as const };
-    setContratos(prev=>prev.concat([contrato]));
-    addN("Novo contrato: "+representante); addA("Contrato criado",representante,"Tipo: "+(TIPO_MOD[tipo]?TIPO_MOD[tipo].label:""));
-    setShowCForm(false); setNewC({representante:"",cpfCnpj:"",porcentagem:"",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"});
+    const { data, error } = await supabase.from("contratos").insert({
+      representante_id: representanteId,
+      tipo, cpf_cnpj: cpfCnpj, porcentagem: porcentagemNum, email, telefone,
+      data_inicio: dataInicio, status:"ativo", created_by: user?user.id:null,
+    }).select("*, representantes(nome)").single();
+    if(error||!data) return;
+    const novo = mapContratoRow(data);
+    setContratos(prev=>[novo, ...prev]);
+    addN("Novo contrato: "+novo.representante); addA("Contrato criado",novo.representante,"Tipo: "+(TIPO_MOD[tipo]?TIPO_MOD[tipo].label:""));
+    setShowCForm(false); setNewC({representanteId:"",cpfCnpj:"",porcentagem:"",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"});
   }
 
-  function addNF(){
+  async function addNF(){
     if(!newPr.fornecedor||!newPr.nf) return;
-    setProrrogacoes(prev=>prev.concat([{...newPr,id:Date.now()}]));
+    const { data, error } = await supabase.from("pendencias").insert({
+      fornecedor: newPr.fornecedor,
+      numero_nf: newPr.nf,
+      vencimento: newPr.vencimento || null,
+      estado: newPr.estado,
+    }).select().single();
+    if(error||!data) return;
+    setProrrogacoes(prev=>prev.concat([mapPendenciaRow(data)]));
     addN("NF incluída: "+newPr.nf); addA("NF incluída",newPr.fornecedor,"NF: "+newPr.nf);
     setNewPr({fornecedor:"",nf:"",vencimento:"",estado:"Aguardando retorno"}); setShowProrrForm(false);
+  }
+
+  async function mudarEstadoNF(id,estado){
+    const { error } = await supabase.from("pendencias").update({ estado }).eq("id", id);
+    if(error) return;
+    setProrrogacoes(prev=>prev.map(x=>x.id===id?{...x,estado}:x));
+  }
+
+  async function excluirNF(id){
+    const { error } = await supabase.from("pendencias").delete().eq("id", id);
+    if(error) return;
+    setProrrogacoes(prev=>prev.filter(x=>x.id!==id));
   }
 
   function exportPDF(c,txt){
@@ -628,9 +503,20 @@ export default function App() {
     addA("Exportação PDF",c.representante,titulo+" exportado"); addN("PDF: "+titulo+" — "+c.representante);
   }
 
-  function saveU(id){
+  // Salva a última versão do texto do contrato (histórico de revisão) no banco.
+  async function salvarDocumento(id,texto){
+    const { error } = await supabase.from("contratos").update({ documento_texto: texto }).eq("id", id);
+    if(error) return;
+    setContratos(prev=>prev.map(x=>x.id===id?{...x,documentoTexto:texto}:x));
+    setShowContrato(prev=>prev&&prev.id===id?{...prev,documentoTexto:texto}:prev);
+  }
+
+  async function saveU(id){
     if(!editN.trim()||!editSetor.trim()) return;
-    const up=users.map(u=>u.id===id?{...u,name:editN.trim(),initials:getIn(editN.trim()),senha:editS||u.senha,setor:editSetor.trim()}:u);
+    const nome = editN.trim(), setor = editSetor.trim();
+    const { error } = await supabase.from("profiles").update({ name:nome, setor, initials:getIn(nome) }).eq("id", id);
+    if(error) return;
+    const up=users.map(u=>u.id===id?{...u,name:nome,initials:getIn(nome),setor}:u);
     setUsers(up); if(user&&user.id===id) setUser(up.find(u=>u.id===id));
     setEditU(null); setEditN(""); setEditS(""); setEditSetor("");
   }
@@ -643,21 +529,51 @@ export default function App() {
     setShowNewU(false); setNewUErr("");
   }
 
-  function criarUsuario(){
+  async function criarUsuario(){
     const nome = newU.name.trim();
     const setor = newU.setor.trim();
+    const email = newU.email.trim();
     if(!nome){ setNewUErr("Informe o nome."); return; }
     if(!setor){ setNewUErr("Informe o setor."); return; }
-    if(newU.senha.length<4){ setNewUErr("A senha deve ter ao menos 4 caracteres."); return; }
-    const base = nome.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"") || "usuario";
-    let id = base, n = 1;
-    while(users.some(u=>u.id===id)){ id = base+n; n++; }
-    const cores = ["#2563EB","#8B5CF6","#F59E0B","#22C55E","#EF4444"];
-    const novo: User = { id, name:nome, role:newU.role, setor, initials:getIn(nome), color:cores[users.length%cores.length], senha:newU.senha, email:newU.email.trim()||undefined, status:"offline" };
-    setUsers(prev=>[...prev, novo]);
-    addA("Usuário criado", nome, "Novo usuário adicionado à equipe ("+setor+")");
-    addN("Novo usuário cadastrado: "+nome);
-    setShowNewU(false); setNewUErr("");
+    if(!email){ setNewUErr("Informe o e-mail."); return; }
+    if(newU.senha.length<6){ setNewUErr("A senha deve ter ao menos 6 caracteres."); return; }
+    setNewUErr(""); setNewULoading(true);
+
+    try {
+      const { data: created, error: createErr } = await supabase.functions.invoke("create-user", {
+        body: { name: nome, email, senha: newU.senha },
+      });
+      if(createErr || !created?.id){
+        // supabase-js só preenche createErr.message com um texto genérico
+        // ("Edge Function returned a non-2xx status code"); o motivo real
+        // que a função devolveu em JSON só existe em error.context.
+        let msg = created?.error;
+        if(!msg && createErr && typeof createErr.context?.json === "function"){
+          try { msg = (await createErr.context.json())?.error; } catch { /* corpo não era JSON */ }
+        }
+        setNewUErr(msg || createErr?.message || "Não foi possível criar o usuário.");
+        return;
+      }
+
+      const cores = ["#2563EB","#8B5CF6","#F59E0B","#22C55E","#EF4444"];
+      const { data: atualizado, error: updErr } = await supabase.from("profiles").update({
+        setor, role: newU.role, initials: getIn(nome), color: cores[users.length%cores.length],
+      }).eq("id", created.id).select("*").single();
+      if(updErr || !atualizado){
+        setNewUErr("Usuário criado no login, mas não foi possível salvar setor/cargo. Edite pela lista de Equipe.");
+        return;
+      }
+
+      const novo: UserType = mapProfileRow(atualizado);
+      setUsers(prev=>[...prev, novo]);
+      addA("Usuário criado", nome, "Novo usuário adicionado à equipe ("+setor+")");
+      addN("Novo usuário cadastrado: "+nome);
+      setShowNewU(false); setNewUErr("");
+    } catch(e) {
+      setNewUErr("Não foi possível criar o usuário. Verifique sua conexão e tente novamente.");
+    } finally {
+      setNewULoading(false);
+    }
   }
 
   const NAV=[
@@ -665,13 +581,38 @@ export default function App() {
     {id:"tarefas",label:"Tarefas",Icon:Receipt,show:true},
     {id:"pendencias",label:"Pendências",Icon:Clock,show:true},
     {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin},
+    {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin},
     {id:"calendario",label:"Calendário",Icon:Calendar,show:true},
     {id:"auditoria",label:"Auditoria",Icon:ClipboardList,show:isAdmin},
     {id:"config",label:"Configurações",Icon:Settings,show:isAdmin},
   ].filter(n=>n.show);
 
+  const loginBg = dark ? "radial-gradient(circle at 15% 15%, rgba(62,147,255,0.12), transparent 45%), radial-gradient(circle at 85% 85%, rgba(62,147,255,0.10), transparent 45%), linear-gradient(160deg, #05070D 0%, #0A0F1E 100%)" : "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)";
+
+  if(authLoading) return (
+    <div className="bv-login-wrap" style={{background:loginBg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:dark?"#fff":D.text,fontSize:14,fontWeight:600}}>Carregando...</div>
+    </div>
+  );
+
+  if(passwordRecovery) return (
+    <div className="bv-login-wrap" style={{background:loginBg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div className="bv-modal-card" style={{background:dark?D.bg:D.white,borderRadius:18,padding:"2.5rem",maxWidth:400,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}}>
+        <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Lock size={24} color={D.blue}/></div>
+        <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Defina sua nova senha</div>
+        <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>Você seguiu o link de recuperação enviado por e-mail. Escolha uma nova senha para acessar sua conta.</div>
+        <label style={st.lbl}>Nova senha</label>
+        <input type="password" placeholder="Nova senha" value={novaSenha1} onChange={e=>{setNovaSenha1(e.target.value);setForgotErr("");}} style={{...st.inp,marginBottom:12}} autoFocus/>
+        <label style={st.lbl}>Confirmar nova senha</label>
+        <input type="password" placeholder="Confirme a nova senha" value={novaSenha2} onChange={e=>{setNovaSenha2(e.target.value);setForgotErr("");}} onKeyDown={e=>e.key==="Enter"&&definirNovaSenha()} style={{...st.inp,marginBottom:12}}/>
+        {forgotErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{forgotErr}</div>}
+        <button style={{...st.btnBlue,width:"100%",justifyContent:"center",padding:"12px"}} onClick={definirNovaSenha} disabled={recoveryLoading}>{recoveryLoading?"Salvando...":"Salvar nova senha"}</button>
+      </div>
+    </div>
+  );
+
   if(!user) return (
-    <div className="bv-login-wrap" style={{background: dark ? "radial-gradient(circle at 15% 15%, rgba(62,147,255,0.12), transparent 45%), radial-gradient(circle at 85% 85%, rgba(62,147,255,0.10), transparent 45%), linear-gradient(160deg, #05070D 0%, #0A0F1E 100%)" : "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)"}}>
+    <div className="bv-login-wrap" style={{background:loginBg}}>
       <div className="bv-modal-card bv-login-card" style={{boxShadow: dark ? "0 30px 90px rgba(0,0,0,0.55)" : "0 30px 80px rgba(15,23,42,0.18)", border:"1px solid "+(dark?"rgba(62,147,255,0.18)":D.border)}}>
         {/* PAINEL DE MARCA */}
         <div className="bv-login-brand" style={{background:"radial-gradient(circle at 25% 15%, rgba(62,147,255,0.22), transparent 45%), radial-gradient(circle at 80% 88%, rgba(62,147,255,0.14), transparent 50%), linear-gradient(165deg, #060912 0%, #0B1226 100%)"}}>
@@ -700,15 +641,12 @@ export default function App() {
           <div style={{fontSize:24,fontWeight:800,color:D.text}}>Bem-vinda de volta! 👋</div>
           <div style={{fontSize:13.5,color:D.muted,marginTop:6,marginBottom:26}}>Faça login para acessar sua conta</div>
 
-          <label style={st.lbl}>Usuário</label>
+          <label style={st.lbl}>E-mail</label>
           <div style={{position:"relative",marginBottom:12}}>
-            <User size={15} color={D.muted} style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
-            <select value={loginId} onChange={e=>{setLoginId(e.target.value);setLoginErr("");}} style={{...st.inp,paddingLeft:36,paddingRight:34,appearance:"none",WebkitAppearance:"none"}}>
-              {users.map(u=><option key={u.id} value={u.id}>{u.name} — {u.setor}</option>)}
-            </select>
-            <ChevronDown size={15} color={D.muted} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
+            <Mail size={15} color={D.muted} style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
+            <input type="email" placeholder="seu.email@bp-visionn.com" value={loginEmail} onChange={e=>{setLoginEmail(e.target.value);setLoginErr("");}} style={{...st.inp,paddingLeft:36}} autoFocus/>
           </div>
-          {users.filter(u=>u.id===loginId).map(u=>(
+          {users.filter(u=>u.email&&u.email.toLowerCase()===loginEmail.trim().toLowerCase()).map(u=>(
             <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:dark?D.white:D.bg,borderRadius:10,marginBottom:16,border:"1px solid "+D.border}}>
               <Av name={u.name} initials={u.initials} color={u.color} size={32}/>
               <div><div style={{fontWeight:600,fontSize:13,color:D.text}}>{u.name}</div><div style={{fontSize:11,color:D.muted}}>{u.setor}</div></div>
@@ -731,7 +669,7 @@ export default function App() {
 
           {loginErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{loginErr}</div>}
 
-          <button style={{...st.btnBlue,width:"100%",justifyContent:"center",padding:"12px"}} onClick={doLogin}>Entrar <ArrowRight size={15}/></button>
+          <button style={{...st.btnBlue,width:"100%",justifyContent:"center",padding:"12px"}} onClick={doLogin} disabled={loginLoading}>{loginLoading?"Entrando...":<>Entrar <ArrowRight size={15}/></>}</button>
 
           <div style={{display:"flex",alignItems:"center",gap:12,margin:"14px 0 10px"}}>
             <div style={{flex:1,height:1,background:D.border}}/>
@@ -740,7 +678,7 @@ export default function App() {
           </div>
 
           <button onClick={()=>setShowGoogle(true)} style={{...st.btn,width:"100%",justifyContent:"center",padding:"11px",background:dark?D.bg:D.white}}>
-            <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
+            <GoogleIcon size={16}/>
             Entrar com Google
           </button>
         </div>
@@ -753,38 +691,22 @@ export default function App() {
               <>
                 <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Mail size={24} color={D.blue}/></div>
                 <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Esqueci minha senha</div>
-                <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>Confirme o e-mail cadastrado de <b>{(users.find(u=>u.id===loginId)||{name:""}).name}</b> para criar uma nova senha.</div>
+                <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>Informe o e-mail da sua conta. Enviaremos um link para você redefinir sua senha.</div>
                 <label style={st.lbl}>E-mail</label>
-                <input type="email" placeholder="seu.email@bp-visionn.com" value={forgotEmail} onChange={e=>{setForgotEmail(e.target.value);setForgotErr("");}} onKeyDown={e=>e.key==="Enter"&&confirmarEmailForgot()} style={{...st.inp,marginBottom:12}} autoFocus/>
+                <input type="email" placeholder="seu.email@bp-visionn.com" value={forgotEmail} onChange={e=>{setForgotEmail(e.target.value);setForgotErr("");}} onKeyDown={e=>e.key==="Enter"&&enviarRecuperacao()} style={{...st.inp,marginBottom:12}} autoFocus/>
                 {forgotErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{forgotErr}</div>}
                 <div style={{display:"flex",gap:10}}>
                   <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:dark?D.bg:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharForgot}>Cancelar</button>
-                  <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={confirmarEmailForgot}>Continuar</button>
+                  <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={enviarRecuperacao} disabled={forgotLoading}>{forgotLoading?"Enviando...":"Enviar link"}</button>
                 </div>
               </>
             )}
-            {forgotStep==="nova"&&(
-              <>
-                <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Lock size={24} color={D.blue}/></div>
-                <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Crie uma nova senha</div>
-                <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>Escolha uma nova senha para sua conta.</div>
-                <label style={st.lbl}>Nova senha</label>
-                <input type="password" placeholder="Nova senha" value={novaSenha1} onChange={e=>{setNovaSenha1(e.target.value);setForgotErr("");}} style={{...st.inp,marginBottom:12}} autoFocus/>
-                <label style={st.lbl}>Confirmar nova senha</label>
-                <input type="password" placeholder="Confirme a nova senha" value={novaSenha2} onChange={e=>{setNovaSenha2(e.target.value);setForgotErr("");}} onKeyDown={e=>e.key==="Enter"&&salvarNovaSenhaForgot()} style={{...st.inp,marginBottom:12}}/>
-                {forgotErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{forgotErr}</div>}
-                <div style={{display:"flex",gap:10}}>
-                  <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:dark?D.bg:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharForgot}>Cancelar</button>
-                  <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={salvarNovaSenhaForgot}>Salvar senha</button>
-                </div>
-              </>
-            )}
-            {forgotStep==="ok"&&(
+            {forgotStep==="sent"&&(
               <>
                 <div style={{width:48,height:48,borderRadius:12,background:D.greenSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><CheckCircle size={26} color={D.green}/></div>
-                <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Senha alterada!</div>
-                <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:24}}>Sua senha foi atualizada com sucesso. Você já pode entrar com a nova senha.</div>
-                <button style={{width:"100%",padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={fecharForgot}>Fazer login</button>
+                <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Verifique seu e-mail</div>
+                <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:24}}>Se esse e-mail estiver cadastrado, você receberá em instantes um link para redefinir sua senha.</div>
+                <button style={{width:"100%",padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={fecharForgot}>Fechar</button>
               </>
             )}
           </div>
@@ -795,13 +717,13 @@ export default function App() {
         <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={()=>setShowGoogle(false)}>
           <div className="bv-modal-card" style={{background:"#fff",borderRadius:18,padding:"0",maxWidth:400,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
             <div style={{padding:"28px 24px 16px",textAlign:"center"}}>
-              <svg width="36" height="36" viewBox="0 0 48 48" style={{margin:"0 auto 14px"}}><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
+              <GoogleIcon size={36} style={{margin:"0 auto 14px"}}/>
               <div style={{fontWeight:600,fontSize:16,color:"#202124"}}>Escolha uma conta</div>
               <div style={{fontSize:13,color:"#5f6368",marginTop:4}}>para continuar no BP-Visionn</div>
             </div>
             <div style={{borderTop:"1px solid #e8eaed"}}>
               {users.map(u=>(
-                <div key={u.id} onClick={()=>loginComGoogle(u.id)} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 24px",cursor:"pointer",transition:"background-color .12s ease"}} onMouseEnter={e=>e.currentTarget.style.background="#f8f9fa"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div key={u.id} onClick={()=>preencherEmailGoogle(u.id)} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 24px",cursor:"pointer",transition:"background-color .12s ease"}} onMouseEnter={e=>e.currentTarget.style.background="#f8f9fa"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                   <Av name={u.name} initials={u.initials} color={u.color} size={36}/>
                   <div><div style={{fontWeight:500,fontSize:14,color:"#202124"}}>{u.name}</div><div style={{fontSize:12,color:"#5f6368"}}>{u.setor}</div></div>
                 </div>
@@ -850,7 +772,7 @@ export default function App() {
           </div>
           <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={D.white} size={32}/>
           <div><div style={{fontSize:13,fontWeight:600,color:D.text}}>{user.name}</div><div style={{fontSize:11,color:D.muted}}>{user.setor}</div></div>
-          <button style={{...st.btn,padding:"6px 10px",border:"none",background:D.bg}} onClick={()=>{setUser(null);setLoginSenha("");}}><LogOut size={15} color={D.muted}/></button>
+          <button style={{...st.btn,padding:"6px 10px",border:"none",background:D.bg}} onClick={doLogout}><LogOut size={15} color={D.muted}/></button>
         </div>
       </div>
 
@@ -876,7 +798,7 @@ export default function App() {
               <span style={{display:"flex",alignItems:"center",gap:8}}>{dark?<Moon size={15} color={D.blue}/>:<Sun size={15} color={D.orange}/>}Modo escuro</span>
               <span className={"bv-switch"+(dark?" on":"")}><span className="bv-switch-knob"/></span>
             </button>
-            <button onClick={()=>{setUser(null);setLoginSenha("");}} style={{...st.btn,width:"100%",justifyContent:"center",color:D.redText,background:dark?D.bg:"#fff"}}><LogOut size={15}/>Sair</button>
+            <button onClick={doLogout} style={{...st.btn,width:"100%",justifyContent:"center",color:D.redText,background:dark?D.bg:"#fff"}}><LogOut size={15}/>Sair</button>
             <div style={{fontSize:10,color:D.muted,textAlign:"center",marginTop:4}}>© 2026 BP-Visionn<br/>Todos os direitos reservados.</div>
           </div>
         </div>
@@ -958,6 +880,7 @@ export default function App() {
                   </div>
                 )}
                 {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
+                  <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                     <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                     <tbody>{prorrogacoes.map(pr=>{
@@ -968,19 +891,21 @@ export default function App() {
                           <td style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
                           <td style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td>
                           <td style={{padding:"10px 8px"}}>
-                            <select value={pr.estado} onChange={e=>setProrrogacoes(prev=>prev.map(x=>x.id===pr.id?{...x,estado:e.target.value}:x))} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
+                            <select value={pr.estado} onChange={e=>mudarEstadoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
                               <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
                             </select>
                           </td>
-                          <td style={{padding:"10px 8px"}}><button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>setProrrogacoes(prev=>prev.filter(x=>x.id!==pr.id))}><X size={12}/></button></td>
+                          <td style={{padding:"10px 8px"}}>{isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}</td>
                         </tr>
                       );
                     })}</tbody>
                   </table>
+                  </div>
                 )}
               </div>
               <div className="bv-card" style={st.card}>
                 <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Tarefas recentes</div>
+                <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                   <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","Vencimento","Responsável","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                   <tbody>{tarefas.slice(0,5).map(t=>{
@@ -996,6 +921,7 @@ export default function App() {
                     );
                   })}</tbody>
                 </table>
+                </div>
               </div>
               </div>
 
@@ -1052,10 +978,12 @@ export default function App() {
                     <div className="bv-dash-grid">
                       <div className="bv-card" style={st.card}>
                         <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:12}}>📋 Prorrogação de Boletos</div>
+                        <div style={{overflowX:"auto"}}>
                         <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                           <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado"].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                           <tbody>{prorrogacoes.map(pr=>{const ec=eCor(pr.estado);return(<tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}><td style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td><td style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td><td style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td><td style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,borderRadius:20,padding:"3px 10px"}}>{pr.estado}</span></td></tr>);})}</tbody>
                         </table>
+                        </div>
                       </div>
                       <div>
                         <MiniCalendario D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab}/>
@@ -1087,7 +1015,7 @@ export default function App() {
                     <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newT.valor} onChange={e=>setNewT(p=>({...p,valor:e.target.value}))}/></div>
                     <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newT.vencimento} onChange={e=>setNewT(p=>({...p,vencimento:e.target.value}))}/></div>
                     <div><label style={st.lbl}>Responsável</label>
-                      <select style={st.inp} value={newT.responsavel} onChange={e=>setNewT(p=>({...p,responsavel:e.target.value}))}>
+                      <select style={st.inp} value={newT.responsavel||responsavelPadrao} onChange={e=>setNewT(p=>({...p,responsavel:e.target.value}))}>
                         {users.filter(u=>u.role==="func").map(u=><option key={u.id} value={u.id}>{u.name} — {u.setor}</option>)}
                       </select>
                     </div>
@@ -1204,7 +1132,15 @@ export default function App() {
                       <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Novo contrato</div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                         <div><label style={st.lbl}>Tipo</label><select style={st.inp} value={newC.tipo} onChange={e=>setNewC(p=>({...p,tipo:e.target.value}))}>{Object.keys(TIPO_MOD).map(k=><option key={k} value={k}>{TIPO_MOD[k].emoji} {TIPO_MOD[k].label}</option>)}</select></div>
-                        <div><label style={st.lbl}>Nome</label><input style={st.inp} value={newC.representante} onChange={e=>setNewC(p=>({...p,representante:e.target.value}))}/></div>
+                        <div><label style={st.lbl}>Representante</label>
+                          <div style={{display:"flex",gap:6}}>
+                            <select style={st.inp} value={newC.representanteId} onChange={e=>setNewC(p=>({...p,representanteId:e.target.value}))}>
+                              <option value="">Selecione...</option>
+                              {representantesAtivos.map(r=><option key={r.id} value={r.id}>{r.nome} — {r.regiao}</option>)}
+                            </select>
+                            <button type="button" style={st.btn} onClick={abrirNovoRep}>+ Novo</button>
+                          </div>
+                        </div>
                         <div><label style={st.lbl}>CPF/CNPJ</label><input style={st.inp} value={newC.cpfCnpj} onChange={e=>setNewC(p=>({...p,cpfCnpj:e.target.value}))}/></div>
                         <div><label style={st.lbl}>% Comissão</label><input type="number" style={st.inp} value={newC.porcentagem} onChange={e=>setNewC(p=>({...p,porcentagem:e.target.value}))}/></div>
                         <div><label style={st.lbl}>E-mail</label><input style={st.inp} value={newC.email} onChange={e=>setNewC(p=>({...p,email:e.target.value}))}/></div>
@@ -1226,7 +1162,7 @@ export default function App() {
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
                           {[["Comissão",c.porcentagem+"%"],["Início",c.dataInicio],["E-mail",c.email],["Telefone",c.telefone]].map(function(kv){ return <div key={kv[0]} style={{background:D.bg,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:11,color:D.muted,marginBottom:2}}>{kv[0]}</div><div style={{fontSize:12,fontWeight:600,color:D.text}}>{kv[1]}</div></div>; })}
                         </div>
-                        <button style={{...st.btn,width:"100%",justifyContent:"center"}} onClick={()=>{setShowContrato(c);setDocEdit("");setEditDoc(false);}}><FileText size={14}/>Ver / Editar</button>
+                        <button style={{...st.btn,width:"100%",justifyContent:"center"}} onClick={()=>{setShowContrato(c);setDocEdit(c.documentoTexto||"");setEditDoc(false);}}><FileText size={14}/>Ver / Editar</button>
                       </div>
                     ))}
                   </div>
@@ -1264,9 +1200,9 @@ export default function App() {
                       <>
                         <textarea value={docEdit} onChange={e=>setDocEdit(e.target.value)} style={{...st.inp,minHeight:320,fontFamily:"'Times New Roman',serif",fontSize:13,lineHeight:1.8,resize:"vertical",marginBottom:16}}/>
                         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                          <button style={st.btnBlue} onClick={()=>setEditDoc(false)}><Save size={14}/>Salvar revisão</button>
-                          <button style={{...st.btnBlue,background:D.green}} onClick={()=>exportPDF(showContrato,docEdit)}><Save size={14}/>Exportar PDF</button>
-                          <button style={st.btn} onClick={()=>{setDocEdit(fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato));setEditDoc(false);}}>Descartar</button>
+                          <button style={st.btnBlue} onClick={()=>{salvarDocumento(showContrato.id,docEdit);setEditDoc(false);}}><Save size={14}/>Salvar revisão</button>
+                          <button style={{...st.btnBlue,background:D.green}} onClick={()=>{salvarDocumento(showContrato.id,docEdit);exportPDF(showContrato,docEdit);}}><Save size={14}/>Exportar PDF</button>
+                          <button style={st.btn} onClick={()=>{setDocEdit(showContrato.documentoTexto||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato));setEditDoc(false);}}>Descartar</button>
                         </div>
                       </>
                     ):(
@@ -1275,7 +1211,7 @@ export default function App() {
                         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                           <button style={st.btn} onClick={()=>{setDocEdit(docEdit||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato));setEditDoc(true);}}><Edit3 size={14}/>Editar</button>
                           <button style={st.btnBlue} onClick={()=>window.print()}><Printer size={14}/>Imprimir</button>
-                          <button style={{...st.btnBlue,background:D.green}} onClick={()=>exportPDF(showContrato,docEdit||undefined)}><Save size={14}/>Exportar PDF</button>
+                          <button style={{...st.btnBlue,background:D.green}} onClick={()=>{if(docEdit) salvarDocumento(showContrato.id,docEdit); exportPDF(showContrato,docEdit||undefined);}}><Save size={14}/>Exportar PDF</button>
                           <button style={st.btn} onClick={()=>{setShowContrato(null);setEditDoc(false);setDocEdit("");}}>Fechar</button>
                         </div>
                       </>
@@ -1283,6 +1219,71 @@ export default function App() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* REPRESENTANTES */}
+          {tab==="representantes"&&(isAdmin||isFin)&&(
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
+                <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Representantes</div><div style={{fontSize:13,color:D.muted}}>{representantesVisiveis.length} de {representantes.length} representante(s)</div></div>
+                <button style={st.btnBlue} onClick={abrirNovoRep}><Plus size={15}/>Novo representante</button>
+              </div>
+
+              <div className="bv-card" style={{...st.card,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
+                <div style={{flex:"1 1 200px"}}>
+                  <label style={st.lbl}>Pesquisar</label>
+                  <input style={st.inp} placeholder="Nome ou CPF" value={repSearch} onChange={e=>setRepSearch(e.target.value)}/>
+                </div>
+                <div style={{flex:"1 1 140px"}}>
+                  <label style={st.lbl}>Região</label>
+                  <select style={st.inp} value={repFiltroRegiao} onChange={e=>setRepFiltroRegiao(e.target.value)}>
+                    <option value="todos">Todas</option>
+                    <option value="Pará">Pará</option>
+                    <option value="Piauí">Piauí</option>
+                  </select>
+                </div>
+                <div style={{flex:"1 1 140px"}}>
+                  <label style={st.lbl}>Status</label>
+                  <select style={st.inp} value={repFiltroStatus} onChange={e=>setRepFiltroStatus(e.target.value)}>
+                    <option value="todos">Todos</option>
+                    <option value="Ativo">Ativo</option>
+                    <option value="Inativo">Inativo</option>
+                  </select>
+                </div>
+                <div style={{flex:"1 1 160px"}}>
+                  <label style={st.lbl}>Supervisor</label>
+                  <select style={st.inp} value={repFiltroSupervisor} onChange={e=>setRepFiltroSupervisor(e.target.value)}>
+                    <option value="todos">Todos</option>
+                    {users.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="bv-card" style={st.card}>
+                {representantesVisiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum representante encontrado.</div>:(
+                  <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Nome","CPF","Região","Supervisor","Status","Entrada","Saída",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+                    <tbody>{representantesVisiveis.map(r=>{
+                      const sup = users.find(u=>u.id===r.supervisorId);
+                      return (
+                        <tr key={r.id} style={{borderBottom:"1px solid "+D.border}}>
+                          <td style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{r.nome}</td>
+                          <td style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{r.cpf||"—"}</td>
+                          <td style={{padding:"10px 8px",color:D.muted}}>{r.regiao}</td>
+                          <td style={{padding:"10px 8px",color:D.muted}}>{sup?sup.name:"—"}</td>
+                          <td style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:r.status==="Ativo"?D.greenSoft:D.redSoft,color:r.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{r.status}</span></td>
+                          <td style={{padding:"10px 8px",color:D.muted}}>{r.dataEntrada||"—"}</td>
+                          <td style={{padding:"10px 8px",color:D.muted}}>{r.dataSaida||"—"}</td>
+                          <td style={{padding:"10px 8px"}}><button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarRep(r)}><Pencil size={12}/>Editar</button></td>
+                        </tr>
+                      );
+                    })}</tbody>
+                  </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1440,8 +1441,51 @@ export default function App() {
             </div>
             {newUErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",margin:"12px 0 0",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{newUErr}</div>}
             <div style={{display:"flex",gap:10,marginTop:20}}>
-              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharNewU}>Cancelar</button>
-              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={criarUsuario}>Criar usuário</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharNewU} disabled={newULoading}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={criarUsuario} disabled={newULoading}>{newULoading?"Criando...":"Criar usuário"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REPRESENTANTE (cadastro/edição) */}
+      {showRepForm&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={fecharRepForm}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:460,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Users size={22} color={D.purple}/></div>
+            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>{repForm.id?"Editar representante":"Novo representante"}</div>
+            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{repForm.id?"Atualize os dados do representante.":"Cadastre um representante para vincular a contratos."}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome</label><input autoFocus style={st.inp} value={repForm.nome} onChange={e=>{setRepForm(p=>({...p,nome:e.target.value}));setRepFormErr("");}}/></div>
+              <div><label style={st.lbl}>CPF</label><input style={st.inp} value={repForm.cpf} onChange={e=>setRepForm(p=>({...p,cpf:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Região</label>
+                <select style={st.inp} value={repForm.regiao} onChange={e=>setRepForm(p=>({...p,regiao:e.target.value}))}>
+                  <option value="Pará">Pará</option>
+                  <option value="Piauí">Piauí</option>
+                </select>
+              </div>
+              <div><label style={st.lbl}>Supervisor</label>
+                <select style={st.inp} value={repForm.supervisorId} onChange={e=>setRepForm(p=>({...p,supervisorId:e.target.value}))}>
+                  <option value="">Sem supervisor</option>
+                  {users.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+              <div><label style={st.lbl}>Status</label>
+                <select style={st.inp} value={repForm.status} onChange={e=>{setRepForm(p=>({...p,status:e.target.value}));setRepFormErr("");}}>
+                  <option value="Ativo">Ativo</option>
+                  <option value="Inativo">Inativo</option>
+                </select>
+              </div>
+              <div><label style={st.lbl}>Data de entrada</label><input type="date" style={st.inp} value={repForm.dataEntrada} onChange={e=>setRepForm(p=>({...p,dataEntrada:e.target.value}))}/></div>
+              {repForm.status==="Inativo"&&(<>
+                <div><label style={st.lbl}>Data de saída</label><input type="date" style={st.inp} value={repForm.dataSaida} onChange={e=>{setRepForm(p=>({...p,dataSaida:e.target.value}));setRepFormErr("");}}/></div>
+                <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Motivo da saída (opcional)</label><input style={st.inp} value={repForm.motivoSaida} onChange={e=>setRepForm(p=>({...p,motivoSaida:e.target.value}))}/></div>
+              </>)}
+            </div>
+            {repFormErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",margin:"12px 0 0",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{repFormErr}</div>}
+            <div style={{display:"flex",gap:10,marginTop:20}}>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharRepForm}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={salvarRepresentante}>{repForm.id?"Salvar alterações":"Criar representante"}</button>
             </div>
           </div>
         </div>
