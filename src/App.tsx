@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "./lib/supabase";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2 } from "lucide-react";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
 import { getIn, fBRL, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL } from "./lib/helpers";
@@ -8,6 +8,7 @@ import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
 import Calendario from "./components/Calendario";
+import Mensagens from "./components/Mensagens";
 import MiniCalendario from "./components/MiniCalendario";
 import StatusDonutCard from "./components/StatusDonutCard";
 import GoogleIcon from "./components/GoogleIcon";
@@ -99,6 +100,7 @@ export default function App() {
   const [editTData, setEditTData] = useState({fornecedor:"",valor:"" as number | string,vencimento:"",responsavel:"",obs:""});
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoErr, setPhotoErr] = useState("");
+  const [naoLidasChat, setNaoLidasChat] = useState(0);
   const notifRef = useRef<HTMLDivElement | null>(null);
 
   const isAdmin = user && user.role==="admin";
@@ -692,6 +694,7 @@ export default function App() {
     {id:"painel",label:"Dashboard",Icon:LayoutDashboard,show:isAdmin||isDemo},
     {id:"tarefas",label:"Tarefas",Icon:Receipt,show:true},
     {id:"pendencias",label:"Pendências",Icon:Clock,show:true},
+    {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
     {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin||isDemo},
     {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin||isDemo},
     {id:"calendario",label:"Calendário",Icon:Calendar,show:true},
@@ -909,6 +912,7 @@ export default function App() {
             <button key={n.id} className={"bv-nav-item"+(tab===n.id?" active":"")} onClick={()=>{setTab(n.id);setShowDrawer(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:5,position:"relative",background:tab===n.id?D.blueSoft:"transparent",color:tab===n.id?D.blue:D.muted,fontWeight:tab===n.id?600:500,fontSize:13,boxShadow:tab===n.id?"0 8px 20px rgba(37,99,235,0.12)":"none"}}>
               <n.Icon size={16}/>{n.label}
               {n.id==="pendencias"&&pendsVis.length>0&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{pendsVis.length}</span>}
+              {n.id==="mensagens"&&naoLidasChat>0&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{naoLidasChat}</span>}
             </button>
           ))}
 
@@ -1447,6 +1451,11 @@ export default function App() {
           {/* CALENDÁRIO */}
           {tab==="calendario"&&(
             <Calendario D={D} st={st} tarefas={tarefas} prorrogacoes={prorrogacoes} eventos={eventos} setEventos={setEventos} users={users}/>
+          )}
+
+          {/* MENSAGENS */}
+          {tab==="mensagens"&&!isDemo&&(
+            <Mensagens D={D} st={st} user={user} users={users} onNaoLidasChange={setNaoLidasChat}/>
           )}
 
           {/* AUDITORIA */}

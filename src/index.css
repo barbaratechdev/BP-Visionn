@@ -358,3 +358,31 @@ button:focus-visible {
     display: none;
   }
 }
+
+/* --- Chat (Mensagens): lista + conversa lado a lado no desktop, uma
+   tela por vez no celular, com botão voltar --- */
+.bv-chat-voltar {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .bv-chat {
+    height: calc(100vh - 200px) !important;
+  }
+  .bv-chat-lista {
+    width: 100% !important;
+    border-right: none !important;
+  }
+  .bv-chat-thread {
+    display: none !important;
+  }
+  .bv-chat-thread-open .bv-chat-lista {
+    display: none !important;
+  }
+  .bv-chat-thread-open .bv-chat-thread {
+    display: flex !important;
+  }
+  .bv-chat-voltar {
+    display: inline-flex !important;
+  }
+}
