@@ -1,5 +1,5 @@
 import { hoje, TIPOS_IMG_PERMITIDOS, TAMANHO_MAX_IMG } from "../constants";
-import type { User, Tarefa, Contrato } from "../types";
+import type { User, Tarefa, Contrato, AuditEntry } from "../types";
 
 export function getIn(n){ return n.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
 export function fBRL(v){ return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
@@ -81,6 +81,21 @@ export function mapContratoRow(row): Contrato {
     tipo: row.tipo,
     status: row.status,
     documentoTexto: row.documento_texto || "",
+  };
+}
+
+// Converte uma linha da tabela auditoria (append-only) para a UI.
+// "referencia" guarda o nome do que a ação descreve (fornecedor da tarefa,
+// nome do representante etc.); "usuario_nome" é a cópia do nome de quem
+// agiu, preservada mesmo que o profile seja excluído depois.
+export function mapAuditoriaRow(row): AuditEntry {
+  return {
+    id: row.id,
+    tipo: row.tipo,
+    tarefa: row.referencia || "",
+    usuario: row.usuario_nome || "",
+    hora: row.created_at ? fmtData(row.created_at) : "",
+    detalhe: row.detalhe || "",
   };
 }
 

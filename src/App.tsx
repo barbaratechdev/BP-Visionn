@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2 } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, validarImagem, lerComoDataURL } from "./lib/helpers";
+import { getIn, fBRL, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL } from "./lib/helpers";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
@@ -60,7 +60,7 @@ export default function App() {
   const [eventos, setEventos] = useState([]);
   const [notifs, setNotifs] = useState([{id:1,msg:"Bem-vinda ao BP-Visionn!",time:"00:00",read:false}]);
   const [showNotif, setShowNotif] = useState(false);
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>([{id:1,tipo:"Tarefa criada",tarefa:"Sistema",usuario:"Bárbara",hora:"Início",detalhe:"Sistema iniciado."}]);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [filtroAudit, setFiltroAudit] = useState("todos");
   const [showTForm, setShowTForm] = useState(false);
   const [showCForm, setShowCForm] = useState(false);
@@ -188,6 +188,16 @@ export default function App() {
       setRepresentantes(data.map(mapRepresentanteRow));
     }
 
+    // Auditoria: admin/demo veem tudo, Financeiro (e qualquer func) vê só o
+    // que está ligado a tarefas das quais é responsável — o RLS já faz esse
+    // filtro (auditoria_select_admin + auditoria_select_own_tarefa), então
+    // a consulta é a mesma pra todo mundo.
+    async function carregarAuditoria(){
+      const { data, error } = await supabase.from("auditoria").select("*").order("created_at",{ascending:false});
+      if(!ativo||error||!data) return;
+      setAuditLog(data.map(mapAuditoriaRow));
+    }
+
     carregarDiretorioPublico();
 
     supabase.auth.getSession().then(async ({data})=>{
@@ -202,6 +212,7 @@ export default function App() {
         carregarPendencias();
         carregarContratos();
         carregarRepresentantes();
+        carregarAuditoria();
       }
       setAuthLoading(false);
     });
@@ -217,7 +228,7 @@ export default function App() {
           if(!logado) setUser(fallbackProfile(novaSessao.user));
           if(event==="SIGNED_IN") setTab((logado||fallbackProfile(novaSessao.user)).role==="admin"?"painel":"tarefas");
         });
-        if(event==="SIGNED_IN"){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarRepresentantes(); }
+        if(event==="SIGNED_IN"){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarRepresentantes(); carregarAuditoria(); }
       }
     });
 
@@ -225,7 +236,21 @@ export default function App() {
   },[]);
 
   function addN(msg){ setNotifs(p=>[{id:Date.now(),msg,time:nowT(),read:false},...p].slice(0,20)); }
-  function addA(tipo,tarefa,detalhe){ setAuditLog(p=>[{id:Date.now(),tipo,tarefa,usuario:user?user.name:"",hora:nowF(),detalhe},...p]); }
+  // Grava local (otimista, aparece na hora pra quem agiu) e no Supabase — a
+  // auditoria precisa existir de verdade no banco pra outra pessoa (ex.:
+  // Financeiro vendo tarefa atribuída a ela) enxergar o que não foi ação
+  // dela própria. "tarefaId" liga o registro à tarefa (RLS usa esse vínculo
+  // pra decidir quem mais, além de admin/demo, pode ver a linha).
+  function addA(tipo,tarefa,detalhe,tarefaId=null){
+    setAuditLog(p=>[{id:Date.now(),tipo,tarefa,usuario:user?user.name:"",hora:nowF(),detalhe},...p]);
+    if(user){
+      supabase.from("auditoria").insert({
+        tipo, referencia:tarefa, detalhe,
+        usuario_id:user.id, usuario_nome:user.name,
+        tarefa_id:tarefaId||null,
+      });
+    }
+  }
   function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.blueSoft,c:D.blueText},"Aprovado":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
   function roleLabel(r){ return r==="admin"?"Supervisora":r==="demo"?"Demonstração":"Funcionária"; }
   // Guarda central pro perfil DEMONSTRAÇÃO: nenhum handler de escrita segue
@@ -327,7 +352,7 @@ export default function App() {
     if(error) return;
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,status:"pago"}:x));
     addN("🔔 "+(user?user.name:"")+" concluiu \""+t.fornecedor+"\".");
-    addA("Tarefa concluída",t.fornecedor,"Concluída por "+(user?user.name:"")+" em "+nowF());
+    addA("Tarefa concluída",t.fornecedor,"Concluída por "+(user?user.name:"")+" em "+nowF(),id);
     setConfirm(null);
   }
 
@@ -337,7 +362,7 @@ export default function App() {
     const { error } = await supabase.from("tarefas").update({ status:"pendente" }).eq("id", id);
     if(error) return;
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,status:"pendente"}:x));
-    addA("Status alterado",t.fornecedor,"Concluída → Pendente");
+    addA("Status alterado",t.fornecedor,"Concluída → Pendente",id);
   }
 
   async function prorrogar(id){
@@ -350,7 +375,7 @@ export default function App() {
     if(errHist){ setProrrErr("Vencimento salvo, mas o histórico não pôde ser registrado."); return; }
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,vencimento:prorr.novoVencimento,status:"prorrogado",historico:(x.historico||[]).concat([{data:hoje,...prorr}])}:x));
     addN("Prorrogação: "+(t?t.fornecedor:""));
-    addA("Prorrogação",t?t.fornecedor:"","Novo vencimento: "+prorr.novoVencimento);
+    addA("Prorrogação",t?t.fornecedor:"","Novo vencimento: "+prorr.novoVencimento,id);
     setShowProrr(null); setProrr({novoVencimento:"",motivo:""}); setProrrErr("");
   }
 
@@ -370,7 +395,7 @@ export default function App() {
     }).select().single();
     if(error||!data) return;
     setTarefas(prev=>prev.concat([mapTarefaRow(data)]));
-    addN("Nova tarefa: "+newT.fornecedor); addA("Tarefa criada",newT.fornecedor,"Atribuída a "+(resp?resp.name:""));
+    addN("Nova tarefa: "+newT.fornecedor); addA("Tarefa criada",newT.fornecedor,"Atribuída a "+(resp?resp.name:""),data.id);
     setNewT({fornecedor:"",valor:"",vencimento:"",responsavel:"",obs:""}); setShowTForm(false);
   }
 
@@ -382,7 +407,7 @@ export default function App() {
     const { error } = await supabase.from("tarefas").update({ responsavel_id:nid }).eq("id", id);
     if(error) return;
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,responsavel:nid}:x));
-    addA("Responsável alterado",t?t.fornecedor:"",(ant?ant.name:"?")+" → "+(nov?nov.name:"?"));
+    addA("Responsável alterado",t?t.fornecedor:"",(ant?ant.name:"?")+" → "+(nov?nov.name:"?"),id);
   }
 
   function abrirEditT(t){
@@ -405,7 +430,7 @@ export default function App() {
     }).eq("id", editT);
     if(error) return;
     setTarefas(prev=>prev.map(x=>x.id===editT?{...x,...editTData,status}:x));
-    addA("Tarefa editada",editTData.fornecedor,"Dados atualizados por "+(user?user.name:""));
+    addA("Tarefa editada",editTData.fornecedor,"Dados atualizados por "+(user?user.name:""),editT);
     setEditT(null);
   }
 
@@ -415,6 +440,9 @@ export default function App() {
     const { error } = await supabase.from("tarefas").delete().eq("id", id);
     if(error) return;
     setTarefas(prev=>prev.filter(x=>x.id!==id));
+    // Sem tarefaId aqui de propósito: a tarefa já foi apagada na linha acima,
+    // e a FK auditoria.tarefa_id não aceita referenciar um id que não existe
+    // mais (diferente de um "on delete set null" numa linha já existente).
     addA("Tarefa excluída",t?t.fornecedor:"","Removida por "+(user?user.name:""));
     addN("🗑️ Tarefa excluída: "+(t?t.fornecedor:""));
     setConfirmDel(null);
@@ -667,7 +695,7 @@ export default function App() {
     {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin||isDemo},
     {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin||isDemo},
     {id:"calendario",label:"Calendário",Icon:Calendar,show:true},
-    {id:"auditoria",label:"Auditoria",Icon:ClipboardList,show:isAdmin||isDemo},
+    {id:"auditoria",label:"Auditoria",Icon:ClipboardList,show:isAdmin||isDemo||isFin},
     {id:"config",label:"Configurações",Icon:Settings,show:isAdmin},
   ].filter(n=>n.show);
 
@@ -1065,16 +1093,54 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                  {isFin&&prorrogacoes.length>0?(
+                  {isFin?(
                     <div className="bv-dash-grid">
                       <div className="bv-card" style={st.card}>
-                        <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:12}}>📋 Prorrogação de Boletos</div>
-                        <div style={{overflowX:"auto"}}>
-                        <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                          <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado"].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-                          <tbody>{prorrogacoes.map(pr=>{const ec=eCor(pr.estado);return(<tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}><td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td><td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td><td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td><td data-label="Estado" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,borderRadius:20,padding:"3px 10px"}}>{pr.estado}</span></td></tr>);})}</tbody>
-                        </table>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                          <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
+                          <button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>
                         </div>
+                        {showProrrForm&&(
+                          <div style={{background:D.bg,borderRadius:10,padding:14,marginBottom:14}}>
+                            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
+                              <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newPr.fornecedor} onChange={e=>setNewPr(p=>({...p,fornecedor:e.target.value}))}/></div>
+                              <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} placeholder="NF-000" value={newPr.nf} onChange={e=>setNewPr(p=>({...p,nf:e.target.value}))}/></div>
+                              <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
+                              <div><label style={st.lbl}>Estado</label>
+                                <select style={st.inp} value={newPr.estado} onChange={e=>setNewPr(p=>({...p,estado:e.target.value}))}>
+                                  <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div style={{display:"flex",gap:8,marginTop:10}}>
+                              <button style={st.btnBlue} onClick={addNF}><CheckCircle size={13}/>Salvar</button>
+                              <button style={st.btn} onClick={()=>setShowProrrForm(false)}>Cancelar</button>
+                            </div>
+                          </div>
+                        )}
+                        {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
+                          <div style={{overflowX:"auto"}}>
+                          <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+                            <tbody>{prorrogacoes.map(pr=>{
+                              const ec=eCor(pr.estado);
+                              return (
+                                <tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}>
+                                  <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td>
+                                  <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
+                                  <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td>
+                                  <td data-label="Estado" style={{padding:"10px 8px"}}>
+                                    <select value={pr.estado} onChange={e=>mudarEstadoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
+                                      <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
+                                    </select>
+                                  </td>
+                                  <td style={{padding:"10px 8px"}}>{isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}</td>
+                                </tr>
+                              );
+                            })}</tbody>
+                          </table>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <MiniCalendario D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab}/>
@@ -1384,7 +1450,7 @@ export default function App() {
           )}
 
           {/* AUDITORIA */}
-          {tab==="auditoria"&&(isAdmin||isDemo)&&(
+          {tab==="auditoria"&&(isAdmin||isDemo||isFin)&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Auditoria</div><div style={{fontSize:13,color:D.muted}}>Log de alterações</div></div>
               <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
