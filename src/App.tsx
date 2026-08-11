@@ -50,7 +50,7 @@ export default function App() {
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [representantes, setRepresentantes] = useState([]);
   const [showRepForm, setShowRepForm] = useState(false);
-  const [repForm, setRepForm] = useState({id:null,nome:"",cpf:"",regiao:"Pará",supervisorId:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:""});
+  const [repForm, setRepForm] = useState({id:null,nome:"",cpf:"",regiao:"Pará",supervisorId:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:"",numeroCore:"",tipoVinculo:"",vinculoDataInicio:"",vinculoDataTerminoPrevisto:"",statusContrato:"",contratoDataEnvio:"",contratoDataConclusao:""});
   const [repFormErr, setRepFormErr] = useState("");
   const [repSearch, setRepSearch] = useState("");
   const [repFiltroRegiao, setRepFiltroRegiao] = useState("todos");
@@ -255,6 +255,23 @@ export default function App() {
   }
   function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.blueSoft,c:D.blueText},"Aprovado":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
   function roleLabel(r){ return r==="admin"?"Supervisora":r==="demo"?"Demonstração":"Funcionária"; }
+  // Prévia local dos 90 dias, só pra exibir no formulário antes de salvar
+  // (o valor de verdade é a coluna gerada no banco, vinculo_data_termino_previsto).
+  function fmtTerminoPrevisto(dataInicioStr){
+    if(!dataInicioStr) return "—";
+    const d = new Date(dataInicioStr+"T00:00:00");
+    d.setDate(d.getDate()+90);
+    return d.toISOString().split("T")[0];
+  }
+  // Dias restantes até o término previsto do contrato temporário (negativo = já venceu).
+  function diasParaVencerVinculo(r){
+    if(r.tipoVinculo!=="temporario"||!r.vinculoDataTerminoPrevisto) return null;
+    const hojeD = new Date(hoje+"T00:00:00");
+    const termino = new Date(r.vinculoDataTerminoPrevisto+"T00:00:00");
+    return Math.round((termino.getTime()-hojeD.getTime())/86400000);
+  }
+  const LIMITE_ALERTA_VINCULO_DIAS = 15;
+  const vinculoLabel = {temporario:"Temporário",fixo:"Fixo",recibo:"Recibo"};
   // Guarda central pro perfil DEMONSTRAÇÃO: nenhum handler de escrita segue
   // adiante sem passar por aqui, mesmo que algum botão não tenha sido
   // escondido corretamente. O bloqueio de verdade está no RLS (o perfil
@@ -451,13 +468,29 @@ export default function App() {
   }
 
   function abrirNovoRep(){
-    setRepForm({id:null,nome:"",cpf:"",regiao:"Pará",supervisorId:user?user.id:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:""});
+    setRepForm({id:null,nome:"",cpf:"",regiao:"Pará",supervisorId:user?user.id:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:"",numeroCore:"",tipoVinculo:"",vinculoDataInicio:"",vinculoDataTerminoPrevisto:"",statusContrato:"",contratoDataEnvio:"",contratoDataConclusao:""});
     setRepFormErr(""); setShowRepForm(true);
   }
 
   function abrirEditarRep(r){
-    setRepForm({id:r.id,nome:r.nome,cpf:r.cpf,regiao:r.regiao,supervisorId:r.supervisorId,status:r.status,dataEntrada:r.dataEntrada,dataSaida:r.dataSaida,motivoSaida:r.motivoSaida});
+    setRepForm({id:r.id,nome:r.nome,cpf:r.cpf,regiao:r.regiao,supervisorId:r.supervisorId,status:r.status,dataEntrada:r.dataEntrada,dataSaida:r.dataSaida,motivoSaida:r.motivoSaida,numeroCore:r.numeroCore,tipoVinculo:r.tipoVinculo,vinculoDataInicio:r.vinculoDataInicio,vinculoDataTerminoPrevisto:r.vinculoDataTerminoPrevisto,statusContrato:r.statusContrato,contratoDataEnvio:r.contratoDataEnvio,contratoDataConclusao:r.contratoDataConclusao});
     setRepFormErr(""); setShowRepForm(true);
+  }
+
+  // Troca de tipo de vínculo = novo período começando: reinicia data de
+  // início, status do contrato e datas de envio/conclusão. O período
+  // anterior não é perdido — o trigger no banco arquiva automaticamente em
+  // representante_vinculos_historico quando salvarRepresentante gravar essa
+  // mudança.
+  function mudarTipoVinculo(novoTipo){
+    setRepForm(p=>({
+      ...p,
+      tipoVinculo: novoTipo,
+      vinculoDataInicio: novoTipo ? hoje : "",
+      statusContrato: novoTipo ? "aguardando_assinatura" : "",
+      contratoDataEnvio: "",
+      contratoDataConclusao: "",
+    }));
   }
 
   function fecharRepForm(){
@@ -478,6 +511,14 @@ export default function App() {
       data_entrada: repForm.dataEntrada||hoje,
       data_saida: repForm.status==="Inativo" ? (repForm.dataSaida||null) : null,
       motivo_saida: repForm.status==="Inativo" ? (repForm.motivoSaida.trim()||null) : null,
+      numero_core: repForm.numeroCore.trim()||null,
+      tipo_vinculo: repForm.tipoVinculo||null,
+      vinculo_data_inicio: repForm.tipoVinculo ? (repForm.vinculoDataInicio||hoje) : null,
+      status_contrato: repForm.tipoVinculo ? (repForm.statusContrato||"aguardando_assinatura") : null,
+      contrato_data_envio: repForm.contratoDataEnvio||null,
+      contrato_data_conclusao: repForm.contratoDataConclusao||null,
+      // vinculo_data_termino_previsto é coluna gerada (90 dias a partir de
+      // vinculo_data_inicio) — nunca enviada, o Postgres calcula sozinho.
     };
     if(repForm.id){
       const { data, error } = await supabase.from("representantes").update(payload).eq("id",repForm.id).select("*").single();
@@ -699,7 +740,7 @@ export default function App() {
     {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin||isDemo},
     {id:"calendario",label:"Calendário",Icon:Calendar,show:true},
     {id:"auditoria",label:"Auditoria",Icon:ClipboardList,show:isAdmin||isDemo||isFin},
-    {id:"config",label:"Configurações",Icon:Settings,show:isAdmin},
+    {id:"config",label:"Configurações",Icon:Settings,show:!isDemo},
   ].filter(n=>n.show);
 
   const loginBg = dark ? "radial-gradient(circle at 15% 15%, rgba(62,147,255,0.12), transparent 45%), radial-gradient(circle at 85% 85%, rgba(62,147,255,0.10), transparent 45%), linear-gradient(160deg, #05070D 0%, #0A0F1E 100%)" : "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)";
@@ -1425,16 +1466,26 @@ export default function App() {
                 {representantesVisiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum representante encontrado.</div>:(
                   <div style={{overflowX:"auto"}}>
                   <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Nome","CPF","Região","Supervisor","Status","Entrada","Saída",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Nome","CPF","Região","Supervisor","Status","Vínculo","Entrada","Saída",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                     <tbody>{representantesVisiveis.map(r=>{
                       const sup = users.find(u=>u.id===r.supervisorId);
+                      const diasVinculo = diasParaVencerVinculo(r);
+                      const venceEmBreve = diasVinculo!==null && diasVinculo<=LIMITE_ALERTA_VINCULO_DIAS;
                       return (
-                        <tr key={r.id} style={{borderBottom:"1px solid "+D.border}}>
+                        <tr key={r.id} style={{borderBottom:"1px solid "+D.border,background:venceEmBreve?D.orangeSoft:undefined}}>
                           <td data-label="Nome" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{r.nome}</td>
                           <td data-label="CPF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{r.cpf||"—"}</td>
                           <td data-label="Região" style={{padding:"10px 8px",color:D.muted}}>{r.regiao}</td>
                           <td data-label="Supervisor" style={{padding:"10px 8px",color:D.muted}}>{sup?sup.name:"—"}</td>
                           <td data-label="Status" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:r.status==="Ativo"?D.greenSoft:D.redSoft,color:r.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{r.status}</span></td>
+                          <td data-label="Vínculo" style={{padding:"10px 8px"}}>
+                            {r.tipoVinculo?<span style={{fontSize:11,fontWeight:600,background:D.blueSoft,color:D.blueText,borderRadius:20,padding:"3px 10px"}}>{vinculoLabel[r.tipoVinculo]}</span>:<span style={{color:D.muted}}>—</span>}
+                            {venceEmBreve&&(
+                              <div style={{marginTop:4,fontSize:11,fontWeight:600,color:D.orangeText,display:"flex",alignItems:"center",gap:4}}>
+                                <AlertCircle size={12}/>{diasVinculo<0?"Contrato temporário vencido":diasVinculo===0?"Vence hoje":"Vence em "+diasVinculo+" dia"+(diasVinculo===1?"":"s")}
+                              </div>
+                            )}
+                          </td>
                           <td data-label="Entrada" style={{padding:"10px 8px",color:D.muted}}>{r.dataEntrada||"—"}</td>
                           <td data-label="Saída" style={{padding:"10px 8px",color:D.muted}}>{r.dataSaida||"—"}</td>
                           <td style={{padding:"10px 8px"}}>{!isDemo&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarRep(r)}><Pencil size={12}/>Editar</button>}</td>
@@ -1486,10 +1537,10 @@ export default function App() {
           )}
 
           {/* CONFIGURAÇÕES */}
-          {tab==="config"&&isAdmin&&(
+          {tab==="config"&&!isDemo&&(
             <div>
               <div style={{fontSize:20,fontWeight:700,color:D.text,marginBottom:6}}>Configurações</div>
-              <div style={{fontSize:13,color:D.muted,marginBottom:20}}>Gerencie usuários e senhas</div>
+              <div style={{fontSize:13,color:D.muted,marginBottom:20}}>{isAdmin?"Gerencie usuários e senhas":"Gerencie sua foto de perfil"}</div>
 
               <div className="bv-card" style={{...st.card,display:"flex",gap:28,flexWrap:"wrap",alignItems:"flex-start"}}>
                 <div style={{fontWeight:600,fontSize:14,color:D.text,width:"100%"}}>Meu Perfil</div>
@@ -1503,7 +1554,12 @@ export default function App() {
                     {(photoPreview||user.photo)&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"44"}} onClick={removerFoto}><X size={13}/>Remover Foto</button>}
                   </div>
                   {photoErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"6px 10px",display:"flex",alignItems:"center",gap:6,textAlign:"center"}}><AlertCircle size={13}/>{photoErr}</div>}
-                  {photoPreview&&<button style={{...st.btnBlue,width:"100%",justifyContent:"center"}} onClick={salvarFoto}><Save size={13}/>Salvar</button>}
+                  {photoPreview&&(
+                    <div style={{display:"flex",gap:8,width:"100%"}}>
+                      <button style={{...st.btnBlue,flex:1,justifyContent:"center"}} onClick={salvarFoto}><Save size={13}/>Salvar alteração</button>
+                      <button style={{...st.btn,flex:1,justifyContent:"center"}} onClick={()=>{setPhotoPreview(null);setPhotoErr("");}}><X size={13}/>Cancelar</button>
+                    </div>
+                  )}
                 </div>
                 <div style={{flex:1,minWidth:220}}>
                   <div style={{fontWeight:700,fontSize:18,color:D.text}}>{user.name}</div>
@@ -1513,6 +1569,7 @@ export default function App() {
                 </div>
               </div>
 
+              {isAdmin&&(
               <div className="bv-card" style={st.card}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{fontWeight:600,fontSize:14,color:D.text}}>Equipe</div>
@@ -1552,6 +1609,7 @@ export default function App() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
 
@@ -1664,9 +1722,36 @@ export default function App() {
                 </select>
               </div>
               <div><label style={st.lbl}>Data de entrada</label><input type="date" style={st.inp} value={repForm.dataEntrada} onChange={e=>setRepForm(p=>({...p,dataEntrada:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Número do CORE</label><input style={st.inp} value={repForm.numeroCore} onChange={e=>setRepForm(p=>({...p,numeroCore:e.target.value}))}/></div>
               {repForm.status==="Inativo"&&(<>
                 <div><label style={st.lbl}>Data de saída</label><input type="date" style={st.inp} value={repForm.dataSaida} onChange={e=>{setRepForm(p=>({...p,dataSaida:e.target.value}));setRepFormErr("");}}/></div>
                 <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Motivo da saída (opcional)</label><input style={st.inp} value={repForm.motivoSaida} onChange={e=>setRepForm(p=>({...p,motivoSaida:e.target.value}))}/></div>
+              </>)}
+            </div>
+
+            <div style={{fontWeight:600,fontSize:13,color:D.text,margin:"18px 0 10px"}}>Vínculo / Contrato</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
+              <div><label style={st.lbl}>Tipo de vínculo</label>
+                <select style={st.inp} value={repForm.tipoVinculo} onChange={e=>mudarTipoVinculo(e.target.value)}>
+                  <option value="">Não definido</option>
+                  <option value="temporario">Contrato Temporário (90 dias)</option>
+                  <option value="fixo">Contrato Fixo</option>
+                  <option value="recibo">Recibo</option>
+                </select>
+              </div>
+              {repForm.tipoVinculo&&(<>
+                <div><label style={st.lbl}>{repForm.tipoVinculo==="temporario"?"Data de início do temporário":repForm.tipoVinculo==="fixo"?"Data de início do fixo":"Data de início"}</label><input type="date" style={st.inp} value={repForm.vinculoDataInicio} onChange={e=>setRepForm(p=>({...p,vinculoDataInicio:e.target.value}))}/></div>
+                {repForm.tipoVinculo==="temporario"&&(
+                  <div><label style={st.lbl}>Término previsto (90 dias)</label><input disabled style={{...st.inp,color:D.muted,cursor:"default"}} value={repForm.vinculoDataTerminoPrevisto||(repForm.vinculoDataInicio?fmtTerminoPrevisto(repForm.vinculoDataInicio):"—")}/></div>
+                )}
+                <div><label style={st.lbl}>Status do contrato</label>
+                  <select style={st.inp} value={repForm.statusContrato} onChange={e=>setRepForm(p=>({...p,statusContrato:e.target.value}))}>
+                    <option value="aguardando_assinatura">Aguardando assinatura</option>
+                    <option value="concluido">Concluído</option>
+                  </select>
+                </div>
+                <div><label style={st.lbl}>Data de envio do contrato</label><input type="date" style={st.inp} value={repForm.contratoDataEnvio} onChange={e=>setRepForm(p=>({...p,contratoDataEnvio:e.target.value}))}/></div>
+                <div><label style={st.lbl}>Data de conclusão/assinatura</label><input type="date" style={st.inp} value={repForm.contratoDataConclusao} onChange={e=>setRepForm(p=>({...p,contratoDataConclusao:e.target.value}))}/></div>
               </>)}
             </div>
             {repFormErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",margin:"12px 0 0",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{repFormErr}</div>}

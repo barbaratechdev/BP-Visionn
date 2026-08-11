@@ -111,6 +111,13 @@ export function mapRepresentanteRow(row){
     dataEntrada: row.data_entrada,
     dataSaida: row.data_saida || "",
     motivoSaida: row.motivo_saida || "",
+    numeroCore: row.numero_core || "",
+    tipoVinculo: row.tipo_vinculo || "",
+    vinculoDataInicio: row.vinculo_data_inicio || "",
+    vinculoDataTerminoPrevisto: row.vinculo_data_termino_previsto || "",
+    statusContrato: row.status_contrato || "",
+    contratoDataEnvio: row.contrato_data_envio || "",
+    contratoDataConclusao: row.contrato_data_conclusao || "",
   };
 }
 
