@@ -82,7 +82,7 @@ export default function Calendario(p) {
           })}
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12}}>
         <div className="bv-card" style={st.card}>
           <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:12}}>{diaSel?"Dia "+diaSel+" de "+MESES[mes]:"Selecione um dia"}</div>
           {diaSel&&(()=>{
@@ -112,7 +112,7 @@ export default function Calendario(p) {
               <div style={{fontWeight:500,fontSize:13,color:D.text,marginBottom:10}}>Novo evento — dia {diaSel}</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 <div><label style={st.lbl}>Título</label><input style={st.inp} value={nTit} onChange={e=>setNTit(e.target.value)}/></div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8}}>
                   <div><label style={st.lbl}>Tipo</label>
                     <select style={st.inp} value={nTipo} onChange={e=>setNTipo(e.target.value)}>
                       {Object.keys(TIPO_EV).map(k=><option key={k} value={k}>{TIPO_EV[k].label}</option>)}

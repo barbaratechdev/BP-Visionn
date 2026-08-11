@@ -251,3 +251,110 @@ button:focus-visible {
     padding: 2.25rem;
   }
 }
+
+/* --- Layout mobile/tablet (app autenticado) --- */
+
+.bv-hamburger-btn {
+  display: none;
+}
+
+.bv-drawer-backdrop {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .bv-page-outer {
+    padding: 0 !important;
+  }
+  .bv-page-card {
+    border-radius: 0 !important;
+    min-height: 100vh !important;
+    border-left: none !important;
+    border-right: none !important;
+  }
+
+  .bv-header {
+    height: auto !important;
+    padding: 12px 14px !important;
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .bv-header-brand-text,
+  .bv-header-username {
+    display: none;
+  }
+  .bv-header-search {
+    max-width: none !important;
+    flex: 1 1 100% !important;
+    order: 3;
+  }
+
+  .bv-hamburger-btn {
+    display: inline-flex !important;
+  }
+
+  .bv-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 82vw;
+    max-width: 300px;
+    z-index: 601;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.28);
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+  }
+  .bv-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .bv-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 600;
+    animation: bvFadeIn .18s ease;
+  }
+}
+
+/* --- Tabelas: viram cartões empilhados em telas estreitas, sem scroll horizontal --- */
+@media (max-width: 680px) {
+  .bv-table thead {
+    display: none;
+  }
+  .bv-table, .bv-table tbody, .bv-table tr, .bv-table td {
+    display: block;
+    width: 100%;
+  }
+  .bv-table tr {
+    border: 1px solid rgba(148,163,184,0.28);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    padding: 4px 10px;
+  }
+  .bv-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid rgba(148,163,184,0.16) !important;
+    padding: 8px 0 !important;
+    text-align: right;
+  }
+  .bv-table td:last-child {
+    border-bottom: none !important;
+  }
+  .bv-table td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: 11px;
+    color: #94a3b8;
+    text-align: left;
+    flex-shrink: 0;
+  }
+  .bv-table td:empty {
+    display: none;
+  }
+}

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "./lib/supabase";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail } from "lucide-react";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2 } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
 import { getIn, fBRL, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, validarImagem, lerComoDataURL } from "./lib/helpers";
@@ -25,6 +25,8 @@ export default function App() {
 
   const [users, setUsers] = useState<UserType[]>([]);
   const [user, setUser]   = useState<UserType | null>(null);
+  const [demoMsg, setDemoMsg] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
@@ -87,6 +89,12 @@ export default function App() {
   const [newULoading, setNewULoading] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [confirmDelUser, setConfirmDelUser] = useState<{id:string,name:string} | null>(null);
+  const [delUserLoading, setDelUserLoading] = useState(false);
+  const [delUserErr, setDelUserErr] = useState("");
+  const [revealedEmails, setRevealedEmails] = useState<Record<string,string>>({});
+  const [emailLoadingId, setEmailLoadingId] = useState<string | null>(null);
+  const [emailErr, setEmailErr] = useState<Record<string,string>>({});
   const [editT, setEditT] = useState<string | null>(null);
   const [editTData, setEditTData] = useState({fornecedor:"",valor:"" as number | string,vencimento:"",responsavel:"",obs:""});
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -95,11 +103,12 @@ export default function App() {
 
   const isAdmin = user && user.role==="admin";
   const isFin   = user && user.setor==="Financeiro";
+  const isDemo  = user && user.role==="demo";
 
-  const tVis = (isAdmin ? tarefas : tarefas.filter(t=>t.responsavel===(user&&user.id)))
+  const tVis = ((isAdmin||isDemo) ? tarefas : tarefas.filter(t=>t.responsavel===(user&&user.id)))
     .filter(t=>(fStatus==="todos"||t.status===fStatus)&&(!search||t.fornecedor.toLowerCase().includes(search.toLowerCase())));
   const pends    = tarefas.filter(t=>t.status==="pendente"||t.status==="vencido");
-  const pendsVis = isAdmin ? pends : pends.filter(t=>t.responsavel===(user&&user.id));
+  const pendsVis = (isAdmin||isDemo) ? pends : pends.filter(t=>t.responsavel===(user&&user.id));
   const unread   = notifs.filter(n=>!n.read).length;
   const responsavelPadrao = (users.find(u=>u.role==="func")||users[0]||{id:""}).id;
   const representantesAtivos = representantes.filter(r=>r.status==="Ativo");
@@ -132,7 +141,10 @@ export default function App() {
     // Lista completa (todos os campos), exige usuário autenticado — é o que
     // alimenta Configurações > Equipe, os seletores de responsável etc.
     async function sincronizarUsuarios(userId){
-      const { data, error } = await supabase.from("profiles").select("*").order("name");
+      // Sem "email" de propósito: a coluna foi revogada para "authenticated"
+      // no banco (ver migration 20260811160000) — só é lida sob demanda via
+      // get_user_email(), quando a Supervisora clica em "Ver e-mail".
+      const { data, error } = await supabase.from("profiles").select("id,name,role,setor,initials,color,photo_url,status,last_access").order("name");
       if(!ativo) return null;
       if(error||!data){ return null; }
       const lista = data.map(mapProfileRow);
@@ -143,7 +155,7 @@ export default function App() {
     }
 
     function marcarOnline(userId){
-      supabase.from("profiles").update({ status:"online", last_access: new Date().toISOString() }).eq("id", userId);
+      return supabase.from("profiles").update({ status:"online", last_access: new Date().toISOString() }).eq("id", userId);
     }
 
     // Todas as tarefas (RLS já filtra: admin vê tudo, funcionária só as suas),
@@ -181,7 +193,7 @@ export default function App() {
     supabase.auth.getSession().then(async ({data})=>{
       if(!ativo) return;
       if(data.session&&data.session.user){
-        marcarOnline(data.session.user.id);
+        await marcarOnline(data.session.user.id);
         const logado = await sincronizarUsuarios(data.session.user.id) || fallbackProfile(data.session.user);
         if(!ativo) return;
         setUser(logado);
@@ -199,8 +211,8 @@ export default function App() {
       if(event==="PASSWORD_RECOVERY") setPasswordRecovery(true);
       if(event==="SIGNED_OUT") setUser(null);
       if((event==="SIGNED_IN"||event==="USER_UPDATED")&&novaSessao&&novaSessao.user){
-        if(event==="SIGNED_IN") marcarOnline(novaSessao.user.id);
-        sincronizarUsuarios(novaSessao.user.id).then(logado=>{
+        const aposMarcar = event==="SIGNED_IN" ? marcarOnline(novaSessao.user.id) : Promise.resolve();
+        aposMarcar.then(()=>sincronizarUsuarios(novaSessao.user.id)).then(logado=>{
           if(!ativo) return;
           if(!logado) setUser(fallbackProfile(novaSessao.user));
           if(event==="SIGNED_IN") setTab((logado||fallbackProfile(novaSessao.user)).role==="admin"?"painel":"tarefas");
@@ -215,6 +227,18 @@ export default function App() {
   function addN(msg){ setNotifs(p=>[{id:Date.now(),msg,time:nowT(),read:false},...p].slice(0,20)); }
   function addA(tipo,tarefa,detalhe){ setAuditLog(p=>[{id:Date.now(),tipo,tarefa,usuario:user?user.name:"",hora:nowF(),detalhe},...p]); }
   function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.blueSoft,c:D.blueText},"Aprovado":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
+  function roleLabel(r){ return r==="admin"?"Supervisora":r==="demo"?"Demonstração":"Funcionária"; }
+  // Guarda central pro perfil DEMONSTRAÇÃO: nenhum handler de escrita segue
+  // adiante sem passar por aqui, mesmo que algum botão não tenha sido
+  // escondido corretamente. O bloqueio de verdade está no RLS (o perfil
+  // demo não consegue gravar nada mesmo chamando a API direto); isso aqui
+  // só evita a chamada e mostra uma mensagem amigável.
+  function bloqueadoDemo(){
+    if(!isDemo) return false;
+    setDemoMsg(true);
+    setTimeout(()=>setDemoMsg(false),3000);
+    return true;
+  }
 
   async function doLogin(){
     const email = loginEmail.trim();
@@ -269,6 +293,7 @@ export default function App() {
   }
 
   async function salvarFoto(){
+    if(bloqueadoDemo()) return;
     if(!photoPreview||!user) return;
     const { error } = await supabase.from("profiles").update({ photo_url: photoPreview }).eq("id", user.id);
     if(error){ setPhotoErr("Não foi possível salvar a foto. Tente novamente."); return; }
@@ -278,6 +303,7 @@ export default function App() {
   }
 
   async function removerFoto(){
+    if(bloqueadoDemo()) return;
     if(!user) return;
     const { error } = await supabase.from("profiles").update({ photo_url: null }).eq("id", user.id);
     if(error){ setPhotoErr("Não foi possível remover a foto. Tente novamente."); return; }
@@ -295,6 +321,7 @@ export default function App() {
   }
 
   async function concluir(id){
+    if(bloqueadoDemo()) return;
     const t=tarefas.find(x=>x.id===id); if(!t) return;
     const { error } = await supabase.from("tarefas").update({ status:"pago" }).eq("id", id);
     if(error) return;
@@ -305,6 +332,7 @@ export default function App() {
   }
 
   async function reabrir(id){
+    if(bloqueadoDemo()) return;
     const t=tarefas.find(x=>x.id===id); if(!t) return;
     const { error } = await supabase.from("tarefas").update({ status:"pendente" }).eq("id", id);
     if(error) return;
@@ -313,6 +341,7 @@ export default function App() {
   }
 
   async function prorrogar(id){
+    if(bloqueadoDemo()) return;
     if(!prorr.novoVencimento||!prorr.motivo){ setProrrErr("Preencha o novo vencimento e o motivo."); return; }
     const t=tarefas.find(x=>x.id===id);
     const { error: errUpd } = await supabase.from("tarefas").update({ vencimento:prorr.novoVencimento, status:"prorrogado" }).eq("id", id);
@@ -326,6 +355,7 @@ export default function App() {
   }
 
   async function addTarefa(){
+    if(bloqueadoDemo()) return;
     const responsavelId = newT.responsavel || responsavelPadrao;
     if(!newT.fornecedor||!newT.vencimento||!responsavelId) return;
     const resp=users.find(u=>u.id===responsavelId);
@@ -345,6 +375,7 @@ export default function App() {
   }
 
   async function mudaResp(id,nid){
+    if(bloqueadoDemo()) return;
     const t=tarefas.find(x=>x.id===id);
     const ant=users.find(u=>u.id===(t?t.responsavel:""));
     const nov=users.find(u=>u.id===nid);
@@ -360,6 +391,7 @@ export default function App() {
   }
 
   async function salvarEditT(){
+    if(bloqueadoDemo()) return;
     if(!editTData.fornecedor||!editTData.vencimento) return;
     const atual = tarefas.find(x=>x.id===editT);
     const status = atual&&atual.status==="pago" ? "pago" : (editTData.vencimento<hoje?"vencido":"pendente");
@@ -378,6 +410,7 @@ export default function App() {
   }
 
   async function excluirTarefa(id){
+    if(bloqueadoDemo()) return;
     const t=tarefas.find(x=>x.id===id);
     const { error } = await supabase.from("tarefas").delete().eq("id", id);
     if(error) return;
@@ -402,6 +435,7 @@ export default function App() {
   }
 
   async function salvarRepresentante(){
+    if(bloqueadoDemo()) return;
     const nome = repForm.nome.trim();
     if(!nome){ setRepFormErr("Informe o nome."); return; }
     if(repForm.status==="Inativo"&&!repForm.dataSaida){ setRepFormErr("Informe a data de saída."); return; }
@@ -433,6 +467,7 @@ export default function App() {
   }
 
   async function addContrato(){
+    if(bloqueadoDemo()) return;
     const representanteId = newC.representanteId;
     const porcentagem = (newC.porcentagem || "").toString().trim();
     const porcentagemNum = Number(porcentagem);
@@ -457,6 +492,7 @@ export default function App() {
   }
 
   async function addNF(){
+    if(bloqueadoDemo()) return;
     if(!newPr.fornecedor||!newPr.nf) return;
     const { data, error } = await supabase.from("pendencias").insert({
       fornecedor: newPr.fornecedor,
@@ -471,12 +507,14 @@ export default function App() {
   }
 
   async function mudarEstadoNF(id,estado){
+    if(bloqueadoDemo()) return;
     const { error } = await supabase.from("pendencias").update({ estado }).eq("id", id);
     if(error) return;
     setProrrogacoes(prev=>prev.map(x=>x.id===id?{...x,estado}:x));
   }
 
   async function excluirNF(id){
+    if(bloqueadoDemo()) return;
     const { error } = await supabase.from("pendencias").delete().eq("id", id);
     if(error) return;
     setProrrogacoes(prev=>prev.filter(x=>x.id!==id));
@@ -505,6 +543,7 @@ export default function App() {
 
   // Salva a última versão do texto do contrato (histórico de revisão) no banco.
   async function salvarDocumento(id,texto){
+    if(bloqueadoDemo()) return;
     const { error } = await supabase.from("contratos").update({ documento_texto: texto }).eq("id", id);
     if(error) return;
     setContratos(prev=>prev.map(x=>x.id===id?{...x,documentoTexto:texto}:x));
@@ -512,6 +551,7 @@ export default function App() {
   }
 
   async function saveU(id){
+    if(bloqueadoDemo()) return;
     if(!editN.trim()||!editSetor.trim()) return;
     const nome = editN.trim(), setor = editSetor.trim();
     const { error } = await supabase.from("profiles").update({ name:nome, setor, initials:getIn(nome) }).eq("id", id);
@@ -519,6 +559,49 @@ export default function App() {
     const up=users.map(u=>u.id===id?{...u,name:nome,initials:getIn(nome),setor}:u);
     setUsers(up); if(user&&user.id===id) setUser(up.find(u=>u.id===id));
     setEditU(null); setEditN(""); setEditS(""); setEditSetor("");
+  }
+
+  // E-mail de outro usuário só é buscado quando a Supervisora clica em "Ver
+  // e-mail" — a coluna nem vem na listagem (ver sincronizarUsuarios). O
+  // backend (get_user_email, security definer) confere is_admin() de novo,
+  // então mesmo essa chamada não adianta nada pra quem não é Supervisora.
+  async function verEmail(id){
+    if(bloqueadoDemo()) return;
+    if(revealedEmails[id]) return;
+    setEmailLoadingId(id); setEmailErr(p=>({...p,[id]:""}));
+    const { data, error } = await supabase.rpc("get_user_email", { target_id: id });
+    setEmailLoadingId(null);
+    if(error || typeof data!=="string"){
+      setEmailErr(p=>({...p,[id]:"Não foi possível carregar o e-mail."}));
+      return;
+    }
+    setRevealedEmails(p=>({...p,[id]:data}));
+  }
+
+  function abrirConfirmDelUser(id,name){
+    if(bloqueadoDemo()) return;
+    setDelUserErr(""); setConfirmDelUser({id,name});
+  }
+
+  async function excluirUsuario(){
+    if(!confirmDelUser) return;
+    if(bloqueadoDemo()) return;
+    setDelUserLoading(true); setDelUserErr("");
+    const { data, error } = await supabase.functions.invoke("delete-user", {
+      body: { id: confirmDelUser.id },
+    });
+    setDelUserLoading(false);
+    if(error || !data?.ok){
+      let msg = data?.error;
+      if(!msg && error && typeof error.context?.json === "function"){
+        try { msg = (await error.context.json())?.error; } catch { /* corpo não era JSON */ }
+      }
+      setDelUserErr(msg || error?.message || "Não foi possível excluir o usuário.");
+      return;
+    }
+    addA("Usuário excluído", confirmDelUser.name, "Conta removida da equipe");
+    setUsers(prev=>prev.filter(u=>u.id!==confirmDelUser.id));
+    setConfirmDelUser(null);
   }
 
   function abrirNewU(){
@@ -530,6 +613,7 @@ export default function App() {
   }
 
   async function criarUsuario(){
+    if(bloqueadoDemo()) return;
     const nome = newU.name.trim();
     const setor = newU.setor.trim();
     const email = newU.email.trim();
@@ -558,7 +642,7 @@ export default function App() {
       const cores = ["#2563EB","#8B5CF6","#F59E0B","#22C55E","#EF4444"];
       const { data: atualizado, error: updErr } = await supabase.from("profiles").update({
         setor, role: newU.role, initials: getIn(nome), color: cores[users.length%cores.length],
-      }).eq("id", created.id).select("*").single();
+      }).eq("id", created.id).select("id,name,role,setor,initials,color,photo_url,status,last_access").single();
       if(updErr || !atualizado){
         setNewUErr("Usuário criado no login, mas não foi possível salvar setor/cargo. Edite pela lista de Equipe.");
         return;
@@ -577,13 +661,13 @@ export default function App() {
   }
 
   const NAV=[
-    {id:"painel",label:"Dashboard",Icon:LayoutDashboard,show:isAdmin},
+    {id:"painel",label:"Dashboard",Icon:LayoutDashboard,show:isAdmin||isDemo},
     {id:"tarefas",label:"Tarefas",Icon:Receipt,show:true},
     {id:"pendencias",label:"Pendências",Icon:Clock,show:true},
-    {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin},
-    {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin},
+    {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin||isDemo},
+    {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin||isDemo},
     {id:"calendario",label:"Calendário",Icon:Calendar,show:true},
-    {id:"auditoria",label:"Auditoria",Icon:ClipboardList,show:isAdmin},
+    {id:"auditoria",label:"Auditoria",Icon:ClipboardList,show:isAdmin||isDemo},
     {id:"config",label:"Configurações",Icon:Settings,show:isAdmin},
   ].filter(n=>n.show);
 
@@ -739,15 +823,21 @@ export default function App() {
   );
 
   return (
-    <div style={{minHeight:"100vh",background: dark ? "linear-gradient(135deg, "+D.bg+" 0%, "+D.white+" 100%)" : "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)",padding:"24px",boxSizing:"border-box"}}>
-      <div style={{maxWidth:1600,margin:"0 auto",minHeight:"calc(100vh - 48px)",background:dark?D.bg:D.white,borderRadius:28,overflow:"hidden",boxShadow:"0 24px 70px rgba(15,23,42,0.16)",border:"1px solid "+D.border,display:"flex",flexDirection:"column"}}>
-        {/* HEADER */}
-      <div style={{background:D.white,borderBottom:"1px solid "+D.border,padding:"0 28px",height:78,display:"flex",alignItems:"center",justifyContent:"space-between",gap:18,flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:32,height:32,borderRadius:8,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center"}}><Receipt size={16} color={D.blue}/></div>
-          <span style={{fontWeight:700,fontSize:15,color:D.blue,letterSpacing:"-0.3px"}}>BP-Visionn</span>
+    <div className="bv-page-outer" style={{minHeight:"100vh",background: dark ? "linear-gradient(135deg, "+D.bg+" 0%, "+D.white+" 100%)" : "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)",padding:"24px",boxSizing:"border-box"}}>
+      {demoMsg&&(
+        <div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",zIndex:1000,background:D.redSoft,color:D.redText,border:"1px solid "+D.red+"44",borderRadius:12,padding:"10px 18px",fontSize:13,fontWeight:600,boxShadow:"0 12px 30px rgba(0,0,0,0.18)",display:"flex",alignItems:"center",gap:8}}>
+          <AlertCircle size={15}/>Você não possui permissão para executar esta ação.
         </div>
-        <div style={{flex:1,maxWidth:420,position:"relative"}}>
+      )}
+      <div className="bv-page-card" style={{maxWidth:1600,margin:"0 auto",minHeight:"calc(100vh - 48px)",background:dark?D.bg:D.white,borderRadius:28,overflow:"hidden",boxShadow:"0 24px 70px rgba(15,23,42,0.16)",border:"1px solid "+D.border,display:"flex",flexDirection:"column"}}>
+        {/* HEADER */}
+      <div className="bv-header" style={{background:D.white,borderBottom:"1px solid "+D.border,padding:"0 28px",height:78,display:"flex",alignItems:"center",justifyContent:"space-between",gap:18,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <button className="bv-hamburger-btn" onClick={()=>setShowDrawer(true)} style={{...st.btn,padding:"7px 9px",border:"none",background:D.bg}}><Menu size={18} color={D.text}/></button>
+          <div style={{width:32,height:32,borderRadius:8,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center"}}><Receipt size={16} color={D.blue}/></div>
+          <span className="bv-header-brand-text" style={{fontWeight:700,fontSize:15,color:D.blue,letterSpacing:"-0.3px"}}>BP-Visionn</span>
+        </div>
+        <div className="bv-header-search" style={{flex:1,maxWidth:420,position:"relative"}}>
           <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
           <input placeholder="Buscar..." value={search} onChange={e=>setSearch(e.target.value)} style={{...st.inp,paddingLeft:32,fontSize:13,background:D.bg}}/>
         </div>
@@ -771,23 +861,24 @@ export default function App() {
             )}
           </div>
           <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={D.white} size={32}/>
-          <div><div style={{fontSize:13,fontWeight:600,color:D.text}}>{user.name}</div><div style={{fontSize:11,color:D.muted}}>{user.setor}</div></div>
+          <div className="bv-header-username"><div style={{fontSize:13,fontWeight:600,color:D.text}}>{user.name}</div><div style={{fontSize:11,color:D.muted}}>{user.setor}</div></div>
           <button style={{...st.btn,padding:"6px 10px",border:"none",background:D.bg}} onClick={doLogout}><LogOut size={15} color={D.muted}/></button>
         </div>
       </div>
 
-      <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+      <div style={{display:"flex",flex:1,overflow:"hidden",position:"relative"}}>
+        {showDrawer&&<div className="bv-drawer-backdrop" onClick={()=>setShowDrawer(false)}/>}
         {/* SIDEBAR */}
-        <div style={{width:250,background:dark?D.white:"#f8fafc",borderRight:"1px solid "+D.border,padding:"1.15rem 0.9rem",flexShrink:0,overflowY:"auto",display:"flex",flexDirection:"column"}}>
+        <div className={"bv-sidebar"+(showDrawer?" open":"")} style={{width:250,background:dark?D.white:"#f8fafc",borderRight:"1px solid "+D.border,padding:"1.15rem 0.9rem",flexShrink:0,overflowY:"auto",display:"flex",flexDirection:"column"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 4px",marginBottom:16}}>
             <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={dark?D.white:"#f8fafc"} size={36}/>
             <div style={{minWidth:0}}>
               <div style={{fontSize:13,fontWeight:600,color:D.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Olá, {user.name}!</div>
-              <div style={{fontSize:11,color:D.muted}}>{user.role==="admin"?"Supervisora":"Funcionária"}</div>
+              <div style={{fontSize:11,color:D.muted}}>{roleLabel(user.role)}</div>
             </div>
           </div>
           {NAV.map(n=>(
-            <button key={n.id} className={"bv-nav-item"+(tab===n.id?" active":"")} onClick={()=>setTab(n.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:5,position:"relative",background:tab===n.id?D.blueSoft:"transparent",color:tab===n.id?D.blue:D.muted,fontWeight:tab===n.id?600:500,fontSize:13,boxShadow:tab===n.id?"0 8px 20px rgba(37,99,235,0.12)":"none"}}>
+            <button key={n.id} className={"bv-nav-item"+(tab===n.id?" active":"")} onClick={()=>{setTab(n.id);setShowDrawer(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:5,position:"relative",background:tab===n.id?D.blueSoft:"transparent",color:tab===n.id?D.blue:D.muted,fontWeight:tab===n.id?600:500,fontSize:13,boxShadow:tab===n.id?"0 8px 20px rgba(37,99,235,0.12)":"none"}}>
               <n.Icon size={16}/>{n.label}
               {n.id==="pendencias"&&pendsVis.length>0&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{pendsVis.length}</span>}
             </button>
@@ -806,7 +897,7 @@ export default function App() {
         <div style={{flex:1,padding:"1.9rem 2.2rem",overflowY:"auto",background:D.bg}}>
 
           {/* DASHBOARD */}
-          {tab==="painel"&&isAdmin&&(
+          {tab==="painel"&&(isAdmin||isDemo)&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Dashboard</div><div style={{fontSize:13,color:D.muted}}>Bem-vinda, Bárbara!</div></div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:20}}>
@@ -836,7 +927,7 @@ export default function App() {
                       <Av name={fn.name} initials={fn.initials} color={fn.color} photo={fn.photo} size={40}/>
                       <div style={{minWidth:110}}>
                         <div style={{fontSize:13,fontWeight:600,color:D.text}}>{fn.name}</div>
-                        <div style={{fontSize:11,color:D.muted}}>{fn.role==="admin"?"Supervisora":"Funcionária"}</div>
+                        <div style={{fontSize:11,color:D.muted}}>{roleLabel(fn.role)}</div>
                       </div>
                       <div style={{flex:1,minWidth:130,display:"flex",alignItems:"center",gap:10}}>
                         <div style={{flex:1,height:8,background:D.gray,borderRadius:20,overflow:"hidden"}}><div className="bv-progress-fill" style={{height:"100%",background:"linear-gradient(90deg, "+pCor+"cc, "+pCor+")",borderRadius:20,width:pc+"%"}}></div></div>
@@ -859,11 +950,11 @@ export default function App() {
               <div className="bv-card" style={{...st.card,marginBottom:20}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                   <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
-                  <button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>
+                  {!isDemo&&<button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>}
                 </div>
                 {showProrrForm&&(
                   <div style={{background:D.bg,borderRadius:10,padding:14,marginBottom:14}}>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
                       <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newPr.fornecedor} onChange={e=>setNewPr(p=>({...p,fornecedor:e.target.value}))}/></div>
                       <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} placeholder="NF-000" value={newPr.nf} onChange={e=>setNewPr(p=>({...p,nf:e.target.value}))}/></div>
                       <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
@@ -881,17 +972,17 @@ export default function App() {
                 )}
                 {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
                   <div style={{overflowX:"auto"}}>
-                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                  <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                     <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                     <tbody>{prorrogacoes.map(pr=>{
                       const ec=eCor(pr.estado);
                       return (
                         <tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}>
-                          <td style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td>
-                          <td style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
-                          <td style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td>
-                          <td style={{padding:"10px 8px"}}>
-                            <select value={pr.estado} onChange={e=>mudarEstadoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
+                          <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td>
+                          <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
+                          <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td>
+                          <td data-label="Estado" style={{padding:"10px 8px"}}>
+                            <select value={pr.estado} disabled={isDemo} onChange={e=>mudarEstadoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
                               <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
                             </select>
                           </td>
@@ -906,17 +997,17 @@ export default function App() {
               <div className="bv-card" style={st.card}>
                 <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Tarefas recentes</div>
                 <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                   <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","Vencimento","Responsável","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                   <tbody>{tarefas.slice(0,5).map(t=>{
                     const fn=users.find(u=>u.id===t.responsavel);
                     return (
                       <tr key={t.id} style={{borderBottom:"1px solid "+D.border}}>
-                        <td style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{t.fornecedor}</td>
-                        <td style={{padding:"10px 8px",color:D.muted}}>{t.vencimento}</td>
-                        <td style={{padding:"10px 8px"}}>{fn&&<div style={{display:"flex",alignItems:"center",gap:6}}><Av name={fn.name} initials={fn.initials} color={fn.color} size={22}/><span style={{color:D.muted}}>{fn.name}</span></div>}</td>
-                        <td style={{padding:"10px 8px"}}><Badge status={t.status}/></td>
-                        <td style={{padding:"10px 8px"}}>{t.status!=="pago"&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>setConfirm(t.id)}><CheckCircle size={12}/>Concluir</button>}</td>
+                        <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{t.fornecedor}</td>
+                        <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{t.vencimento}</td>
+                        <td data-label="Responsável" style={{padding:"10px 8px"}}>{fn&&<div style={{display:"flex",alignItems:"center",gap:6}}><Av name={fn.name} initials={fn.initials} color={fn.color} size={22}/><span style={{color:D.muted}}>{fn.name}</span></div>}</td>
+                        <td data-label="Status" style={{padding:"10px 8px"}}><Badge status={t.status}/></td>
+                        <td style={{padding:"10px 8px"}}>{!isDemo&&t.status!=="pago"&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>setConfirm(t.id)}><CheckCircle size={12}/>Concluir</button>}</td>
                       </tr>
                     );
                   })}</tbody>
@@ -956,11 +1047,11 @@ export default function App() {
           {/* TAREFAS */}
           {tab==="tarefas"&&(
             <div>
-              {!isAdmin&&(
+              {!isAdmin&&!isDemo&&(
                 <div style={{marginBottom:20}}>
                   <div style={{fontSize:16,fontWeight:700,color:D.text,marginBottom:4}}>Olá, {user.name}! 👋</div>
                   <div style={{fontSize:13,color:D.muted,marginBottom:14}}>{user.setor}</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:10,marginBottom:16}}>
                     {[
                       {label:"Total",value:tarefas.filter(t=>t.responsavel===user.id).length,Icon:Receipt,bg:D.blueSoft,color:D.blue},
                       {label:"Pendentes",value:tarefas.filter(t=>t.responsavel===user.id&&t.status==="pendente").length,Icon:Clock,bg:D.orangeSoft,color:D.orange},
@@ -979,9 +1070,9 @@ export default function App() {
                       <div className="bv-card" style={st.card}>
                         <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:12}}>📋 Prorrogação de Boletos</div>
                         <div style={{overflowX:"auto"}}>
-                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                        <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                           <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado"].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-                          <tbody>{prorrogacoes.map(pr=>{const ec=eCor(pr.estado);return(<tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}><td style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td><td style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td><td style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td><td style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,borderRadius:20,padding:"3px 10px"}}>{pr.estado}</span></td></tr>);})}</tbody>
+                          <tbody>{prorrogacoes.map(pr=>{const ec=eCor(pr.estado);return(<tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}><td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td><td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td><td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td><td data-label="Estado" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,borderRadius:20,padding:"3px 10px"}}>{pr.estado}</span></td></tr>);})}</tbody>
                         </table>
                         </div>
                       </div>
@@ -1010,7 +1101,7 @@ export default function App() {
               {showTForm&&(
                 <div className="bv-card" style={{...st.card,borderColor:D.blue,marginBottom:16}}>
                   <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Nova Tarefa</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
                     <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newT.fornecedor} onChange={e=>setNewT(p=>({...p,fornecedor:e.target.value}))}/></div>
                     <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newT.valor} onChange={e=>setNewT(p=>({...p,valor:e.target.value}))}/></div>
                     <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newT.vencimento} onChange={e=>setNewT(p=>({...p,vencimento:e.target.value}))}/></div>
@@ -1059,7 +1150,7 @@ export default function App() {
                       {isAdmin&&t.status==="pago"&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"55"}} onClick={()=>reabrir(t.id)}><AlertCircle size={13}/>Reabrir</button>}
                       {isAdmin&&<button style={st.btn} onClick={()=>abrirEditT(t)}><Edit3 size={13}/>Editar</button>}
                       {isAdmin&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"55"}} onClick={()=>setConfirmDel(t.id)}><X size={13}/>Excluir</button>}
-                      {!isAdmin&&t.status!=="pago"&&(
+                      {!isAdmin&&!isDemo&&t.status!=="pago"&&(
                         <button style={{padding:"9px 18px",borderRadius:10,border:"none",background:D.green,cursor:"pointer",fontSize:13,color:"#ffffff",fontWeight:600,display:"inline-flex",alignItems:"center",gap:8}} onClick={()=>setConfirm(t.id)}>
                           <CheckCircle size={15}/>Concluir Tarefa
                         </button>
@@ -1067,7 +1158,7 @@ export default function App() {
                       {!isAdmin&&t.status==="pago"&&<div style={{padding:"7px 14px",background:D.greenSoft,borderRadius:10,fontSize:12,color:D.greenText,display:"inline-flex",alignItems:"center",gap:6,fontWeight:500}}><CheckCircle size={13}/>Concluída</div>}
                     </div>
                     {showProrr===t.id&&(
-                      <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                      <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
                         <div><label style={st.lbl}>Novo vencimento</label><input type="date" style={st.inp} value={prorr.novoVencimento} onChange={e=>setProrr(p=>({...p,novoVencimento:e.target.value}))}/></div>
                         <div><label style={st.lbl}>Motivo</label><input style={st.inp} value={prorr.motivo} onChange={e=>setProrr(p=>({...p,motivo:e.target.value}))}/></div>
                         {prorrErr&&<div style={{gridColumn:"1/-1",fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{prorrErr}</div>}
@@ -1075,7 +1166,7 @@ export default function App() {
                       </div>
                     )}
                     {editT===t.id&&(
-                      <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                      <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
                         <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editTData.fornecedor} onChange={e=>setEditTData(p=>({...p,fornecedor:e.target.value}))}/></div>
                         <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editTData.valor} onChange={e=>setEditTData(p=>({...p,valor:e.target.value}))}/></div>
                         <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editTData.vencimento} onChange={e=>setEditTData(p=>({...p,vencimento:e.target.value}))}/></div>
@@ -1114,11 +1205,11 @@ export default function App() {
           )}
 
           {/* CONTRATOS */}
-          {tab==="contratos"&&(isAdmin||isFin)&&(
+          {tab==="contratos"&&(isAdmin||isFin||isDemo)&&(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
                 <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Contratos</div><div style={{fontSize:13,color:D.muted}}>{contratos.length} representante(s)</div></div>
-                <button style={st.btnBlue} onClick={()=>setShowCForm(p=>!p)}><Plus size={15}/>Novo contrato</button>
+                {!isDemo&&<button style={st.btnBlue} onClick={()=>setShowCForm(p=>!p)}><Plus size={15}/>Novo contrato</button>}
               </div>
               <div style={{display:"flex",gap:4,marginBottom:20,background:D.bg,borderRadius:10,padding:4,width:"fit-content"}}>
                 {[{id:"lista",label:"📋 Lista"},{id:"modelos",label:"📄 Modelos"}].map(a=>(
@@ -1130,7 +1221,7 @@ export default function App() {
                   {showCForm&&(
                     <div className="bv-card" style={{...st.card,borderColor:D.blue,marginBottom:16}}>
                       <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Novo contrato</div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
                         <div><label style={st.lbl}>Tipo</label><select style={st.inp} value={newC.tipo} onChange={e=>setNewC(p=>({...p,tipo:e.target.value}))}>{Object.keys(TIPO_MOD).map(k=><option key={k} value={k}>{TIPO_MOD[k].emoji} {TIPO_MOD[k].label}</option>)}</select></div>
                         <div><label style={st.lbl}>Representante</label>
                           <div style={{display:"flex",gap:6}}>
@@ -1159,7 +1250,7 @@ export default function App() {
                           <div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,color:D.text}}>{c.representante}</div><div style={{fontSize:11,color:D.muted,marginTop:2}}>{TIPO_MOD[c.tipo]?TIPO_MOD[c.tipo].emoji:""} {TIPO_MOD[c.tipo]?TIPO_MOD[c.tipo].label:""}</div></div>
                           <span style={{background:D.greenSoft,color:D.greenText,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}>Ativo</span>
                         </div>
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:8,marginBottom:14}}>
                           {[["Comissão",c.porcentagem+"%"],["Início",c.dataInicio],["E-mail",c.email],["Telefone",c.telefone]].map(function(kv){ return <div key={kv[0]} style={{background:D.bg,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:11,color:D.muted,marginBottom:2}}>{kv[0]}</div><div style={{fontSize:12,fontWeight:600,color:D.text}}>{kv[1]}</div></div>; })}
                         </div>
                         <button style={{...st.btn,width:"100%",justifyContent:"center"}} onClick={()=>{setShowContrato(c);setDocEdit(c.documentoTexto||"");setEditDoc(false);}}><FileText size={14}/>Ver / Editar</button>
@@ -1175,14 +1266,14 @@ export default function App() {
                     <div className="bv-card" key={key} style={st.card}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                         <div style={{fontWeight:600,fontSize:15,color:D.text}}>{TIPO_MOD[key].emoji} {TIPO_MOD[key].label}</div>
-                        {editMod===key?(
+                        {!isDemo&&(editMod===key?(
                           <div style={{display:"flex",gap:8}}>
                             <button style={st.btnBlue} onClick={()=>{setModelos(p=>({...p,[key]:modEdit}));setEditMod(null);addA("Edição de informações","Modelo",TIPO_MOD[key].label+" editado");}}><Save size={13}/>Salvar</button>
                             <button style={st.btn} onClick={()=>setEditMod(null)}>Cancelar</button>
                           </div>
                         ):(
                           <button style={st.btn} onClick={()=>{setEditMod(key);setModEdit(modelos[key]);}}><Edit3 size={13}/>Editar</button>
-                        )}
+                        ))}
                       </div>
                       {editMod===key?<textarea value={modEdit} onChange={e=>setModEdit(e.target.value)} style={{...st.inp,minHeight:240,fontFamily:"monospace",fontSize:13,lineHeight:1.6,resize:"vertical"}}/>:<pre style={{fontSize:12,color:D.muted,background:D.bg,borderRadius:8,padding:"1rem",lineHeight:1.7,margin:0,whiteSpace:"pre-wrap",overflow:"auto"}}>{modelos[key]}</pre>}
                     </div>
@@ -1209,7 +1300,7 @@ export default function App() {
                       <>
                         <pre style={{fontSize:13,color:D.text,background:D.bg,borderRadius:10,padding:"1.25rem",lineHeight:1.8,whiteSpace:"pre-wrap",margin:"0 0 16px",fontFamily:"'Times New Roman',serif"}}>{docEdit||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato)}</pre>
                         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                          <button style={st.btn} onClick={()=>{setDocEdit(docEdit||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato));setEditDoc(true);}}><Edit3 size={14}/>Editar</button>
+                          {!isDemo&&<button style={st.btn} onClick={()=>{setDocEdit(docEdit||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato));setEditDoc(true);}}><Edit3 size={14}/>Editar</button>}
                           <button style={st.btnBlue} onClick={()=>window.print()}><Printer size={14}/>Imprimir</button>
                           <button style={{...st.btnBlue,background:D.green}} onClick={()=>{if(docEdit) salvarDocumento(showContrato.id,docEdit); exportPDF(showContrato,docEdit||undefined);}}><Save size={14}/>Exportar PDF</button>
                           <button style={st.btn} onClick={()=>{setShowContrato(null);setEditDoc(false);setDocEdit("");}}>Fechar</button>
@@ -1223,11 +1314,11 @@ export default function App() {
           )}
 
           {/* REPRESENTANTES */}
-          {tab==="representantes"&&(isAdmin||isFin)&&(
+          {tab==="representantes"&&(isAdmin||isFin||isDemo)&&(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
                 <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Representantes</div><div style={{fontSize:13,color:D.muted}}>{representantesVisiveis.length} de {representantes.length} representante(s)</div></div>
-                <button style={st.btnBlue} onClick={abrirNovoRep}><Plus size={15}/>Novo representante</button>
+                {!isDemo&&<button style={st.btnBlue} onClick={abrirNovoRep}><Plus size={15}/>Novo representante</button>}
               </div>
 
               <div className="bv-card" style={{...st.card,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
@@ -1263,20 +1354,20 @@ export default function App() {
               <div className="bv-card" style={st.card}>
                 {representantesVisiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum representante encontrado.</div>:(
                   <div style={{overflowX:"auto"}}>
-                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                  <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                     <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Nome","CPF","Região","Supervisor","Status","Entrada","Saída",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                     <tbody>{representantesVisiveis.map(r=>{
                       const sup = users.find(u=>u.id===r.supervisorId);
                       return (
                         <tr key={r.id} style={{borderBottom:"1px solid "+D.border}}>
-                          <td style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{r.nome}</td>
-                          <td style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{r.cpf||"—"}</td>
-                          <td style={{padding:"10px 8px",color:D.muted}}>{r.regiao}</td>
-                          <td style={{padding:"10px 8px",color:D.muted}}>{sup?sup.name:"—"}</td>
-                          <td style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:r.status==="Ativo"?D.greenSoft:D.redSoft,color:r.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{r.status}</span></td>
-                          <td style={{padding:"10px 8px",color:D.muted}}>{r.dataEntrada||"—"}</td>
-                          <td style={{padding:"10px 8px",color:D.muted}}>{r.dataSaida||"—"}</td>
-                          <td style={{padding:"10px 8px"}}><button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarRep(r)}><Pencil size={12}/>Editar</button></td>
+                          <td data-label="Nome" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{r.nome}</td>
+                          <td data-label="CPF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{r.cpf||"—"}</td>
+                          <td data-label="Região" style={{padding:"10px 8px",color:D.muted}}>{r.regiao}</td>
+                          <td data-label="Supervisor" style={{padding:"10px 8px",color:D.muted}}>{sup?sup.name:"—"}</td>
+                          <td data-label="Status" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:r.status==="Ativo"?D.greenSoft:D.redSoft,color:r.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{r.status}</span></td>
+                          <td data-label="Entrada" style={{padding:"10px 8px",color:D.muted}}>{r.dataEntrada||"—"}</td>
+                          <td data-label="Saída" style={{padding:"10px 8px",color:D.muted}}>{r.dataSaida||"—"}</td>
+                          <td style={{padding:"10px 8px"}}>{!isDemo&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarRep(r)}><Pencil size={12}/>Editar</button>}</td>
                         </tr>
                       );
                     })}</tbody>
@@ -1293,7 +1384,7 @@ export default function App() {
           )}
 
           {/* AUDITORIA */}
-          {tab==="auditoria"&&isAdmin&&(
+          {tab==="auditoria"&&(isAdmin||isDemo)&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Auditoria</div><div style={{fontSize:13,color:D.muted}}>Log de alterações</div></div>
               <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
@@ -1341,7 +1432,7 @@ export default function App() {
                 </div>
                 <div style={{flex:1,minWidth:220}}>
                   <div style={{fontWeight:700,fontSize:18,color:D.text}}>{user.name}</div>
-                  <div style={{fontSize:13,color:D.muted,marginTop:2}}>{user.setor} · {user.role==="admin"?"Supervisora":"Funcionária"}</div>
+                  <div style={{fontSize:13,color:D.muted,marginTop:2}}>{user.setor} · {roleLabel(user.role)}</div>
                   <div style={{fontSize:13,color:D.muted,marginTop:12}}>{user.email||"E-mail não informado"}</div>
                   <div style={{fontSize:12,color:D.muted,marginTop:12}}>Último acesso: {user.lastAccess||"—"}</div>
                 </div>
@@ -1369,14 +1460,18 @@ export default function App() {
                       ):(
                         <>
                           <div style={{fontWeight:500,fontSize:14,color:D.text}}>{u.name}</div>
-                          <div style={{fontSize:12,color:D.muted,marginTop:2}}>{u.setor} · {u.role==="admin"?"Supervisora":"Funcionária"}</div>
+                          <div style={{fontSize:12,color:D.muted,marginTop:2}}>{u.setor} · {roleLabel(u.role)}</div>
+                          {revealedEmails[u.id]&&<div style={{fontSize:12,color:D.muted,marginTop:2}}>{revealedEmails[u.id]}</div>}
+                          {emailErr[u.id]&&<div style={{fontSize:11,color:D.redText,marginTop:2}}>{emailErr[u.id]}</div>}
                         </>
                       )}
                     </div>
                     {editU!==u.id&&(
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <span style={{fontSize:12,background:u.role==="admin"?D.blueSoft:D.bg,color:u.role==="admin"?D.blueText:D.muted,borderRadius:20,padding:"3px 10px",fontWeight:500}}>{u.setor}</span>
+                        {!revealedEmails[u.id]&&<button style={{...st.btn,padding:"6px 8px"}} title="Ver e-mail" disabled={emailLoadingId===u.id} onClick={()=>verEmail(u.id)}><Mail size={13} color={D.muted}/></button>}
                         <button style={{...st.btn,padding:"6px 8px"}} onClick={()=>{setEditU(u.id);setEditN(u.name);setEditS("");setEditSetor(u.setor);}}><Pencil size={13} color={D.muted}/></button>
+                        {u.id!==user.id&&<button style={{...st.btn,padding:"6px 8px",color:D.redText,borderColor:D.red+"44"}} title="Excluir usuário" onClick={()=>abrirConfirmDelUser(u.id,u.name)}><Trash2 size={13}/></button>}
                       </div>
                     )}
                   </div>
@@ -1420,6 +1515,23 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL EXCLUIR USUÁRIO */}
+      {confirmDelUser!==null&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500}} onClick={()=>{if(!delUserLoading){setConfirmDelUser(null);setDelUserErr("");}}}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:380,width:"90%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:48,height:48,borderRadius:12,background:D.redSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Trash2 size={22} color={D.red}/></div>
+            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Excluir usuário?</div>
+            <div style={{fontSize:14,color:D.text,textAlign:"center",fontWeight:500,marginBottom:6}}>"{confirmDelUser.name}"</div>
+            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:24}}>Essa ação é <strong>permanente</strong> e não pode ser desfeita. O acesso ao sistema será removido imediatamente.</div>
+            {delUserErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:16,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{delUserErr}</div>}
+            <div style={{display:"flex",gap:10}}>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>{setConfirmDelUser(null);setDelUserErr("");}} disabled={delUserLoading}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.red,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={excluirUsuario} disabled={delUserLoading}>{delUserLoading?"Excluindo...":"Excluir"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL NOVO USUÁRIO */}
       {showNewU&&(
         <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={fecharNewU}>
@@ -1427,7 +1539,7 @@ export default function App() {
             <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Users size={22} color={D.blue}/></div>
             <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Novo usuário</div>
             <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>Cadastre um novo membro da equipe.</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome</label><input autoFocus style={st.inp} value={newU.name} onChange={e=>{setNewU(p=>({...p,name:e.target.value}));setNewUErr("");}}/></div>
               <div><label style={st.lbl}>Setor</label><input style={st.inp} placeholder="Ex.: Financeiro" value={newU.setor} onChange={e=>{setNewU(p=>({...p,setor:e.target.value}));setNewUErr("");}}/></div>
               <div><label style={st.lbl}>Cargo</label>
@@ -1455,7 +1567,7 @@ export default function App() {
             <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Users size={22} color={D.purple}/></div>
             <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>{repForm.id?"Editar representante":"Novo representante"}</div>
             <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{repForm.id?"Atualize os dados do representante.":"Cadastre um representante para vincular a contratos."}</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome</label><input autoFocus style={st.inp} value={repForm.nome} onChange={e=>{setRepForm(p=>({...p,nome:e.target.value}));setRepFormErr("");}}/></div>
               <div><label style={st.lbl}>CPF</label><input style={st.inp} value={repForm.cpf} onChange={e=>setRepForm(p=>({...p,cpf:e.target.value}))}/></div>
               <div><label style={st.lbl}>Região</label>
