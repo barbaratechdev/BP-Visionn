@@ -129,6 +129,25 @@ export function mapRepresentanteRow(row){
   };
 }
 
+// Converte uma linha de supervisores_lista() (já mascarada pra Demonstração
+// pelo próprio banco) para a UI.
+export function mapSupervisorRow(row){
+  return {
+    id: row.id,
+    nome: row.nome,
+    cpf: row.cpf || "",
+    email: row.email || "",
+    telefone: row.telefone || "",
+    dataNascimento: row.data_nascimento || "",
+    cargo: row.cargo || "",
+    dataInicio: row.data_inicio || "",
+    dataFim: row.data_fim || "",
+    status: row.status,
+    observacoes: row.observacoes || "",
+    foto: row.foto_url || "",
+  };
+}
+
 export function validarImagem(file){
   if(!TIPOS_IMG_PERMITIDOS.includes(file.type)) return {ok:false, erro:"Formato não suportado. Envie uma imagem PNG, JPG ou JPEG."};
   if(file.size>TAMANHO_MAX_IMG) return {ok:false, erro:"Arquivo muito grande. O limite é 5MB."};
