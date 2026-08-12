@@ -119,14 +119,14 @@ export default function Supervisores(p) {
         {isAdmin&&<button style={st.btnBlue} onClick={abrirNovo}><Plus size={15}/>Novo Supervisor</button>}
       </div>
 
-      {isDemo&&<div style={{fontSize:12,color:D.muted,background:D.bg,borderRadius:10,padding:"9px 12px",marginBottom:14}}>Modo Demonstração: CPF, e-mail, telefone, data de nascimento e observações não são exibidos.</div>}
+      {isDemo&&<div style={{fontSize:12,color:D.muted,background:D.bg,borderRadius:10,padding:"9px 12px",marginBottom:14}}>Modo Demonstração: CPF/CNPJ, e-mail, telefone, data de nascimento e observações não são exibidos.</div>}
 
       <div className="bv-card" style={{...st.card,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
         <div style={{flex:"1 1 220px"}}>
           <label style={st.lbl}>Pesquisar</label>
           <div style={{position:"relative"}}>
             <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
-            <input style={{...st.inp,paddingLeft:30}} placeholder="Nome, CPF ou e-mail" value={busca} onChange={e=>setBusca(e.target.value)}/>
+            <input style={{...st.inp,paddingLeft:30}} placeholder="Nome, CPF, CNPJ ou e-mail" value={busca} onChange={e=>setBusca(e.target.value)}/>
           </div>
         </div>
         <div style={{flex:"1 1 140px"}}>
@@ -143,7 +143,7 @@ export default function Supervisores(p) {
         {visiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum supervisor encontrado.</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Supervisor","CPF","Telefone","Data de início","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Supervisor","CPF ou CNPJ","Telefone","Data de início","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
             <tbody>{visiveis.map(s=>(
               <tr key={s.id} style={{borderBottom:"1px solid "+D.border}}>
                 <td data-label="Supervisor" style={{padding:"10px 8px"}}>
@@ -155,7 +155,7 @@ export default function Supervisores(p) {
                     </div>
                   </div>
                 </td>
-                <td data-label="CPF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{s.cpf||"—"}</td>
+                <td data-label="CPF ou CNPJ" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{s.cpf||"—"}</td>
                 <td data-label="Telefone" style={{padding:"10px 8px",color:D.muted}}>{s.telefone||"—"}</td>
                 <td data-label="Data de início" style={{padding:"10px 8px",color:D.muted}}>{s.dataInicio?fData(s.dataInicio):"—"}</td>
                 <td data-label="Status" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:s.status==="Ativo"?D.greenSoft:D.redSoft,color:s.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{s.status}</span></td>
@@ -193,7 +193,7 @@ export default function Supervisores(p) {
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome completo</label><input autoFocus style={st.inp} value={form.nome} onChange={e=>{setForm(f=>({...f,nome:e.target.value}));setFormErr("");}}/></div>
-              <div><label style={st.lbl}>CPF</label><input style={st.inp} value={form.cpf} onChange={e=>setForm(f=>({...f,cpf:e.target.value}))}/></div>
+              <div><label style={st.lbl}>CPF ou CNPJ</label><input style={st.inp} value={form.cpf} onChange={e=>setForm(f=>({...f,cpf:e.target.value}))}/></div>
               <div><label style={st.lbl}>Data de nascimento</label><input type="date" style={st.inp} value={form.dataNascimento} onChange={e=>setForm(f=>({...f,dataNascimento:e.target.value}))}/></div>
               <div><label style={st.lbl}>E-mail</label><input type="email" style={st.inp} value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/></div>
               <div><label style={st.lbl}>Telefone</label><input style={st.inp} value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))}/></div>
@@ -237,7 +237,7 @@ export default function Supervisores(p) {
             <div style={{fontSize:11,fontWeight:600,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:6}}>Dados pessoais</div>
             <div style={{background:D.bg,borderRadius:10,padding:"4px 14px",marginBottom:16}}>
               {[
-                {label:"CPF", value:detalheDe.cpf||"—"},
+                {label:"CPF ou CNPJ", value:detalheDe.cpf||"—"},
                 {label:"Data de nascimento", value:detalheDe.dataNascimento?fData(detalheDe.dataNascimento):"—"},
                 {label:"Telefone", value:detalheDe.telefone||"—"},
                 {label:"E-mail", value:detalheDe.email||"—"},
