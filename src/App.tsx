@@ -9,6 +9,7 @@ import Av from "./components/Av";
 import MCard from "./components/MCard";
 import Calendario from "./components/Calendario";
 import Mensagens from "./components/Mensagens";
+import Acessos from "./components/Acessos";
 import MiniCalendario from "./components/MiniCalendario";
 import StatusDonutCard from "./components/StatusDonutCard";
 import GoogleIcon from "./components/GoogleIcon";
@@ -434,6 +435,10 @@ export default function App() {
     const { error } = await supabase.auth.signInWithPassword({ email, password: loginSenha });
     setLoginLoading(false);
     if(error){ setLoginErr("E-mail ou senha incorretos."); return; }
+    // Registra o acesso pro histórico da Supervisora — só aqui, no momento
+    // exato de um login de verdade (nunca em refresh de página ou troca de
+    // aba). Não trava o login se isso falhar por algum motivo.
+    supabase.rpc("registrar_login");
     setLoginSenha("");
   }
 
@@ -1765,6 +1770,14 @@ export default function App() {
                     )}
                   </div>
                 ))}
+              </div>
+              )}
+
+              {isAdmin&&(
+              <div className="bv-card" style={st.card}>
+                <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:4}}>🔐 Acessos ao sistema</div>
+                <div style={{fontSize:12,color:D.muted,marginBottom:16}}>Quem entrou, quando, e quantas vezes — visível só pra você.</div>
+                <Acessos D={D} st={st}/>
               </div>
               )}
             </div>
