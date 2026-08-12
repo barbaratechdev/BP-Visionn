@@ -1490,7 +1490,7 @@ export default function App() {
               <div className="bv-card" style={{...st.card,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
                 <div style={{flex:"1 1 200px"}}>
                   <label style={st.lbl}>Pesquisar</label>
-                  <input style={st.inp} placeholder="Nome ou CPF" value={repSearch} onChange={e=>setRepSearch(e.target.value)}/>
+                  <input style={st.inp} placeholder="Nome, CPF ou CNPJ" value={repSearch} onChange={e=>setRepSearch(e.target.value)}/>
                 </div>
                 <div style={{flex:"1 1 140px"}}>
                   <label style={st.lbl}>Região</label>
@@ -1521,7 +1521,7 @@ export default function App() {
                 {representantesVisiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum representante encontrado.</div>:(
                   <div style={{overflowX:"auto"}}>
                   <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Nome","CPF","Região","Supervisor","Status","Vínculo","Entrada","Saída",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Nome","CPF ou CNPJ","Região","Supervisor","Status","Vínculo","Entrada","Saída",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                     <tbody>{representantesVisiveis.map(r=>{
                       const sup = users.find(u=>u.id===r.supervisorId);
                       const diasVinculo = diasParaVencerVinculo(r);
@@ -1529,7 +1529,7 @@ export default function App() {
                       return (
                         <tr key={r.id} style={{borderBottom:"1px solid "+D.border,background:venceEmBreve?D.orangeSoft:undefined}}>
                           <td data-label="Nome" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{r.nome}</td>
-                          <td data-label="CPF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{r.cpf||"—"}</td>
+                          <td data-label="CPF ou CNPJ" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{r.cpf||"—"}</td>
                           <td data-label="Região" style={{padding:"10px 8px",color:D.muted}}>{r.regiao}</td>
                           <td data-label="Supervisor" style={{padding:"10px 8px",color:D.muted}}>{sup?sup.name:"—"}</td>
                           <td data-label="Status" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:r.status==="Ativo"?D.greenSoft:D.redSoft,color:r.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{r.status}</span></td>
@@ -1757,7 +1757,7 @@ export default function App() {
             <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{repForm.id?"Atualize os dados do representante.":"Cadastre um representante para vincular a contratos."}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome</label><input autoFocus style={st.inp} value={repForm.nome} onChange={e=>{setRepForm(p=>({...p,nome:e.target.value}));setRepFormErr("");}}/></div>
-              <div><label style={st.lbl}>CPF</label><input style={st.inp} value={repForm.cpf} onChange={e=>setRepForm(p=>({...p,cpf:e.target.value}))}/></div>
+              <div><label style={st.lbl}>CPF ou CNPJ</label><input style={st.inp} value={repForm.cpf} onChange={e=>setRepForm(p=>({...p,cpf:e.target.value}))}/></div>
               <div><label style={st.lbl}>Região</label>
                 <select style={st.inp} value={repForm.regiao} onChange={e=>setRepForm(p=>({...p,regiao:e.target.value}))}>
                   <option value="Pará">Pará</option>
