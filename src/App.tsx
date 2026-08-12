@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
 import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL } from "./lib/helpers";
+import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL } from "./lib/helpers";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
@@ -77,7 +77,9 @@ export default function App() {
   const [fStatus, setFStatus] = useState("todos");
   const [newT, setNewT] = useState({fornecedor:"",valor:"",vencimento:"",responsavel:"",obs:""});
   const [newC, setNewC] = useState({representanteId:"",cpfCnpj:"",porcentagem:"",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"});
-  const [newPr, setNewPr] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno"});
+  const [newPr, setNewPr] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno",valor:"" as number | string});
+  const [editPr, setEditPr] = useState<string | null>(null);
+  const [editPrData, setEditPrData] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Pará",valor:"" as number | string});
   const [prorr, setProrr] = useState({novoVencimento:"",motivo:""});
   const [prorrErr, setProrrErr] = useState("");
   const [editU, setEditU] = useState<string | null>(null);
@@ -712,11 +714,12 @@ export default function App() {
       vencimento: newPr.vencimento || null,
       estado: newPr.estado,
       situacao: newPr.situacao,
+      valor: newPr.valor===""?null:Number(newPr.valor),
     }).select().single();
     if(error||!data) return;
     setProrrogacoes(prev=>prev.concat([mapPendenciaRow(data)]));
     addN("NF incluída: "+newPr.nf); addA("NF incluída",newPr.fornecedor,"NF: "+newPr.nf);
-    setNewPr({fornecedor:"",nf:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno"}); setShowProrrForm(false);
+    setNewPr({fornecedor:"",nf:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno",valor:""}); setShowProrrForm(false);
   }
 
   async function mudarSituacaoNF(id,situacao){
@@ -724,6 +727,27 @@ export default function App() {
     const { error } = await supabase.from("pendencias").update({ situacao }).eq("id", id);
     if(error) return;
     setProrrogacoes(prev=>prev.map(x=>x.id===id?{...x,situacao}:x));
+  }
+
+  function abrirEditPr(pr){
+    setEditPr(pr.id);
+    setEditPrData({fornecedor:pr.fornecedor,nf:pr.nf,vencimento:pr.vencimento,estado:pr.estado,valor:pr.valor??""});
+  }
+
+  async function salvarEditPr(){
+    if(bloqueadoDemo()) return;
+    if(!editPrData.fornecedor||!editPrData.nf) return;
+    const { error } = await supabase.from("pendencias").update({
+      fornecedor: editPrData.fornecedor,
+      numero_nf: editPrData.nf,
+      vencimento: editPrData.vencimento || null,
+      estado: editPrData.estado,
+      valor: editPrData.valor===""?null:Number(editPrData.valor),
+    }).eq("id", editPr);
+    if(error) return;
+    setProrrogacoes(prev=>prev.map(x=>x.id===editPr?{...x,fornecedor:editPrData.fornecedor,nf:editPrData.nf,vencimento:editPrData.vencimento,estado:editPrData.estado,valor:editPrData.valor===""?null:Number(editPrData.valor)}:x));
+    addA("NF editada",editPrData.fornecedor,"Dados atualizados por "+(user?user.name:""));
+    setEditPr(null);
   }
 
   async function excluirNF(id){
@@ -1172,6 +1196,7 @@ export default function App() {
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
                       <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newPr.fornecedor} onChange={e=>setNewPr(p=>({...p,fornecedor:e.target.value}))}/></div>
                       <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} placeholder="NF-000" value={newPr.nf} onChange={e=>setNewPr(p=>({...p,nf:e.target.value}))}/></div>
+                      <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newPr.valor} onChange={e=>setNewPr(p=>({...p,valor:e.target.value}))}/></div>
                       <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
                       <div><label style={st.lbl}>Estado</label>
                         <select style={st.inp} value={newPr.estado} onChange={e=>setNewPr(p=>({...p,estado:e.target.value}))}>
@@ -1193,22 +1218,49 @@ export default function App() {
                 {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
                   <div style={{overflowX:"auto"}}>
                   <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                     <tbody>{prorrogacoes.map(pr=>{
                       const ec=eCor(pr.situacao);
                       return (
-                        <tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}>
+                        <Fragment key={pr.id}>
+                        <tr style={{borderBottom:"1px solid "+D.border}}>
                           <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td>
                           <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
-                          <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td>
+                          <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
+                          <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
                           <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
                           <td data-label="Situação" style={{padding:"10px 8px"}}>
                             <select value={pr.situacao} disabled={isDemo} onChange={e=>mudarSituacaoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
                               <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
                             </select>
                           </td>
-                          <td style={{padding:"10px 8px"}}>{isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}</td>
+                          <td style={{padding:"10px 8px",display:"flex",gap:4}}>
+                            {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
+                            {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}
+                          </td>
                         </tr>
+                        {editPr===pr.id&&(
+                          <tr>
+                            <td colSpan={7} style={{padding:14,background:D.bg}}>
+                              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
+                                <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editPrData.fornecedor} onChange={e=>setEditPrData(p=>({...p,fornecedor:e.target.value}))}/></div>
+                                <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} value={editPrData.nf} onChange={e=>setEditPrData(p=>({...p,nf:e.target.value}))}/></div>
+                                <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editPrData.valor} onChange={e=>setEditPrData(p=>({...p,valor:e.target.value}))}/></div>
+                                <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editPrData.vencimento} onChange={e=>setEditPrData(p=>({...p,vencimento:e.target.value}))}/></div>
+                                <div><label style={st.lbl}>Estado</label>
+                                  <select style={st.inp} value={editPrData.estado} onChange={e=>setEditPrData(p=>({...p,estado:e.target.value}))}>
+                                    <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div style={{display:"flex",gap:8,marginTop:10}}>
+                                <button style={st.btnBlue} onClick={salvarEditPr}><Save size={13}/>Salvar</button>
+                                <button style={st.btn} onClick={()=>setEditPr(null)}>Cancelar</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       );
                     })}</tbody>
                   </table>
@@ -1299,6 +1351,7 @@ export default function App() {
                             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
                               <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newPr.fornecedor} onChange={e=>setNewPr(p=>({...p,fornecedor:e.target.value}))}/></div>
                               <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} placeholder="NF-000" value={newPr.nf} onChange={e=>setNewPr(p=>({...p,nf:e.target.value}))}/></div>
+                              <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newPr.valor} onChange={e=>setNewPr(p=>({...p,valor:e.target.value}))}/></div>
                               <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
                               <div><label style={st.lbl}>Estado</label>
                                 <select style={st.inp} value={newPr.estado} onChange={e=>setNewPr(p=>({...p,estado:e.target.value}))}>
@@ -1320,22 +1373,49 @@ export default function App() {
                         {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
                           <div style={{overflowX:"auto"}}>
                           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+                            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                             <tbody>{prorrogacoes.map(pr=>{
                               const ec=eCor(pr.situacao);
                               return (
-                                <tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}>
+                                <Fragment key={pr.id}>
+                                <tr style={{borderBottom:"1px solid "+D.border}}>
                                   <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td>
                                   <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
-                                  <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td>
+                                  <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
+                                  <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
                                   <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
                                   <td data-label="Situação" style={{padding:"10px 8px"}}>
                                     <select value={pr.situacao} onChange={e=>mudarSituacaoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
                                       <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
                                     </select>
                                   </td>
-                                  <td style={{padding:"10px 8px"}}>{isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}</td>
+                                  <td style={{padding:"10px 8px",display:"flex",gap:4}}>
+                                    {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
+                                    {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}
+                                  </td>
                                 </tr>
+                                {editPr===pr.id&&(
+                                  <tr>
+                                    <td colSpan={7} style={{padding:14,background:D.bg}}>
+                                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
+                                        <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editPrData.fornecedor} onChange={e=>setEditPrData(p=>({...p,fornecedor:e.target.value}))}/></div>
+                                        <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} value={editPrData.nf} onChange={e=>setEditPrData(p=>({...p,nf:e.target.value}))}/></div>
+                                        <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editPrData.valor} onChange={e=>setEditPrData(p=>({...p,valor:e.target.value}))}/></div>
+                                        <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editPrData.vencimento} onChange={e=>setEditPrData(p=>({...p,vencimento:e.target.value}))}/></div>
+                                        <div><label style={st.lbl}>Estado</label>
+                                          <select style={st.inp} value={editPrData.estado} onChange={e=>setEditPrData(p=>({...p,estado:e.target.value}))}>
+                                            <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
+                                          </select>
+                                        </div>
+                                      </div>
+                                      <div style={{display:"flex",gap:8,marginTop:10}}>
+                                        <button style={st.btnBlue} onClick={salvarEditPr}><Save size={13}/>Salvar</button>
+                                        <button style={st.btn} onClick={()=>setEditPr(null)}>Cancelar</button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                                </Fragment>
                               );
                             })}</tbody>
                           </table>

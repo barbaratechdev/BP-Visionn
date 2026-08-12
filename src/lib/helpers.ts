@@ -15,6 +15,14 @@ export function fillTpl(tpl, d){
 export function nowT(){ return new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}); }
 export function nowF(){ return new Date().toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
 export function fmtData(iso){ return new Date(iso).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
+// Formata uma data "YYYY-MM-DD" (coluna date, sem hora) pra "DD/MM/YYYY".
+// Não usa o construtor Date: "YYYY-MM-DD" é interpretado como UTC meia-noite,
+// e num fuso atrás de UTC (Brasil) isso pode voltar um dia no display.
+export function fData(iso){
+  if(!iso) return "";
+  const [y,m,d] = iso.split("-");
+  return d+"/"+m+"/"+y;
+}
 
 // Converte uma linha da tabela profiles (Supabase) para o formato usado pela UI.
 export function mapProfileRow(row): User {
@@ -65,7 +73,7 @@ export function mapTarefaRow(row): Tarefa {
 
 // Converte uma linha da tabela pendencias (NFs em negociação com fornecedores) para a UI.
 export function mapPendenciaRow(row){
-  return { id: row.id, fornecedor: row.fornecedor, nf: row.numero_nf, vencimento: row.vencimento || "", estado: row.estado, situacao: row.situacao };
+  return { id: row.id, fornecedor: row.fornecedor, nf: row.numero_nf, vencimento: row.vencimento || "", estado: row.estado, situacao: row.situacao, valor: row.valor };
 }
 
 // Converte uma linha da tabela contratos (+ representantes aninhado, via representante_id) para a UI.
