@@ -77,7 +77,7 @@ export default function App() {
   const [fStatus, setFStatus] = useState("todos");
   const [newT, setNewT] = useState({fornecedor:"",valor:"",vencimento:"",responsavel:"",obs:""});
   const [newC, setNewC] = useState({representanteId:"",cpfCnpj:"",porcentagem:"",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"});
-  const [newPr, setNewPr] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Aguardando retorno"});
+  const [newPr, setNewPr] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno"});
   const [prorr, setProrr] = useState({novoVencimento:"",motivo:""});
   const [prorrErr, setProrrErr] = useState("");
   const [editU, setEditU] = useState<string | null>(null);
@@ -711,18 +711,19 @@ export default function App() {
       numero_nf: newPr.nf,
       vencimento: newPr.vencimento || null,
       estado: newPr.estado,
+      situacao: newPr.situacao,
     }).select().single();
     if(error||!data) return;
     setProrrogacoes(prev=>prev.concat([mapPendenciaRow(data)]));
     addN("NF incluída: "+newPr.nf); addA("NF incluída",newPr.fornecedor,"NF: "+newPr.nf);
-    setNewPr({fornecedor:"",nf:"",vencimento:"",estado:"Aguardando retorno"}); setShowProrrForm(false);
+    setNewPr({fornecedor:"",nf:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno"}); setShowProrrForm(false);
   }
 
-  async function mudarEstadoNF(id,estado){
+  async function mudarSituacaoNF(id,situacao){
     if(bloqueadoDemo()) return;
-    const { error } = await supabase.from("pendencias").update({ estado }).eq("id", id);
+    const { error } = await supabase.from("pendencias").update({ situacao }).eq("id", id);
     if(error) return;
-    setProrrogacoes(prev=>prev.map(x=>x.id===id?{...x,estado}:x));
+    setProrrogacoes(prev=>prev.map(x=>x.id===id?{...x,situacao}:x));
   }
 
   async function excluirNF(id){
@@ -1174,6 +1175,11 @@ export default function App() {
                       <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
                       <div><label style={st.lbl}>Estado</label>
                         <select style={st.inp} value={newPr.estado} onChange={e=>setNewPr(p=>({...p,estado:e.target.value}))}>
+                          <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
+                        </select>
+                      </div>
+                      <div><label style={st.lbl}>Situação</label>
+                        <select style={st.inp} value={newPr.situacao} onChange={e=>setNewPr(p=>({...p,situacao:e.target.value}))}>
                           <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
                         </select>
                       </div>
@@ -1187,16 +1193,17 @@ export default function App() {
                 {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
                   <div style={{overflowX:"auto"}}>
                   <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                     <tbody>{prorrogacoes.map(pr=>{
-                      const ec=eCor(pr.estado);
+                      const ec=eCor(pr.situacao);
                       return (
                         <tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}>
                           <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td>
                           <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
                           <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td>
-                          <td data-label="Estado" style={{padding:"10px 8px"}}>
-                            <select value={pr.estado} disabled={isDemo} onChange={e=>mudarEstadoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
+                          <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
+                          <td data-label="Situação" style={{padding:"10px 8px"}}>
+                            <select value={pr.situacao} disabled={isDemo} onChange={e=>mudarSituacaoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
                               <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
                             </select>
                           </td>
@@ -1295,6 +1302,11 @@ export default function App() {
                               <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
                               <div><label style={st.lbl}>Estado</label>
                                 <select style={st.inp} value={newPr.estado} onChange={e=>setNewPr(p=>({...p,estado:e.target.value}))}>
+                                  <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
+                                </select>
+                              </div>
+                              <div><label style={st.lbl}>Situação</label>
+                                <select style={st.inp} value={newPr.situacao} onChange={e=>setNewPr(p=>({...p,situacao:e.target.value}))}>
                                   <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
                                 </select>
                               </div>
@@ -1308,16 +1320,17 @@ export default function App() {
                         {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
                           <div style={{overflowX:"auto"}}>
                           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+                            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                             <tbody>{prorrogacoes.map(pr=>{
-                              const ec=eCor(pr.estado);
+                              const ec=eCor(pr.situacao);
                               return (
                                 <tr key={pr.id} style={{borderBottom:"1px solid "+D.border}}>
                                   <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td>
                                   <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
                                   <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento||"—"}</td>
-                                  <td data-label="Estado" style={{padding:"10px 8px"}}>
-                                    <select value={pr.estado} onChange={e=>mudarEstadoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
+                                  <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
+                                  <td data-label="Situação" style={{padding:"10px 8px"}}>
+                                    <select value={pr.situacao} onChange={e=>mudarSituacaoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
                                       <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
                                     </select>
                                   </td>

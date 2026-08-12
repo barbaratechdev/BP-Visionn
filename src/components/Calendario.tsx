@@ -26,7 +26,7 @@ export default function Calendario(p) {
 
   const evP = p.prorrogacoes
     .filter(pr => pr.vencimento && pr.vencimento.indexOf(mStr)===0)
-    .map(pr => ({id:"p"+pr.id,data:pr.vencimento,titulo:"NF "+pr.nf+" - "+pr.fornecedor,tipo:"lembrete",responsavel:"",descricao:"Estado: "+pr.estado,hora:"",auto:true}));
+    .map(pr => ({id:"p"+pr.id,data:pr.vencimento,titulo:"NF "+pr.nf+" - "+pr.fornecedor,tipo:"lembrete",responsavel:"",descricao:"Situação: "+pr.situacao,hora:"",auto:true}));
 
   const evM = p.eventos.filter(e => e.data.indexOf(mStr)===0);
   const todos = evT.concat(evP).concat(evM);

@@ -65,7 +65,7 @@ export function mapTarefaRow(row): Tarefa {
 
 // Converte uma linha da tabela pendencias (NFs em negociação com fornecedores) para a UI.
 export function mapPendenciaRow(row){
-  return { id: row.id, fornecedor: row.fornecedor, nf: row.numero_nf, vencimento: row.vencimento || "", estado: row.estado };
+  return { id: row.id, fornecedor: row.fornecedor, nf: row.numero_nf, vencimento: row.vencimento || "", estado: row.estado, situacao: row.situacao };
 }
 
 // Converte uma linha da tabela contratos (+ representantes aninhado, via representante_id) para a UI.
