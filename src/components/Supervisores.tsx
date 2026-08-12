@@ -5,7 +5,7 @@ import { fData, mapSupervisorRow, validarImagem, lerComoDataURL } from "../lib/h
 import { hoje } from "../constants";
 import Av from "./Av";
 
-const FORM_VAZIO = {id:null,nome:"",cpf:"",email:"",telefone:"",dataNascimento:"",cargo:"",dataInicio:hoje,dataFim:"",status:"Ativo",observacoes:""};
+const FORM_VAZIO = {id:null,nome:"",cpf:"",email:"",telefone:"",dataNascimento:"",cargo:"",regiao:"Pará",dataInicio:hoje,dataFim:"",status:"Ativo",observacoes:""};
 
 // Aba "Supervisores" — cadastro de pessoas da estrutura do CRM, separado
 // de Representantes (representante comercial) e de profiles (contas de
@@ -20,6 +20,7 @@ export default function Supervisores(p) {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [filtroRegiao, setFiltroRegiao] = useState("todos");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   const [formErr, setFormErr] = useState("");
@@ -43,7 +44,7 @@ export default function Supervisores(p) {
   }
 
   function abrirEditar(s){
-    setForm({id:s.id,nome:s.nome,cpf:s.cpf,email:s.email,telefone:s.telefone,dataNascimento:s.dataNascimento,cargo:s.cargo,dataInicio:s.dataInicio,dataFim:s.dataFim,status:s.status,observacoes:s.observacoes});
+    setForm({id:s.id,nome:s.nome,cpf:s.cpf,email:s.email,telefone:s.telefone,dataNascimento:s.dataNascimento,cargo:s.cargo,regiao:s.regiao,dataInicio:s.dataInicio,dataFim:s.dataFim,status:s.status,observacoes:s.observacoes});
     setFormErr(""); setPhotoPreview(s.foto||null); setPhotoErr(""); setShowForm(true);
   }
 
@@ -68,6 +69,7 @@ export default function Supervisores(p) {
       telefone: form.telefone||null,
       data_nascimento: form.dataNascimento||null,
       cargo: form.cargo||null,
+      regiao: form.regiao,
       data_inicio: form.dataInicio||hoje,
       data_fim: form.dataFim||null,
       status: form.status,
@@ -107,6 +109,7 @@ export default function Supervisores(p) {
 
   const visiveis = lista.filter(s=>
     (filtroStatus==="todos"||s.status===filtroStatus) &&
+    (filtroRegiao==="todos"||s.regiao===filtroRegiao) &&
     (!busca || s.nome.toLowerCase().includes(busca.toLowerCase()) || s.cpf.includes(busca) || s.email.toLowerCase().includes(busca.toLowerCase()))
   );
 
@@ -130,6 +133,15 @@ export default function Supervisores(p) {
           </div>
         </div>
         <div style={{flex:"1 1 140px"}}>
+          <label style={st.lbl}>Região</label>
+          <select style={st.inp} value={filtroRegiao} onChange={e=>setFiltroRegiao(e.target.value)}>
+            <option value="todos">Todas</option>
+            <option value="Pará">Pará</option>
+            <option value="Piauí">Piauí</option>
+            <option value="Maranhão">Maranhão</option>
+          </select>
+        </div>
+        <div style={{flex:"1 1 140px"}}>
           <label style={st.lbl}>Status</label>
           <select style={st.inp} value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)}>
             <option value="todos">Todos</option>
@@ -143,7 +155,7 @@ export default function Supervisores(p) {
         {visiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum supervisor encontrado.</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Supervisor","CPF ou CNPJ","Telefone","Data de início","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Supervisor","CPF ou CNPJ","Telefone","Região","Data de início","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
             <tbody>{visiveis.map(s=>(
               <tr key={s.id} style={{borderBottom:"1px solid "+D.border}}>
                 <td data-label="Supervisor" style={{padding:"10px 8px"}}>
@@ -157,6 +169,7 @@ export default function Supervisores(p) {
                 </td>
                 <td data-label="CPF ou CNPJ" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{s.cpf||"—"}</td>
                 <td data-label="Telefone" style={{padding:"10px 8px",color:D.muted}}>{s.telefone||"—"}</td>
+                <td data-label="Região" style={{padding:"10px 8px",color:D.muted}}>{s.regiao}</td>
                 <td data-label="Data de início" style={{padding:"10px 8px",color:D.muted}}>{s.dataInicio?fData(s.dataInicio):"—"}</td>
                 <td data-label="Status" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:s.status==="Ativo"?D.greenSoft:D.redSoft,color:s.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{s.status}</span></td>
                 <td style={{padding:"10px 8px"}}>
@@ -198,6 +211,13 @@ export default function Supervisores(p) {
               <div><label style={st.lbl}>E-mail</label><input type="email" style={st.inp} value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/></div>
               <div><label style={st.lbl}>Telefone</label><input style={st.inp} value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))}/></div>
               <div><label style={st.lbl}>Cargo</label><input style={st.inp} value={form.cargo} onChange={e=>setForm(f=>({...f,cargo:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Região</label>
+                <select style={st.inp} value={form.regiao} onChange={e=>setForm(f=>({...f,regiao:e.target.value}))}>
+                  <option value="Pará">Pará</option>
+                  <option value="Piauí">Piauí</option>
+                  <option value="Maranhão">Maranhão</option>
+                </select>
+              </div>
               <div><label style={st.lbl}>Status</label>
                 <select style={st.inp} value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))}>
                   <option value="Ativo">Ativo</option>
@@ -253,6 +273,7 @@ export default function Supervisores(p) {
             <div style={{background:D.bg,borderRadius:10,padding:"4px 14px",marginBottom:detalheDe.observacoes?12:4}}>
               {[
                 {label:"Cargo", value:detalheDe.cargo||"—"},
+                {label:"Região", value:detalheDe.regiao||"—"},
                 {label:"Data de início", value:detalheDe.dataInicio?fData(detalheDe.dataInicio):"—"},
                 {label:"Data de término", value:detalheDe.dataFim?fData(detalheDe.dataFim):"—"},
                 {label:"Status", value:detalheDe.status},

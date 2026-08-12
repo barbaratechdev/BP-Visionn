@@ -140,6 +140,7 @@ export function mapSupervisorRow(row){
     telefone: row.telefone || "",
     dataNascimento: row.data_nascimento || "",
     cargo: row.cargo || "",
+    regiao: row.regiao,
     dataInicio: row.data_inicio || "",
     dataFim: row.data_fim || "",
     status: row.status,
