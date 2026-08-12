@@ -715,6 +715,7 @@ export default function App() {
       estado: newPr.estado,
       situacao: newPr.situacao,
       valor: newPr.valor===""?null:Number(newPr.valor),
+      created_by: user?user.id:null,
     }).select().single();
     if(error||!data) return;
     setProrrogacoes(prev=>prev.concat([mapPendenciaRow(data)]));
@@ -1221,10 +1222,14 @@ export default function App() {
                     <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                     <tbody>{prorrogacoes.map(pr=>{
                       const ec=eCor(pr.situacao);
+                      const criador=users.find(u=>u.id===pr.criadoPor);
                       return (
                         <Fragment key={pr.id}>
                         <tr style={{borderBottom:"1px solid "+D.border}}>
-                          <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td>
+                          <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>
+                            {pr.fornecedor}
+                            <div style={{fontSize:10,color:D.muted,fontWeight:400,marginTop:2}}>Incluído por {criador?criador.name:"—"}</div>
+                          </td>
                           <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
                           <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
                           <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
@@ -1376,10 +1381,14 @@ export default function App() {
                             <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                             <tbody>{prorrogacoes.map(pr=>{
                               const ec=eCor(pr.situacao);
+                              const criador=users.find(u=>u.id===pr.criadoPor);
                               return (
                                 <Fragment key={pr.id}>
                                 <tr style={{borderBottom:"1px solid "+D.border}}>
-                                  <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{pr.fornecedor}</td>
+                                  <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>
+                                    {pr.fornecedor}
+                                    <div style={{fontSize:10,color:D.muted,fontWeight:400,marginTop:2}}>Incluído por {criador?criador.name:"—"}</div>
+                                  </td>
                                   <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
                                   <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
                                   <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
