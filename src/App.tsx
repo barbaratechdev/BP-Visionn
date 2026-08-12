@@ -102,6 +102,7 @@ export default function App() {
   const [photoErr, setPhotoErr] = useState("");
   const [naoLidasChat, setNaoLidasChat] = useState(0);
   const [demoResponsavelId, setDemoResponsavelId] = useState<string | null>(null);
+  const [demoFuncionariosTeste, setDemoFuncionariosTeste] = useState<string[]>([]);
   const notifRef = useRef<HTMLDivElement | null>(null);
 
   const isAdmin = user && user.role==="admin";
@@ -215,6 +216,17 @@ export default function App() {
       setDemoResponsavelId(data||null);
     }
 
+    // Ids das contas descartáveis (teste@/teste2@) que aparecem no widget
+    // "Produtividade da equipe" pra Demonstração, no lugar da equipe real —
+    // só um filtro de exibição, não uma restrição de RLS (profiles continua
+    // listável por qualquer autenticada, usado em outras telas).
+    async function carregarDemoFuncionariosTeste(perfil){
+      if(!perfil||perfil.role!=="demo") return;
+      const { data, error } = await supabase.rpc("demo_funcionarios_teste");
+      if(!ativo||error||!data) return;
+      setDemoFuncionariosTeste(data);
+    }
+
     carregarDiretorioPublico();
 
     supabase.auth.getSession().then(async ({data})=>{
@@ -231,6 +243,7 @@ export default function App() {
         carregarRepresentantes();
         carregarAuditoria();
         carregarDemoResponsavelPermitido(logado);
+        carregarDemoFuncionariosTeste(logado);
       }
       setAuthLoading(false);
     });
@@ -247,6 +260,7 @@ export default function App() {
           if(!logado) setUser(perfil);
           if(event==="SIGNED_IN") setTab(perfil.role==="admin"?"painel":"tarefas");
           carregarDemoResponsavelPermitido(perfil);
+          carregarDemoFuncionariosTeste(perfil);
         });
         if(event==="SIGNED_IN"){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarRepresentantes(); carregarAuditoria(); }
       }
@@ -1007,7 +1021,7 @@ export default function App() {
                   </div>
                   <button style={{...st.btn,padding:"5px 12px",fontSize:12}} onClick={()=>setTab("tarefas")}>Ver todos</button>
                 </div>
-                {users.filter(u=>u.role==="func").map(fn=>{
+                {users.filter(u=>u.role==="func" && (!isDemo || demoFuncionariosTeste.includes(u.id))).map(fn=>{
                   const m=tarefas.filter(t=>t.responsavel===fn.id);
                   const pd=m.filter(t=>t.status!=="pago").length;
                   const ug=m.filter(t=>t.status==="vencido").length;
