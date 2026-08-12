@@ -297,7 +297,7 @@ export default function App() {
   // função porque precisa aparecer em dois lugares diferentes do layout da
   // aba Tarefas dependendo do perfil (ver "tarefasNoGridFin" acima) sem
   // duplicar o JSX nem sua lógica.
-  function TarefasSecao(){
+  function renderTarefasSecao(){
     return (
       <>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
@@ -1329,7 +1329,7 @@ export default function App() {
                           </div>
                         )}
                       </div>
-                      <TarefasSecao/>
+                      {renderTarefasSecao()}
                       </div>
                       <div>
                         <MiniCalendario D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab}/>
@@ -1347,7 +1347,7 @@ export default function App() {
               {/* Pra funcionária do financeiro, essa seção já foi renderizada
                   acima, dentro da coluna principal do grid (logo abaixo de
                   Prorrogação de Boletos) — ver "tarefasNoGridFin". */}
-              {!tarefasNoGridFin && <TarefasSecao/>}
+              {!tarefasNoGridFin && renderTarefasSecao()}
             </div>
           )}
 
