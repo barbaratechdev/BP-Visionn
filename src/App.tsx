@@ -101,16 +101,21 @@ export default function App() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoErr, setPhotoErr] = useState("");
   const [naoLidasChat, setNaoLidasChat] = useState(0);
+  const [demoResponsavelId, setDemoResponsavelId] = useState<string | null>(null);
   const notifRef = useRef<HTMLDivElement | null>(null);
 
   const isAdmin = user && user.role==="admin";
   const isFin   = user && user.setor==="Financeiro";
   const isDemo  = user && user.role==="demo";
 
-  const tVis = ((isAdmin||isDemo) ? tarefas : tarefas.filter(t=>t.responsavel===(user&&user.id)))
+  // Demonstração só enxerga a tarefa destinada a teste@bp-visionn.com — o
+  // RLS (tarefa_visivel_para_demo) já garante isso na consulta em si, este
+  // filtro aqui é defesa em profundidade do lado do cliente, não a proteção
+  // principal.
+  const tVis = (isAdmin ? tarefas : isDemo ? tarefas.filter(t=>t.responsavel===demoResponsavelId) : tarefas.filter(t=>t.responsavel===(user&&user.id)))
     .filter(t=>(fStatus==="todos"||t.status===fStatus)&&(!search||t.fornecedor.toLowerCase().includes(search.toLowerCase())));
   const pends    = tarefas.filter(t=>t.status==="pendente"||t.status==="vencido");
-  const pendsVis = (isAdmin||isDemo) ? pends : pends.filter(t=>t.responsavel===(user&&user.id));
+  const pendsVis = isAdmin ? pends : isDemo ? pends.filter(t=>t.responsavel===demoResponsavelId) : pends.filter(t=>t.responsavel===(user&&user.id));
   const unread   = notifs.filter(n=>!n.read).length;
   const responsavelPadrao = (users.find(u=>u.role==="func")||users[0]||{id:""}).id;
   const representantesAtivos = representantes.filter(r=>r.status==="Ativo");
@@ -200,6 +205,16 @@ export default function App() {
       setAuditLog(data.map(mapAuditoriaRow));
     }
 
+    // Id do profile autorizado pra Demonstração ver tarefas (o que tem
+    // e-mail teste@bp-visionn.com) — nunca o e-mail em si, só o id, pro
+    // filtro client-side de tVis/pendsVis. Sem efeito pra quem não é demo.
+    async function carregarDemoResponsavelPermitido(perfil){
+      if(!perfil||perfil.role!=="demo") return;
+      const { data, error } = await supabase.rpc("demo_responsavel_permitido");
+      if(!ativo||error) return;
+      setDemoResponsavelId(data||null);
+    }
+
     carregarDiretorioPublico();
 
     supabase.auth.getSession().then(async ({data})=>{
@@ -215,6 +230,7 @@ export default function App() {
         carregarContratos();
         carregarRepresentantes();
         carregarAuditoria();
+        carregarDemoResponsavelPermitido(logado);
       }
       setAuthLoading(false);
     });
@@ -227,8 +243,10 @@ export default function App() {
         const aposMarcar = event==="SIGNED_IN" ? marcarOnline(novaSessao.user.id) : Promise.resolve();
         aposMarcar.then(()=>sincronizarUsuarios(novaSessao.user.id)).then(logado=>{
           if(!ativo) return;
-          if(!logado) setUser(fallbackProfile(novaSessao.user));
-          if(event==="SIGNED_IN") setTab((logado||fallbackProfile(novaSessao.user)).role==="admin"?"painel":"tarefas");
+          const perfil = logado||fallbackProfile(novaSessao.user);
+          if(!logado) setUser(perfil);
+          if(event==="SIGNED_IN") setTab(perfil.role==="admin"?"painel":"tarefas");
+          carregarDemoResponsavelPermitido(perfil);
         });
         if(event==="SIGNED_IN"){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarRepresentantes(); carregarAuditoria(); }
       }
