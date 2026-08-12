@@ -108,6 +108,11 @@ export default function App() {
   const isAdmin = user && user.role==="admin";
   const isFin   = user && user.setor==="Financeiro";
   const isDemo  = user && user.role==="demo";
+  // Funcionária do financeiro: na aba Tarefas ela vê o grid de Prorrogação de
+  // Boletos + Calendário — a lista de Tarefas entra na coluna principal desse
+  // mesmo grid (logo abaixo de Prorrogação), em vez de ficar solta depois
+  // dele (que deixava um vão vazio quando a coluna lateral era mais alta).
+  const tarefasNoGridFin = !isAdmin && !isDemo && isFin;
 
   // Demonstração só enxerga a tarefa destinada a teste@bp-visionn.com — o
   // RLS (tarefa_visivel_para_demo) já garante isso na consulta em si, este
@@ -287,6 +292,110 @@ export default function App() {
   }
   function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.blueSoft,c:D.blueText},"Aprovado":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
   function roleLabel(r){ return r==="admin"?"Supervisora":r==="demo"?"Demonstração":"Funcionária"; }
+
+  // Título + filtro + formulário "Nova Tarefa" + lista de cards. Extraído pra
+  // função porque precisa aparecer em dois lugares diferentes do layout da
+  // aba Tarefas dependendo do perfil (ver "tarefasNoGridFin" acima) sem
+  // duplicar o JSX nem sua lógica.
+  function TarefasSecao(){
+    return (
+      <>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
+          <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Tarefas</div><div style={{fontSize:13,color:D.muted}}>{tVis.length} resultado(s)</div></div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{...st.inp,width:"auto",fontSize:13}}>
+              <option value="todos">Todos</option><option value="pendente">Pendente</option><option value="vencido">Urgente</option><option value="prorrogado">Prorrogado</option><option value="pago">Concluída</option>
+            </select>
+            {isAdmin&&<button style={st.btnBlue} onClick={()=>setShowTForm(p=>!p)}><Plus size={15}/>Nova Tarefa</button>}
+          </div>
+        </div>
+        {showTForm&&(
+          <div className="bv-card" style={{...st.card,borderColor:D.blue,marginBottom:16}}>
+            <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Nova Tarefa</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
+              <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newT.fornecedor} onChange={e=>setNewT(p=>({...p,fornecedor:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newT.valor} onChange={e=>setNewT(p=>({...p,valor:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newT.vencimento} onChange={e=>setNewT(p=>({...p,vencimento:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Responsável</label>
+                <select style={st.inp} value={newT.responsavel||responsavelPadrao} onChange={e=>setNewT(p=>({...p,responsavel:e.target.value}))}>
+                  {users.filter(u=>u.role==="func").map(u=><option key={u.id} value={u.id}>{u.name} — {u.setor}</option>)}
+                </select>
+              </div>
+              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Observação</label><input style={st.inp} value={newT.obs} onChange={e=>setNewT(p=>({...p,obs:e.target.value}))}/></div>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:14}}><button style={st.btnBlue} onClick={addTarefa}><CheckCircle size={14}/>Salvar</button><button style={st.btn} onClick={()=>setShowTForm(false)}>Cancelar</button></div>
+          </div>
+        )}
+        {tVis.length===0&&<div style={{textAlign:"center",padding:"3rem",color:D.muted,fontSize:14}}>Nenhuma tarefa encontrada.</div>}
+        {tVis.map(t=>{
+          const fn=users.find(u=>u.id===t.responsavel);
+          return (
+            <div className="bv-card" key={t.id} style={{...st.card,border:undefined,borderTop:"1px solid "+D.border,borderRight:"1px solid "+D.border,borderBottom:"1px solid "+D.border,borderLeft:t.status==="pago"?"3px solid "+D.green:t.status==="vencido"?"3px solid "+D.red:"1px solid "+D.border,borderRadius:t.status==="pago"||t.status==="vencido"?"0 14px 14px 0":14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
+                <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+                  <div style={{width:40,height:40,borderRadius:10,background:D.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"1px solid "+D.border}}><Receipt size={18} color={D.muted}/></div>
+                  <div>
+                    <div style={{fontWeight:600,fontSize:15,color:D.text}}>{t.fornecedor}</div>
+                    <div style={{fontSize:13,color:D.muted,marginTop:3,display:"flex",gap:12,flexWrap:"wrap"}}>
+                      <span style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={12}/>{t.vencimento}</span>
+                      {Number(t.valor)>0&&<span style={{fontWeight:600,color:D.text}}>{fBRL(t.valor)}</span>}
+                      {isAdmin&&fn&&<span style={{display:"flex",alignItems:"center",gap:4}}><User size={12}/>{fn.name}</span>}
+                    </div>
+                    {t.obs&&<div style={{fontSize:12,color:D.muted,marginTop:4,fontStyle:"italic"}}>{t.obs}</div>}
+                  </div>
+                </div>
+                <Badge status={t.status}/>
+              </div>
+              {t.historico&&t.historico.length>0&&(
+                <div style={{marginTop:10,padding:"8px 12px",background:D.bg,borderRadius:8,fontSize:12,color:D.muted,borderLeft:"3px solid "+D.blue}}>
+                  {t.historico.map((h,i)=><div key={i} style={{display:"flex",gap:6}}><ChevronRight size={12}/>Prorrogado em {h.data} → {h.novoVencimento}: {h.motivo}</div>)}
+                </div>
+              )}
+              <div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}}>
+                {isAdmin&&t.status!=="pago"&&(
+                  <>
+                    <button style={{...st.btn,color:D.orangeText,borderColor:D.orange+"55"}} onClick={()=>{setShowProrr(t.id);setProrr({novoVencimento:"",motivo:""});setProrrErr("");}}><Calendar size={13}/>Prorrogar</button>
+                    <button style={{...st.btn,color:D.greenText,borderColor:D.green+"55"}} onClick={()=>setConfirm(t.id)}><CheckCircle size={13}/>Concluir</button>
+                  </>
+                )}
+                {isAdmin&&t.status==="pago"&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"55"}} onClick={()=>reabrir(t.id)}><AlertCircle size={13}/>Reabrir</button>}
+                {isAdmin&&<button style={st.btn} onClick={()=>abrirEditT(t)}><Edit3 size={13}/>Editar</button>}
+                {isAdmin&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"55"}} onClick={()=>setConfirmDel(t.id)}><X size={13}/>Excluir</button>}
+                {!isAdmin&&!isDemo&&t.status!=="pago"&&(
+                  <button style={{padding:"9px 18px",borderRadius:10,border:"none",background:D.green,cursor:"pointer",fontSize:13,color:"#ffffff",fontWeight:600,display:"inline-flex",alignItems:"center",gap:8}} onClick={()=>setConfirm(t.id)}>
+                    <CheckCircle size={15}/>Concluir Tarefa
+                  </button>
+                )}
+                {!isAdmin&&t.status==="pago"&&<div style={{padding:"7px 14px",background:D.greenSoft,borderRadius:10,fontSize:12,color:D.greenText,display:"inline-flex",alignItems:"center",gap:6,fontWeight:500}}><CheckCircle size={13}/>Concluída</div>}
+              </div>
+              {showProrr===t.id&&(
+                <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
+                  <div><label style={st.lbl}>Novo vencimento</label><input type="date" style={st.inp} value={prorr.novoVencimento} onChange={e=>setProrr(p=>({...p,novoVencimento:e.target.value}))}/></div>
+                  <div><label style={st.lbl}>Motivo</label><input style={st.inp} value={prorr.motivo} onChange={e=>setProrr(p=>({...p,motivo:e.target.value}))}/></div>
+                  {prorrErr&&<div style={{gridColumn:"1/-1",fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{prorrErr}</div>}
+                  <div style={{gridColumn:"1/-1",display:"flex",gap:8}}><button style={st.btnBlue} onClick={()=>prorrogar(t.id)}>Confirmar</button><button style={st.btn} onClick={()=>{setShowProrr(null);setProrrErr("");}}>Cancelar</button></div>
+                </div>
+              )}
+              {editT===t.id&&(
+                <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
+                  <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editTData.fornecedor} onChange={e=>setEditTData(p=>({...p,fornecedor:e.target.value}))}/></div>
+                  <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editTData.valor} onChange={e=>setEditTData(p=>({...p,valor:e.target.value}))}/></div>
+                  <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editTData.vencimento} onChange={e=>setEditTData(p=>({...p,vencimento:e.target.value}))}/></div>
+                  <div><label style={st.lbl}>Responsável</label>
+                    <select style={st.inp} value={editTData.responsavel} onChange={e=>setEditTData(p=>({...p,responsavel:e.target.value}))}>
+                      {users.filter(u=>u.role==="func").map(u=><option key={u.id} value={u.id}>{u.name} — {u.setor}</option>)}
+                    </select>
+                  </div>
+                  <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Observação</label><input style={st.inp} value={editTData.obs} onChange={e=>setEditTData(p=>({...p,obs:e.target.value}))}/></div>
+                  <div style={{gridColumn:"1/-1",display:"flex",gap:8}}><button style={st.btnBlue} onClick={salvarEditT}><Save size={13}/>Salvar</button><button style={st.btn} onClick={()=>setEditT(null)}>Cancelar</button></div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </>
+    );
+  }
   // Prévia local dos 90 dias, só pra exibir no formulário antes de salvar
   // (o valor de verdade é a coluna gerada no banco, vinculo_data_termino_previsto).
   function fmtTerminoPrevisto(dataInicioStr){
@@ -1172,6 +1281,7 @@ export default function App() {
                   </div>
                   {isFin?(
                     <div className="bv-dash-grid">
+                      <div>
                       <div className="bv-card" style={st.card}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                           <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
@@ -1219,6 +1329,8 @@ export default function App() {
                           </div>
                         )}
                       </div>
+                      <TarefasSecao/>
+                      </div>
                       <div>
                         <MiniCalendario D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab}/>
                         <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab} title="Minhas tarefas por status"/>
@@ -1232,99 +1344,10 @@ export default function App() {
                   )}
                 </div>
               )}
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
-                <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Tarefas</div><div style={{fontSize:13,color:D.muted}}>{tVis.length} resultado(s)</div></div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{...st.inp,width:"auto",fontSize:13}}>
-                    <option value="todos">Todos</option><option value="pendente">Pendente</option><option value="vencido">Urgente</option><option value="prorrogado">Prorrogado</option><option value="pago">Concluída</option>
-                  </select>
-                  {isAdmin&&<button style={st.btnBlue} onClick={()=>setShowTForm(p=>!p)}><Plus size={15}/>Nova Tarefa</button>}
-                </div>
-              </div>
-              {showTForm&&(
-                <div className="bv-card" style={{...st.card,borderColor:D.blue,marginBottom:16}}>
-                  <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Nova Tarefa</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
-                    <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newT.fornecedor} onChange={e=>setNewT(p=>({...p,fornecedor:e.target.value}))}/></div>
-                    <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newT.valor} onChange={e=>setNewT(p=>({...p,valor:e.target.value}))}/></div>
-                    <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newT.vencimento} onChange={e=>setNewT(p=>({...p,vencimento:e.target.value}))}/></div>
-                    <div><label style={st.lbl}>Responsável</label>
-                      <select style={st.inp} value={newT.responsavel||responsavelPadrao} onChange={e=>setNewT(p=>({...p,responsavel:e.target.value}))}>
-                        {users.filter(u=>u.role==="func").map(u=><option key={u.id} value={u.id}>{u.name} — {u.setor}</option>)}
-                      </select>
-                    </div>
-                    <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Observação</label><input style={st.inp} value={newT.obs} onChange={e=>setNewT(p=>({...p,obs:e.target.value}))}/></div>
-                  </div>
-                  <div style={{display:"flex",gap:8,marginTop:14}}><button style={st.btnBlue} onClick={addTarefa}><CheckCircle size={14}/>Salvar</button><button style={st.btn} onClick={()=>setShowTForm(false)}>Cancelar</button></div>
-                </div>
-              )}
-              {tVis.length===0&&<div style={{textAlign:"center",padding:"3rem",color:D.muted,fontSize:14}}>Nenhuma tarefa encontrada.</div>}
-              {tVis.map(t=>{
-                const fn=users.find(u=>u.id===t.responsavel);
-                return (
-                  <div className="bv-card" key={t.id} style={{...st.card,border:undefined,borderTop:"1px solid "+D.border,borderRight:"1px solid "+D.border,borderBottom:"1px solid "+D.border,borderLeft:t.status==="pago"?"3px solid "+D.green:t.status==="vencido"?"3px solid "+D.red:"1px solid "+D.border,borderRadius:t.status==="pago"||t.status==="vencido"?"0 14px 14px 0":14}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
-                      <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
-                        <div style={{width:40,height:40,borderRadius:10,background:D.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,border:"1px solid "+D.border}}><Receipt size={18} color={D.muted}/></div>
-                        <div>
-                          <div style={{fontWeight:600,fontSize:15,color:D.text}}>{t.fornecedor}</div>
-                          <div style={{fontSize:13,color:D.muted,marginTop:3,display:"flex",gap:12,flexWrap:"wrap"}}>
-                            <span style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={12}/>{t.vencimento}</span>
-                            {Number(t.valor)>0&&<span style={{fontWeight:600,color:D.text}}>{fBRL(t.valor)}</span>}
-                            {isAdmin&&fn&&<span style={{display:"flex",alignItems:"center",gap:4}}><User size={12}/>{fn.name}</span>}
-                          </div>
-                          {t.obs&&<div style={{fontSize:12,color:D.muted,marginTop:4,fontStyle:"italic"}}>{t.obs}</div>}
-                        </div>
-                      </div>
-                      <Badge status={t.status}/>
-                    </div>
-                    {t.historico&&t.historico.length>0&&(
-                      <div style={{marginTop:10,padding:"8px 12px",background:D.bg,borderRadius:8,fontSize:12,color:D.muted,borderLeft:"3px solid "+D.blue}}>
-                        {t.historico.map((h,i)=><div key={i} style={{display:"flex",gap:6}}><ChevronRight size={12}/>Prorrogado em {h.data} → {h.novoVencimento}: {h.motivo}</div>)}
-                      </div>
-                    )}
-                    <div style={{marginTop:12,display:"flex",gap:8,flexWrap:"wrap"}}>
-                      {isAdmin&&t.status!=="pago"&&(
-                        <>
-                          <button style={{...st.btn,color:D.orangeText,borderColor:D.orange+"55"}} onClick={()=>{setShowProrr(t.id);setProrr({novoVencimento:"",motivo:""});setProrrErr("");}}><Calendar size={13}/>Prorrogar</button>
-                          <button style={{...st.btn,color:D.greenText,borderColor:D.green+"55"}} onClick={()=>setConfirm(t.id)}><CheckCircle size={13}/>Concluir</button>
-                        </>
-                      )}
-                      {isAdmin&&t.status==="pago"&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"55"}} onClick={()=>reabrir(t.id)}><AlertCircle size={13}/>Reabrir</button>}
-                      {isAdmin&&<button style={st.btn} onClick={()=>abrirEditT(t)}><Edit3 size={13}/>Editar</button>}
-                      {isAdmin&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"55"}} onClick={()=>setConfirmDel(t.id)}><X size={13}/>Excluir</button>}
-                      {!isAdmin&&!isDemo&&t.status!=="pago"&&(
-                        <button style={{padding:"9px 18px",borderRadius:10,border:"none",background:D.green,cursor:"pointer",fontSize:13,color:"#ffffff",fontWeight:600,display:"inline-flex",alignItems:"center",gap:8}} onClick={()=>setConfirm(t.id)}>
-                          <CheckCircle size={15}/>Concluir Tarefa
-                        </button>
-                      )}
-                      {!isAdmin&&t.status==="pago"&&<div style={{padding:"7px 14px",background:D.greenSoft,borderRadius:10,fontSize:12,color:D.greenText,display:"inline-flex",alignItems:"center",gap:6,fontWeight:500}}><CheckCircle size={13}/>Concluída</div>}
-                    </div>
-                    {showProrr===t.id&&(
-                      <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
-                        <div><label style={st.lbl}>Novo vencimento</label><input type="date" style={st.inp} value={prorr.novoVencimento} onChange={e=>setProrr(p=>({...p,novoVencimento:e.target.value}))}/></div>
-                        <div><label style={st.lbl}>Motivo</label><input style={st.inp} value={prorr.motivo} onChange={e=>setProrr(p=>({...p,motivo:e.target.value}))}/></div>
-                        {prorrErr&&<div style={{gridColumn:"1/-1",fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{prorrErr}</div>}
-                        <div style={{gridColumn:"1/-1",display:"flex",gap:8}}><button style={st.btnBlue} onClick={()=>prorrogar(t.id)}>Confirmar</button><button style={st.btn} onClick={()=>{setShowProrr(null);setProrrErr("");}}>Cancelar</button></div>
-                      </div>
-                    )}
-                    {editT===t.id&&(
-                      <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
-                        <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editTData.fornecedor} onChange={e=>setEditTData(p=>({...p,fornecedor:e.target.value}))}/></div>
-                        <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editTData.valor} onChange={e=>setEditTData(p=>({...p,valor:e.target.value}))}/></div>
-                        <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editTData.vencimento} onChange={e=>setEditTData(p=>({...p,vencimento:e.target.value}))}/></div>
-                        <div><label style={st.lbl}>Responsável</label>
-                          <select style={st.inp} value={editTData.responsavel} onChange={e=>setEditTData(p=>({...p,responsavel:e.target.value}))}>
-                            {users.filter(u=>u.role==="func").map(u=><option key={u.id} value={u.id}>{u.name} — {u.setor}</option>)}
-                          </select>
-                        </div>
-                        <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Observação</label><input style={st.inp} value={editTData.obs} onChange={e=>setEditTData(p=>({...p,obs:e.target.value}))}/></div>
-                        <div style={{gridColumn:"1/-1",display:"flex",gap:8}}><button style={st.btnBlue} onClick={salvarEditT}><Save size={13}/>Salvar</button><button style={st.btn} onClick={()=>setEditT(null)}>Cancelar</button></div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {/* Pra funcionária do financeiro, essa seção já foi renderizada
+                  acima, dentro da coluna principal do grid (logo abaixo de
+                  Prorrogação de Boletos) — ver "tarefasNoGridFin". */}
+              {!tarefasNoGridFin && <TarefasSecao/>}
             </div>
           )}
 
