@@ -1774,9 +1774,7 @@ export default function App() {
               )}
 
               {isAdmin&&(
-              <div className="bv-card" style={st.card}>
-                <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:4}}>🔐 Acessos ao sistema</div>
-                <div style={{fontSize:12,color:D.muted,marginBottom:16}}>Quem entrou, quando, e quantas vezes — visível só pra você.</div>
+              <div style={{marginTop:20}}>
                 <Acessos D={D} st={st}/>
               </div>
               )}

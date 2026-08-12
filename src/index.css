@@ -204,6 +204,23 @@ button:focus-visible {
   }
 }
 
+/* --- Acessos ao sistema: faixa de indicadores compacta --- */
+.bv-acessos-resumo {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .bv-acessos-resumo {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.bv-row-click:hover {
+  background: rgba(148, 163, 184, 0.1);
+}
+
 .bv-login-wrap {
   min-height: 100vh;
   display: flex;
