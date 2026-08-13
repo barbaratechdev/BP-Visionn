@@ -902,49 +902,79 @@ export default function App() {
   // vencimento crescente. Como pr.vencimento é "YYYY-MM-DD", a comparação
   // de string já respeita a ordem cronológica (ano, depois mês, depois dia).
   function imprimirProrrogacoes(){
-    const lista=[...prorrogacoes].sort((a,b)=>{
+    // Concluída (Prorrogação Aprovada) sai da lista de pendentes e vai pra
+    // sua própria seção — um registro nunca aparece nas duas ao mesmo tempo.
+    // Recusado fica junto dos pendentes pra nenhuma NF cadastrada ficar de
+    // fora do relatório impresso.
+    const pendentes=prorrogacoes.filter(function(pr){ return pr.situacao!=="Prorrogação Aprovada"; }).sort((a,b)=>{
       if(!a.vencimento) return 1;
       if(!b.vencimento) return -1;
       return a.vencimento<b.vencimento?-1:a.vencimento>b.vencimento?1:0;
     });
+    const concluidas=prorrogacoes.filter(function(pr){ return pr.situacao==="Prorrogação Aprovada"; }).sort((a,b)=>{
+      if(!a.dataAprovacao) return 1;
+      if(!b.dataAprovacao) return -1;
+      return a.dataAprovacao<b.dataAprovacao?1:a.dataAprovacao>b.dataAprovacao?-1:0;
+    });
     const w=window.open("","_blank");
     if(!w) return;
     w.opener=null;
-    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{margin:2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#111}h1{font-size:16pt;margin:0 0 4px}.sub{font-size:10pt;color:#555;margin-bottom:18px}table{width:100%;border-collapse:collapse}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #ddd;font-size:10.5pt}th{background:#f2f2f2;font-weight:600}.r{margin-top:32px;font-size:9pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:10px}@media print{button{display:none}}</style></head><body></body></html>");
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{margin:2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#111}h1{font-size:16pt;margin:0 0 4px}h2{font-size:13pt;margin:28px 0 10px;padding-top:18px;border-top:1px solid #ccc}h2:first-of-type{margin-top:22px;padding-top:0;border-top:none}.sub{font-size:10pt;color:#555;margin-bottom:18px}.vazio{font-size:10.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;border-collapse:collapse}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #ddd;font-size:10.5pt}th{background:#f2f2f2;font-weight:600}.r{margin-top:32px;font-size:9pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:10px}@media print{button{display:none}}</style></head><body></body></html>");
     w.document.close();
     w.document.title="Prorrogação de Boletos";
     const h1=w.document.createElement("h1");
     h1.textContent="Prorrogação de Boletos";
     const sub=w.document.createElement("div");
     sub.className="sub";
-    sub.textContent=lista.length+" NF"+(lista.length===1?"":"s")+" cadastrada"+(lista.length===1?"":"s")+" — ordenado por vencimento — gerado em "+new Date().toLocaleDateString("pt-BR");
-    const table=w.document.createElement("table");
-    const thead=w.document.createElement("thead");
-    const trh=w.document.createElement("tr");
-    ["Fornecedor","NF","Valor","Vencimento","Estado","Situação","Aprovada em"].forEach(function(h){
-      const th=w.document.createElement("th");
-      th.textContent=h;
-      trh.appendChild(th);
-    });
-    thead.appendChild(trh);
-    const tbody=w.document.createElement("tbody");
-    lista.forEach(function(pr){
-      const tr=w.document.createElement("tr");
-      [pr.fornecedor,pr.nf,Number(pr.valor)>0?fBRL(pr.valor):"—",pr.vencimento?fData(pr.vencimento):"—",pr.estado,pr.situacao,pr.dataAprovacao?fData(pr.dataAprovacao):"—"].forEach(function(v){
-        const td=w.document.createElement("td");
-        td.textContent=v||"—";
-        tr.appendChild(td);
+    sub.textContent=prorrogacoes.length+" NF"+(prorrogacoes.length===1?"":"s")+" cadastrada"+(prorrogacoes.length===1?"":"s")+" — ordenado por vencimento — gerado em "+new Date().toLocaleDateString("pt-BR");
+    w.document.body.appendChild(h1);
+    w.document.body.appendChild(sub);
+
+    function criarTabela(lista){
+      const table=w.document.createElement("table");
+      const thead=w.document.createElement("thead");
+      const trh=w.document.createElement("tr");
+      ["Fornecedor","NF","Valor","Vencimento","Estado","Situação","Aprovada em"].forEach(function(h){
+        const th=w.document.createElement("th");
+        th.textContent=h;
+        trh.appendChild(th);
       });
-      tbody.appendChild(tr);
-    });
-    table.appendChild(thead);
-    table.appendChild(tbody);
+      thead.appendChild(trh);
+      const tbody=w.document.createElement("tbody");
+      lista.forEach(function(pr){
+        const tr=w.document.createElement("tr");
+        [pr.fornecedor,pr.nf,Number(pr.valor)>0?fBRL(pr.valor):"—",pr.vencimento?fData(pr.vencimento):"—",pr.estado,pr.situacao,pr.dataAprovacao?fData(pr.dataAprovacao):"—"].forEach(function(v){
+          const td=w.document.createElement("td");
+          td.textContent=v||"—";
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      return table;
+    }
+
+    function criarSecao(titulo, lista, msgVazio){
+      const h2=w.document.createElement("h2");
+      h2.textContent=titulo;
+      w.document.body.appendChild(h2);
+      if(lista.length===0){
+        const vazio=w.document.createElement("div");
+        vazio.className="vazio";
+        vazio.textContent=msgVazio;
+        w.document.body.appendChild(vazio);
+      } else {
+        w.document.body.appendChild(criarTabela(lista));
+      }
+    }
+
+    criarSecao("Prorrogações Pendentes", pendentes, "Nenhuma NF pendente no momento.");
+    criarSecao("Prorrogações Concluídas", concluidas, "Nenhuma prorrogação aprovada até o momento.");
+
     const rodape=w.document.createElement("div");
     rodape.className="r";
     rodape.textContent="Documento gerado pelo BP-Visionn — "+new Date().toLocaleDateString("pt-BR");
-    w.document.body.appendChild(h1);
-    w.document.body.appendChild(sub);
-    w.document.body.appendChild(table);
     w.document.body.appendChild(rodape);
     w.print();
     w.onafterprint=function(){w.close();};
