@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { supabase } from "./lib/supabase";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog } from "lucide-react";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
 import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL } from "./lib/helpers";
@@ -82,6 +82,9 @@ export default function App() {
   const [newPr, setNewPr] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno",valor:"" as number | string});
   const [editPr, setEditPr] = useState<string | null>(null);
   const [editPrData, setEditPrData] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Pará",valor:"" as number | string});
+  const [showAprovarPr, setShowAprovarPr] = useState<string | null>(null);
+  const [dataAprovacaoInput, setDataAprovacaoInput] = useState(hoje);
+  const [dataAprovacaoErr, setDataAprovacaoErr] = useState("");
   const [prorr, setProrr] = useState({novoVencimento:"",motivo:""});
   const [prorrErr, setProrrErr] = useState("");
   const [editU, setEditU] = useState<string | null>(null);
@@ -294,8 +297,113 @@ export default function App() {
       });
     }
   }
-  function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.blueSoft,c:D.blueText},"Aprovado":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
+  function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.blueSoft,c:D.blueText},"Prorrogação Aprovada":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
   function roleLabel(r){ return r==="admin"?"Supervisora":r==="demo"?"Demonstração":"Funcionária"; }
+
+  // Card "Prorrogação de Boletos": formulário de inclusão + tabela. Extraído
+  // pra função porque aparece em três lugares (Dashboard, aba Tarefas da
+  // Financeiro, aba própria "Prorrogação de Boletos") sem duplicar o JSX.
+  // Com "limite" definido, mostra só os N mais recentes e um link "Ver
+  // todas"; sem limite (página própria), mostra a lista completa.
+  function renderProrrogacoesCard(limite?:number){
+    const lista = limite ? prorrogacoes.slice(0,limite) : prorrogacoes;
+    return (
+      <div className="bv-card" style={{...st.card,marginBottom:20}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
+          <div style={{display:"flex",gap:8}}>
+            <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={imprimirProrrogacoes}><Printer size={13}/>Imprimir</button>
+            {!isDemo&&<button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>}
+          </div>
+        </div>
+        {showProrrForm&&(
+          <div style={{background:D.bg,borderRadius:10,padding:14,marginBottom:14}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
+              <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newPr.fornecedor} onChange={e=>setNewPr(p=>({...p,fornecedor:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} placeholder="NF-000" value={newPr.nf} onChange={e=>setNewPr(p=>({...p,nf:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newPr.valor} onChange={e=>setNewPr(p=>({...p,valor:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Estado</label>
+                <select style={st.inp} value={newPr.estado} onChange={e=>setNewPr(p=>({...p,estado:e.target.value}))}>
+                  <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
+                </select>
+              </div>
+              <div><label style={st.lbl}>Situação</label>
+                <select style={st.inp} value={newPr.situacao} onChange={e=>setNewPr(p=>({...p,situacao:e.target.value}))}>
+                  <option>Aguardando retorno</option><option>Em negociação</option><option>Recusado</option>
+                </select>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:10}}>
+              <button style={st.btnBlue} onClick={addNF}><CheckCircle size={13}/>Salvar</button>
+              <button style={st.btn} onClick={()=>setShowProrrForm(false)}>Cancelar</button>
+            </div>
+          </div>
+        )}
+        {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
+          <div style={{overflowX:"auto"}}>
+          <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <tbody>{lista.map(pr=>{
+              const ec=eCor(pr.situacao);
+              const criador=users.find(u=>u.id===pr.criadoPor);
+              return (
+                <Fragment key={pr.id}>
+                <tr style={{borderBottom:"1px solid "+D.border}}>
+                  <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>
+                    {pr.fornecedor}
+                    <div style={{fontSize:10,color:D.muted,fontWeight:400,marginTop:2}}>Incluído por {criador?criador.name:"—"}</div>
+                  </td>
+                  <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
+                  <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
+                  <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
+                  <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
+                  <td data-label="Situação" style={{padding:"10px 8px"}}>
+                    <select value={pr.situacao} disabled={isDemo} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
+                      <option>Aguardando retorno</option><option>Em negociação</option><option>Prorrogação Aprovada</option><option>Recusado</option>
+                    </select>
+                    {pr.situacao==="Prorrogação Aprovada"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>Aprovada em {fData(pr.dataAprovacao)}</div>}
+                  </td>
+                  <td style={{padding:"10px 8px",display:"flex",gap:4}}>
+                    {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
+                    {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}
+                  </td>
+                </tr>
+                {editPr===pr.id&&(
+                  <tr>
+                    <td colSpan={7} style={{padding:14,background:D.bg}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
+                        <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editPrData.fornecedor} onChange={e=>setEditPrData(p=>({...p,fornecedor:e.target.value}))}/></div>
+                        <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} value={editPrData.nf} onChange={e=>setEditPrData(p=>({...p,nf:e.target.value}))}/></div>
+                        <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editPrData.valor} onChange={e=>setEditPrData(p=>({...p,valor:e.target.value}))}/></div>
+                        <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editPrData.vencimento} onChange={e=>setEditPrData(p=>({...p,vencimento:e.target.value}))}/></div>
+                        <div><label style={st.lbl}>Estado</label>
+                          <select style={st.inp} value={editPrData.estado} onChange={e=>setEditPrData(p=>({...p,estado:e.target.value}))}>
+                            <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:8,marginTop:10}}>
+                        <button style={st.btnBlue} onClick={salvarEditPr}><Save size={13}/>Salvar</button>
+                        <button style={st.btn} onClick={()=>setEditPr(null)}>Cancelar</button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+              );
+            })}</tbody>
+          </table>
+          </div>
+        )}
+        {limite&&prorrogacoes.length>limite&&(
+          <div style={{textAlign:"center",marginTop:14}}>
+            <button style={st.btn} onClick={()=>setTab("prorrogacao")}>Ver todas as prorrogações ({prorrogacoes.length})<ArrowRight size={13}/></button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // Título + filtro + formulário "Nova Tarefa" + lista de cards. Extraído pra
   // função porque precisa aparecer em dois lugares diferentes do layout da
@@ -733,7 +841,33 @@ export default function App() {
     if(bloqueadoDemo()) return;
     const { error } = await supabase.from("pendencias").update({ situacao }).eq("id", id);
     if(error) return;
+    const anterior=prorrogacoes.find(x=>x.id===id);
     setProrrogacoes(prev=>prev.map(x=>x.id===id?{...x,situacao}:x));
+    if(anterior&&anterior.situacao!==situacao) addA("Status alterado",anterior.fornecedor,anterior.situacao+" → "+situacao);
+  }
+
+  // "Prorrogação Aprovada" exige informar quando a aprovação aconteceu —
+  // abre um modal à parte em vez de trocar a situação na hora, pra
+  // garantir que a data seja preenchida antes de salvar (regra também
+  // reforçada no banco via check constraint).
+  function abrirAprovarProrrogacao(id){
+    setShowAprovarPr(id);
+    setDataAprovacaoInput(hoje);
+    setDataAprovacaoErr("");
+  }
+
+  async function confirmarAprovarProrrogacao(){
+    if(bloqueadoDemo()) return;
+    if(!dataAprovacaoInput){ setDataAprovacaoErr("Informe a data da aprovação."); return; }
+    const pr=prorrogacoes.find(x=>x.id===showAprovarPr);
+    const { error } = await supabase.from("pendencias").update({
+      situacao:"Prorrogação Aprovada",
+      data_aprovacao_prorrogacao: dataAprovacaoInput,
+    }).eq("id", showAprovarPr);
+    if(error){ setDataAprovacaoErr("Não foi possível salvar. Tente novamente."); return; }
+    setProrrogacoes(prev=>prev.map(x=>x.id===showAprovarPr?{...x,situacao:"Prorrogação Aprovada",dataAprovacao:dataAprovacaoInput}:x));
+    addA("Status alterado",pr?pr.fornecedor:"",(pr?pr.situacao:"")+" → Prorrogação Aprovada — Data da aprovação: "+fData(dataAprovacaoInput));
+    setShowAprovarPr(null);
   }
 
   function abrirEditPr(pr){
@@ -787,7 +921,7 @@ export default function App() {
     const table=w.document.createElement("table");
     const thead=w.document.createElement("thead");
     const trh=w.document.createElement("tr");
-    ["Fornecedor","NF","Valor","Vencimento","Estado","Situação"].forEach(function(h){
+    ["Fornecedor","NF","Valor","Vencimento","Estado","Situação","Aprovada em"].forEach(function(h){
       const th=w.document.createElement("th");
       th.textContent=h;
       trh.appendChild(th);
@@ -796,7 +930,7 @@ export default function App() {
     const tbody=w.document.createElement("tbody");
     lista.forEach(function(pr){
       const tr=w.document.createElement("tr");
-      [pr.fornecedor,pr.nf,Number(pr.valor)>0?fBRL(pr.valor):"—",pr.vencimento?fData(pr.vencimento):"—",pr.estado,pr.situacao].forEach(function(v){
+      [pr.fornecedor,pr.nf,Number(pr.valor)>0?fBRL(pr.valor):"—",pr.vencimento?fData(pr.vencimento):"—",pr.estado,pr.situacao,pr.dataAprovacao?fData(pr.dataAprovacao):"—"].forEach(function(v){
         const td=w.document.createElement("td");
         td.textContent=v||"—";
         tr.appendChild(td);
@@ -960,6 +1094,7 @@ export default function App() {
     {id:"painel",label:"Dashboard",Icon:LayoutDashboard,show:isAdmin||isDemo},
     {id:"tarefas",label:"Tarefas",Icon:Receipt,show:true},
     {id:"pendencias",label:"Pendências",Icon:Clock,show:true},
+    {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:isAdmin||isFin||isDemo},
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
     {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin||isDemo},
     {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin||isDemo},
@@ -1246,94 +1381,7 @@ export default function App() {
                 })}
                 <div style={{fontSize:11,color:D.muted,marginTop:4,paddingTop:12,borderTop:"1px solid "+D.border}}>Dados atualizados em tempo real</div>
               </div>
-              <div className="bv-card" style={{...st.card,marginBottom:20}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                  <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
-                  <div style={{display:"flex",gap:8}}>
-                    <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={imprimirProrrogacoes}><Printer size={13}/>Imprimir</button>
-                    {!isDemo&&<button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>}
-                  </div>
-                </div>
-                {showProrrForm&&(
-                  <div style={{background:D.bg,borderRadius:10,padding:14,marginBottom:14}}>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
-                      <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newPr.fornecedor} onChange={e=>setNewPr(p=>({...p,fornecedor:e.target.value}))}/></div>
-                      <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} placeholder="NF-000" value={newPr.nf} onChange={e=>setNewPr(p=>({...p,nf:e.target.value}))}/></div>
-                      <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newPr.valor} onChange={e=>setNewPr(p=>({...p,valor:e.target.value}))}/></div>
-                      <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
-                      <div><label style={st.lbl}>Estado</label>
-                        <select style={st.inp} value={newPr.estado} onChange={e=>setNewPr(p=>({...p,estado:e.target.value}))}>
-                          <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
-                        </select>
-                      </div>
-                      <div><label style={st.lbl}>Situação</label>
-                        <select style={st.inp} value={newPr.situacao} onChange={e=>setNewPr(p=>({...p,situacao:e.target.value}))}>
-                          <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div style={{display:"flex",gap:8,marginTop:10}}>
-                      <button style={st.btnBlue} onClick={addNF}><CheckCircle size={13}/>Salvar</button>
-                      <button style={st.btn} onClick={()=>setShowProrrForm(false)}>Cancelar</button>
-                    </div>
-                  </div>
-                )}
-                {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
-                  <div style={{overflowX:"auto"}}>
-                  <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-                    <tbody>{prorrogacoes.map(pr=>{
-                      const ec=eCor(pr.situacao);
-                      const criador=users.find(u=>u.id===pr.criadoPor);
-                      return (
-                        <Fragment key={pr.id}>
-                        <tr style={{borderBottom:"1px solid "+D.border}}>
-                          <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>
-                            {pr.fornecedor}
-                            <div style={{fontSize:10,color:D.muted,fontWeight:400,marginTop:2}}>Incluído por {criador?criador.name:"—"}</div>
-                          </td>
-                          <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
-                          <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
-                          <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
-                          <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
-                          <td data-label="Situação" style={{padding:"10px 8px"}}>
-                            <select value={pr.situacao} disabled={isDemo} onChange={e=>mudarSituacaoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
-                              <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
-                            </select>
-                          </td>
-                          <td style={{padding:"10px 8px",display:"flex",gap:4}}>
-                            {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
-                            {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}
-                          </td>
-                        </tr>
-                        {editPr===pr.id&&(
-                          <tr>
-                            <td colSpan={7} style={{padding:14,background:D.bg}}>
-                              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
-                                <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editPrData.fornecedor} onChange={e=>setEditPrData(p=>({...p,fornecedor:e.target.value}))}/></div>
-                                <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} value={editPrData.nf} onChange={e=>setEditPrData(p=>({...p,nf:e.target.value}))}/></div>
-                                <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editPrData.valor} onChange={e=>setEditPrData(p=>({...p,valor:e.target.value}))}/></div>
-                                <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editPrData.vencimento} onChange={e=>setEditPrData(p=>({...p,vencimento:e.target.value}))}/></div>
-                                <div><label style={st.lbl}>Estado</label>
-                                  <select style={st.inp} value={editPrData.estado} onChange={e=>setEditPrData(p=>({...p,estado:e.target.value}))}>
-                                    <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
-                                  </select>
-                                </div>
-                              </div>
-                              <div style={{display:"flex",gap:8,marginTop:10}}>
-                                <button style={st.btnBlue} onClick={salvarEditPr}><Save size={13}/>Salvar</button>
-                                <button style={st.btn} onClick={()=>setEditPr(null)}>Cancelar</button>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                        </Fragment>
-                      );
-                    })}</tbody>
-                  </table>
-                  </div>
-                )}
-              </div>
+              {renderProrrogacoesCard(4)}
               <div className="bv-card" style={st.card}>
                 <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Tarefas recentes</div>
                 <div style={{overflowX:"auto"}}>
@@ -1408,94 +1456,7 @@ export default function App() {
                   {isFin?(
                     <div className="bv-dash-grid">
                       <div>
-                      <div className="bv-card" style={st.card}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                          <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
-                          <div style={{display:"flex",gap:8}}>
-                            <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={imprimirProrrogacoes}><Printer size={13}/>Imprimir</button>
-                            <button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>
-                          </div>
-                        </div>
-                        {showProrrForm&&(
-                          <div style={{background:D.bg,borderRadius:10,padding:14,marginBottom:14}}>
-                            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
-                              <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newPr.fornecedor} onChange={e=>setNewPr(p=>({...p,fornecedor:e.target.value}))}/></div>
-                              <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} placeholder="NF-000" value={newPr.nf} onChange={e=>setNewPr(p=>({...p,nf:e.target.value}))}/></div>
-                              <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newPr.valor} onChange={e=>setNewPr(p=>({...p,valor:e.target.value}))}/></div>
-                              <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
-                              <div><label style={st.lbl}>Estado</label>
-                                <select style={st.inp} value={newPr.estado} onChange={e=>setNewPr(p=>({...p,estado:e.target.value}))}>
-                                  <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
-                                </select>
-                              </div>
-                              <div><label style={st.lbl}>Situação</label>
-                                <select style={st.inp} value={newPr.situacao} onChange={e=>setNewPr(p=>({...p,situacao:e.target.value}))}>
-                                  <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
-                                </select>
-                              </div>
-                            </div>
-                            <div style={{display:"flex",gap:8,marginTop:10}}>
-                              <button style={st.btnBlue} onClick={addNF}><CheckCircle size={13}/>Salvar</button>
-                              <button style={st.btn} onClick={()=>setShowProrrForm(false)}>Cancelar</button>
-                            </div>
-                          </div>
-                        )}
-                        {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
-                          <div style={{overflowX:"auto"}}>
-                          <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-                            <tbody>{prorrogacoes.map(pr=>{
-                              const ec=eCor(pr.situacao);
-                              const criador=users.find(u=>u.id===pr.criadoPor);
-                              return (
-                                <Fragment key={pr.id}>
-                                <tr style={{borderBottom:"1px solid "+D.border}}>
-                                  <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>
-                                    {pr.fornecedor}
-                                    <div style={{fontSize:10,color:D.muted,fontWeight:400,marginTop:2}}>Incluído por {criador?criador.name:"—"}</div>
-                                  </td>
-                                  <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
-                                  <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
-                                  <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
-                                  <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
-                                  <td data-label="Situação" style={{padding:"10px 8px"}}>
-                                    <select value={pr.situacao} onChange={e=>mudarSituacaoNF(pr.id,e.target.value)} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
-                                      <option>Aguardando retorno</option><option>Em negociação</option><option>Aprovado</option><option>Recusado</option>
-                                    </select>
-                                  </td>
-                                  <td style={{padding:"10px 8px",display:"flex",gap:4}}>
-                                    {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
-                                    {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}
-                                  </td>
-                                </tr>
-                                {editPr===pr.id&&(
-                                  <tr>
-                                    <td colSpan={7} style={{padding:14,background:D.bg}}>
-                                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
-                                        <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editPrData.fornecedor} onChange={e=>setEditPrData(p=>({...p,fornecedor:e.target.value}))}/></div>
-                                        <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} value={editPrData.nf} onChange={e=>setEditPrData(p=>({...p,nf:e.target.value}))}/></div>
-                                        <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editPrData.valor} onChange={e=>setEditPrData(p=>({...p,valor:e.target.value}))}/></div>
-                                        <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editPrData.vencimento} onChange={e=>setEditPrData(p=>({...p,vencimento:e.target.value}))}/></div>
-                                        <div><label style={st.lbl}>Estado</label>
-                                          <select style={st.inp} value={editPrData.estado} onChange={e=>setEditPrData(p=>({...p,estado:e.target.value}))}>
-                                            <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
-                                          </select>
-                                        </div>
-                                      </div>
-                                      <div style={{display:"flex",gap:8,marginTop:10}}>
-                                        <button style={st.btnBlue} onClick={salvarEditPr}><Save size={13}/>Salvar</button>
-                                        <button style={st.btn} onClick={()=>setEditPr(null)}>Cancelar</button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
-                                </Fragment>
-                              );
-                            })}</tbody>
-                          </table>
-                          </div>
-                        )}
-                      </div>
+                      {renderProrrogacoesCard(4)}
                       {renderTarefasSecao()}
                       </div>
                       <div>
@@ -1515,6 +1476,14 @@ export default function App() {
                   acima, dentro da coluna principal do grid (logo abaixo de
                   Prorrogação de Boletos) — ver "tarefasNoGridFin". */}
               {!tarefasNoGridFin && renderTarefasSecao()}
+            </div>
+          )}
+
+          {/* PRORROGAÇÃO DE BOLETOS */}
+          {tab==="prorrogacao"&&(isAdmin||isFin||isDemo)&&(
+            <div>
+              <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Prorrogação de Boletos</div><div style={{fontSize:13,color:D.muted}}>{prorrogacoes.length} NF(s) cadastrada(s)</div></div>
+              {renderProrrogacoesCard()}
             </div>
           )}
 
@@ -1848,6 +1817,24 @@ export default function App() {
 
         </div>
       </div>
+
+      {/* MODAL APROVAR PRORROGAÇÃO (exige data da aprovação) */}
+      {showAprovarPr!==null&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={()=>setShowAprovarPr(null)}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:380,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:48,height:48,borderRadius:12,background:D.greenSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><CheckCircle size={22} color={D.green}/></div>
+            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Prorrogação Aprovada</div>
+            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{(prorrogacoes.find(x=>x.id===showAprovarPr)||{fornecedor:""}).fornecedor} — informe a data em que a prorrogação do boleto foi aprovada.</div>
+            <label style={st.lbl}>Data da aprovação da prorrogação</label>
+            <input type="date" autoFocus style={st.inp} value={dataAprovacaoInput} onChange={e=>{setDataAprovacaoInput(e.target.value);setDataAprovacaoErr("");}}/>
+            {dataAprovacaoErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",margin:"12px 0 0",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{dataAprovacaoErr}</div>}
+            <div style={{display:"flex",gap:10,marginTop:20}}>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setShowAprovarPr(null)}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={confirmarAprovarProrrogacao}>Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL CONFIRMAR */}
       {confirm!==null&&(
