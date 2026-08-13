@@ -764,6 +764,58 @@ export default function App() {
     setProrrogacoes(prev=>prev.filter(x=>x.id!==id));
   }
 
+  // Imprime a lista completa de Prorrogação de Boletos, ordenada por
+  // vencimento crescente. Como pr.vencimento é "YYYY-MM-DD", a comparação
+  // de string já respeita a ordem cronológica (ano, depois mês, depois dia).
+  function imprimirProrrogacoes(){
+    const lista=[...prorrogacoes].sort((a,b)=>{
+      if(!a.vencimento) return 1;
+      if(!b.vencimento) return -1;
+      return a.vencimento<b.vencimento?-1:a.vencimento>b.vencimento?1:0;
+    });
+    const w=window.open("","_blank");
+    if(!w) return;
+    w.opener=null;
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{margin:2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#111}h1{font-size:16pt;margin:0 0 4px}.sub{font-size:10pt;color:#555;margin-bottom:18px}table{width:100%;border-collapse:collapse}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #ddd;font-size:10.5pt}th{background:#f2f2f2;font-weight:600}.r{margin-top:32px;font-size:9pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:10px}@media print{button{display:none}}</style></head><body></body></html>");
+    w.document.close();
+    w.document.title="Prorrogação de Boletos";
+    const h1=w.document.createElement("h1");
+    h1.textContent="Prorrogação de Boletos";
+    const sub=w.document.createElement("div");
+    sub.className="sub";
+    sub.textContent=lista.length+" NF"+(lista.length===1?"":"s")+" cadastrada"+(lista.length===1?"":"s")+" — ordenado por vencimento — gerado em "+new Date().toLocaleDateString("pt-BR");
+    const table=w.document.createElement("table");
+    const thead=w.document.createElement("thead");
+    const trh=w.document.createElement("tr");
+    ["Fornecedor","NF","Valor","Vencimento","Estado","Situação"].forEach(function(h){
+      const th=w.document.createElement("th");
+      th.textContent=h;
+      trh.appendChild(th);
+    });
+    thead.appendChild(trh);
+    const tbody=w.document.createElement("tbody");
+    lista.forEach(function(pr){
+      const tr=w.document.createElement("tr");
+      [pr.fornecedor,pr.nf,Number(pr.valor)>0?fBRL(pr.valor):"—",pr.vencimento?fData(pr.vencimento):"—",pr.estado,pr.situacao].forEach(function(v){
+        const td=w.document.createElement("td");
+        td.textContent=v||"—";
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    const rodape=w.document.createElement("div");
+    rodape.className="r";
+    rodape.textContent="Documento gerado pelo BP-Visionn — "+new Date().toLocaleDateString("pt-BR");
+    w.document.body.appendChild(h1);
+    w.document.body.appendChild(sub);
+    w.document.body.appendChild(table);
+    w.document.body.appendChild(rodape);
+    w.print();
+    w.onafterprint=function(){w.close();};
+  }
+
   function exportPDF(c,txt){
     const titulo=(TIPO_MOD[c.tipo]?TIPO_MOD[c.tipo].label:"Documento");
     const conteudo=txt!==undefined?txt:fillTpl(modelos[c.tipo||"vendedor"],c);
@@ -1197,7 +1249,10 @@ export default function App() {
               <div className="bv-card" style={{...st.card,marginBottom:20}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                   <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
-                  {!isDemo&&<button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>}
+                  <div style={{display:"flex",gap:8}}>
+                    <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={imprimirProrrogacoes}><Printer size={13}/>Imprimir</button>
+                    {!isDemo&&<button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>}
+                  </div>
                 </div>
                 {showProrrForm&&(
                   <div style={{background:D.bg,borderRadius:10,padding:14,marginBottom:14}}>
@@ -1356,7 +1411,10 @@ export default function App() {
                       <div className="bv-card" style={st.card}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                           <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
-                          <button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>
+                          <div style={{display:"flex",gap:8}}>
+                            <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={imprimirProrrogacoes}><Printer size={13}/>Imprimir</button>
+                            <button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>
+                          </div>
                         </div>
                         {showProrrForm&&(
                           <div style={{background:D.bg,borderRadius:10,padding:14,marginBottom:14}}>
@@ -1869,45 +1927,52 @@ export default function App() {
       )}
 
       {/* MODAL REPRESENTANTE (cadastro/edição) */}
-      {showRepForm&&(
-        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={fecharRepForm}>
-          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:460,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
+      {showRepForm&&(()=>{
+        const rInp={...st.inp,padding:"12px 14px",fontSize:14.5};
+        const rLbl={...st.lbl,fontSize:12.5};
+        const rGrid={display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:"18px 20px"};
+        const rSecao={fontWeight:700,fontSize:13,color:D.text,margin:"26px 0 14px",paddingBottom:8,borderBottom:"1px solid "+D.border,textTransform:"uppercase",letterSpacing:"0.03em"};
+        return (
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1.5rem"}} onClick={fecharRepForm}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2.25rem 2.5rem",maxWidth:800,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
             <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Users size={22} color={D.purple}/></div>
-            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>{repForm.id?"Editar representante":"Novo representante"}</div>
-            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{repForm.id?"Atualize os dados do representante.":"Cadastre um representante para vincular a contratos."}</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
-              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome</label><input autoFocus style={st.inp} value={repForm.nome} onChange={e=>{setRepForm(p=>({...p,nome:e.target.value}));setRepFormErr("");}}/></div>
-              <div><label style={st.lbl}>CPF ou CNPJ</label><input style={st.inp} value={repForm.cpf} onChange={e=>setRepForm(p=>({...p,cpf:e.target.value}))}/></div>
-              <div><label style={st.lbl}>Região</label>
-                <select style={st.inp} value={repForm.regiao} onChange={e=>setRepForm(p=>({...p,regiao:e.target.value}))}>
+            <div style={{fontWeight:700,fontSize:18,color:D.text,textAlign:"center",marginBottom:8}}>{repForm.id?"Editar representante":"Novo representante"}</div>
+            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:8}}>{repForm.id?"Atualize os dados do representante.":"Cadastre um representante para vincular a contratos."}</div>
+
+            <div style={{...rSecao,marginTop:22}}>Dados do representante</div>
+            <div style={rGrid}>
+              <div style={{gridColumn:"1/-1"}}><label style={rLbl}>Nome</label><input autoFocus style={rInp} value={repForm.nome} onChange={e=>{setRepForm(p=>({...p,nome:e.target.value}));setRepFormErr("");}}/></div>
+              <div><label style={rLbl}>CPF ou CNPJ</label><input style={rInp} value={repForm.cpf} onChange={e=>setRepForm(p=>({...p,cpf:e.target.value}))}/></div>
+              <div><label style={rLbl}>Região</label>
+                <select style={rInp} value={repForm.regiao} onChange={e=>setRepForm(p=>({...p,regiao:e.target.value}))}>
                   <option value="Pará">Pará</option>
                   <option value="Piauí">Piauí</option>
                 </select>
               </div>
-              <div><label style={st.lbl}>Supervisor</label>
-                <select style={st.inp} value={repForm.supervisorId} onChange={e=>setRepForm(p=>({...p,supervisorId:e.target.value}))}>
+              <div><label style={rLbl}>Supervisor</label>
+                <select style={rInp} value={repForm.supervisorId} onChange={e=>setRepForm(p=>({...p,supervisorId:e.target.value}))}>
                   <option value="">Sem supervisor</option>
                   {users.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
               </div>
-              <div><label style={st.lbl}>Status</label>
-                <select style={st.inp} value={repForm.status} onChange={e=>{setRepForm(p=>({...p,status:e.target.value}));setRepFormErr("");}}>
+              <div><label style={rLbl}>Status</label>
+                <select style={rInp} value={repForm.status} onChange={e=>{setRepForm(p=>({...p,status:e.target.value}));setRepFormErr("");}}>
                   <option value="Ativo">Ativo</option>
                   <option value="Inativo">Inativo</option>
                 </select>
               </div>
-              <div><label style={st.lbl}>Data de entrada</label><input type="date" style={st.inp} value={repForm.dataEntrada} onChange={e=>setRepForm(p=>({...p,dataEntrada:e.target.value}))}/></div>
-              <div><label style={st.lbl}>Número do CORE</label><input style={st.inp} value={repForm.numeroCore} onChange={e=>setRepForm(p=>({...p,numeroCore:e.target.value}))}/></div>
+              <div><label style={rLbl}>Data de entrada</label><input type="date" style={rInp} value={repForm.dataEntrada} onChange={e=>setRepForm(p=>({...p,dataEntrada:e.target.value}))}/></div>
+              <div><label style={rLbl}>Número do CORE</label><input style={rInp} value={repForm.numeroCore} onChange={e=>setRepForm(p=>({...p,numeroCore:e.target.value}))}/></div>
               {repForm.status==="Inativo"&&(<>
-                <div><label style={st.lbl}>Data de saída</label><input type="date" style={st.inp} value={repForm.dataSaida} onChange={e=>{setRepForm(p=>({...p,dataSaida:e.target.value}));setRepFormErr("");}}/></div>
-                <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Motivo da saída (opcional)</label><input style={st.inp} value={repForm.motivoSaida} onChange={e=>setRepForm(p=>({...p,motivoSaida:e.target.value}))}/></div>
+                <div><label style={rLbl}>Data de saída</label><input type="date" style={rInp} value={repForm.dataSaida} onChange={e=>{setRepForm(p=>({...p,dataSaida:e.target.value}));setRepFormErr("");}}/></div>
+                <div style={{gridColumn:"1/-1"}}><label style={rLbl}>Motivo da saída (opcional)</label><input style={rInp} value={repForm.motivoSaida} onChange={e=>setRepForm(p=>({...p,motivoSaida:e.target.value}))}/></div>
               </>)}
             </div>
 
-            <div style={{fontWeight:600,fontSize:13,color:D.text,margin:"18px 0 10px"}}>Vínculo / Contrato</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
-              <div><label style={st.lbl}>Tipo de vínculo</label>
-                <select style={st.inp} value={repForm.tipoVinculo} onChange={e=>mudarTipoVinculo(e.target.value)}>
+            <div style={rSecao}>Vínculo / Contrato</div>
+            <div style={rGrid}>
+              <div><label style={rLbl}>Tipo de vínculo</label>
+                <select style={rInp} value={repForm.tipoVinculo} onChange={e=>mudarTipoVinculo(e.target.value)}>
                   <option value="">Não definido</option>
                   <option value="temporario">Contrato Temporário (90 dias)</option>
                   <option value="fixo">Contrato Fixo</option>
@@ -1915,28 +1980,29 @@ export default function App() {
                 </select>
               </div>
               {repForm.tipoVinculo&&(<>
-                <div><label style={st.lbl}>{repForm.tipoVinculo==="temporario"?"Data de início do temporário":repForm.tipoVinculo==="fixo"?"Data de início do fixo":"Data de início"}</label><input type="date" style={st.inp} value={repForm.vinculoDataInicio} onChange={e=>setRepForm(p=>({...p,vinculoDataInicio:e.target.value}))}/></div>
+                <div><label style={rLbl}>{repForm.tipoVinculo==="temporario"?"Data de início do temporário":repForm.tipoVinculo==="fixo"?"Data de início do fixo":"Data de início"}</label><input type="date" style={rInp} value={repForm.vinculoDataInicio} onChange={e=>setRepForm(p=>({...p,vinculoDataInicio:e.target.value}))}/></div>
                 {repForm.tipoVinculo==="temporario"&&(
-                  <div><label style={st.lbl}>Término previsto (90 dias)</label><input disabled style={{...st.inp,color:D.muted,cursor:"default"}} value={repForm.vinculoDataTerminoPrevisto||(repForm.vinculoDataInicio?fmtTerminoPrevisto(repForm.vinculoDataInicio):"—")}/></div>
+                  <div><label style={rLbl}>Término previsto (90 dias)</label><input disabled style={{...rInp,color:D.muted,cursor:"default"}} value={repForm.vinculoDataTerminoPrevisto||(repForm.vinculoDataInicio?fmtTerminoPrevisto(repForm.vinculoDataInicio):"—")}/></div>
                 )}
-                <div><label style={st.lbl}>Status do contrato</label>
-                  <select style={st.inp} value={repForm.statusContrato} onChange={e=>setRepForm(p=>({...p,statusContrato:e.target.value}))}>
+                <div><label style={rLbl}>Status do contrato</label>
+                  <select style={rInp} value={repForm.statusContrato} onChange={e=>setRepForm(p=>({...p,statusContrato:e.target.value}))}>
                     <option value="aguardando_assinatura">Aguardando assinatura</option>
                     <option value="concluido">Concluído</option>
                   </select>
                 </div>
-                <div><label style={st.lbl}>Data de envio do contrato</label><input type="date" style={st.inp} value={repForm.contratoDataEnvio} onChange={e=>setRepForm(p=>({...p,contratoDataEnvio:e.target.value}))}/></div>
-                <div><label style={st.lbl}>Data de conclusão/assinatura</label><input type="date" style={st.inp} value={repForm.contratoDataConclusao} onChange={e=>setRepForm(p=>({...p,contratoDataConclusao:e.target.value}))}/></div>
+                <div><label style={rLbl}>Data de envio do contrato</label><input type="date" style={rInp} value={repForm.contratoDataEnvio} onChange={e=>setRepForm(p=>({...p,contratoDataEnvio:e.target.value}))}/></div>
+                <div><label style={rLbl}>Data de conclusão/assinatura</label><input type="date" style={rInp} value={repForm.contratoDataConclusao} onChange={e=>setRepForm(p=>({...p,contratoDataConclusao:e.target.value}))}/></div>
               </>)}
             </div>
-            {repFormErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",margin:"12px 0 0",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{repFormErr}</div>}
-            <div style={{display:"flex",gap:10,marginTop:20}}>
-              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharRepForm}>Cancelar</button>
-              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={salvarRepresentante}>{repForm.id?"Salvar alterações":"Criar representante"}</button>
+            {repFormErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",margin:"18px 0 0",display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{repFormErr}</div>}
+            <div style={{display:"flex",gap:10,marginTop:24,paddingTop:20,borderTop:"1px solid "+D.border}}>
+              <button style={{flex:1,padding:"12px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharRepForm}>Cancelar</button>
+              <button style={{flex:1,padding:"12px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={salvarRepresentante}>{repForm.id?"Salvar alterações":"Criar representante"}</button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
       </div>
     </div>
   );
