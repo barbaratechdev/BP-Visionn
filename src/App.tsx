@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL } from "./lib/helpers";
+import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput } from "./lib/helpers";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
@@ -104,7 +104,7 @@ export default function App() {
   const [emailLoadingId, setEmailLoadingId] = useState<string | null>(null);
   const [emailErr, setEmailErr] = useState<Record<string,string>>({});
   const [editT, setEditT] = useState<string | null>(null);
-  const [editTData, setEditTData] = useState({fornecedor:"",valor:"" as number | string,vencimento:"",responsavel:"",obs:""});
+  const [editTData, setEditTData] = useState({fornecedor:"",valor:"" as number | string,vencimento:"",responsavel:"",obs:"",status:"pendente"});
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoErr, setPhotoErr] = useState("");
   const [naoLidasChat, setNaoLidasChat] = useState(0);
@@ -426,7 +426,7 @@ export default function App() {
             <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Nova Tarefa</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
               <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newT.fornecedor} onChange={e=>setNewT(p=>({...p,fornecedor:e.target.value}))}/></div>
-              <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newT.valor} onChange={e=>setNewT(p=>({...p,valor:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Valor (opcional)</label><input inputMode="decimal" placeholder="0,00" style={st.inp} value={newT.valor} onChange={e=>setNewT(p=>({...p,valor:sanitizarMoedaInput(e.target.value)}))} onBlur={()=>setNewT(p=>({...p,valor:fMoedaInput(p.valor)}))}/></div>
               <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newT.vencimento} onChange={e=>setNewT(p=>({...p,vencimento:e.target.value}))}/></div>
               <div><label style={st.lbl}>Responsável</label>
                 <select style={st.inp} value={newT.responsavel||responsavelPadrao} onChange={e=>setNewT(p=>({...p,responsavel:e.target.value}))}>
@@ -491,11 +491,18 @@ export default function App() {
               {editT===t.id&&(
                 <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
                   <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editTData.fornecedor} onChange={e=>setEditTData(p=>({...p,fornecedor:e.target.value}))}/></div>
-                  <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editTData.valor} onChange={e=>setEditTData(p=>({...p,valor:e.target.value}))}/></div>
+                  <div><label style={st.lbl}>Valor (opcional)</label><input inputMode="decimal" placeholder="0,00" style={st.inp} value={editTData.valor} onChange={e=>setEditTData(p=>({...p,valor:sanitizarMoedaInput(e.target.value)}))} onBlur={()=>setEditTData(p=>({...p,valor:fMoedaInput(p.valor)}))}/></div>
                   <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editTData.vencimento} onChange={e=>setEditTData(p=>({...p,vencimento:e.target.value}))}/></div>
                   <div><label style={st.lbl}>Responsável</label>
                     <select style={st.inp} value={editTData.responsavel} onChange={e=>setEditTData(p=>({...p,responsavel:e.target.value}))}>
                       {users.filter(u=>u.role==="func").map(u=><option key={u.id} value={u.id}>{u.name} — {u.setor}</option>)}
+                    </select>
+                  </div>
+                  <div><label style={st.lbl}>Status</label>
+                    <select style={st.inp} value={editTData.status} onChange={e=>setEditTData(p=>({...p,status:e.target.value}))}>
+                      <option value="pendente">Pendente</option>
+                      <option value="pago">Concluído</option>
+                      <option value="prorrogado">Prorrogado</option>
                     </select>
                   </div>
                   <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Observação</label><input style={st.inp} value={editTData.obs} onChange={e=>setEditTData(p=>({...p,obs:e.target.value}))}/></div>
@@ -663,7 +670,7 @@ export default function App() {
     const status = newT.vencimento<hoje?"vencido":"pendente";
     const { data, error } = await supabase.from("tarefas").insert({
       fornecedor: newT.fornecedor,
-      valor: newT.valor===""?null:Number(newT.valor),
+      valor: newT.valor===""?null:parseMoedaInput(newT.valor),
       vencimento: newT.vencimento,
       responsavel_id: responsavelId,
       observacao: newT.obs,
@@ -688,25 +695,35 @@ export default function App() {
 
   function abrirEditT(t){
     setEditT(t.id);
-    setEditTData({fornecedor:t.fornecedor,valor:t.valor,vencimento:t.vencimento,responsavel:t.responsavel,obs:t.obs});
+    // "vencido" é só uma variação automática de "pendente" com vencimento no
+    // passado (ver Badge) — não é uma opção do seletor de Status, então cai
+    // em "Pendente" aqui; ao salvar, se continuar pendente, o cálculo
+    // automático de vencido/pendente por data volta a valer.
+    setEditTData({fornecedor:t.fornecedor,valor:fMoedaInput(t.valor),vencimento:t.vencimento,responsavel:t.responsavel,obs:t.obs,status:t.status==="vencido"?"pendente":t.status});
   }
 
   async function salvarEditT(){
     if(bloqueadoDemo()) return;
     if(!editTData.fornecedor||!editTData.vencimento) return;
     const atual = tarefas.find(x=>x.id===editT);
-    const status = atual&&atual.status==="pago" ? "pago" : (editTData.vencimento<hoje?"vencido":"pendente");
+    // Só "Pendente" recalcula vencido/pendente pela data — "Concluído" e
+    // "Prorrogado" são escolhas explícitas da Supervisora e vão pro banco
+    // exatamente como selecionadas (antes disso era sempre recalculado e
+    // "Prorrogado" era perdido silenciosamente ao editar).
+    const status = editTData.status==="pendente" ? (editTData.vencimento<hoje?"vencido":"pendente") : editTData.status;
+    const valorNum = editTData.valor===""?null:parseMoedaInput(editTData.valor);
     const { error } = await supabase.from("tarefas").update({
       fornecedor: editTData.fornecedor,
-      valor: editTData.valor===""?null:Number(editTData.valor),
+      valor: valorNum,
       vencimento: editTData.vencimento,
       responsavel_id: editTData.responsavel,
       observacao: editTData.obs,
       status,
     }).eq("id", editT);
     if(error) return;
-    setTarefas(prev=>prev.map(x=>x.id===editT?{...x,...editTData,status}:x));
-    addA("Tarefa editada",editTData.fornecedor,"Dados atualizados por "+(user?user.name:""),editT);
+    setTarefas(prev=>prev.map(x=>x.id===editT?{...x,...editTData,valor:valorNum,status}:x));
+    const detalheStatus = atual&&atual.status!==status ? " — Status: "+atual.status+" → "+status : "";
+    addA("Tarefa editada",editTData.fornecedor,"Dados atualizados por "+(user?user.name:"")+detalheStatus,editT);
     setEditT(null);
   }
 

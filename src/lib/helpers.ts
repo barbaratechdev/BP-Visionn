@@ -3,6 +3,36 @@ import type { User, Tarefa, Contrato, AuditEntry } from "../types";
 
 export function getIn(n){ return n.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
 export function fBRL(v){ return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
+
+// Converte o texto de um campo de valor (ex.: "10.543,33", "10543,33" ou
+// "10000") num number pronto pra salvar no banco. Aceita ponto de milhar
+// (ignorado) e vírgula decimal (vira ponto). Nunca retorna a máscara.
+export function parseMoedaInput(v){
+  if(v==null||v==="") return null;
+  if(typeof v==="number") return isNaN(v)?null:v;
+  const limpo = String(v).replace(/\./g,"").replace(",",".");
+  if(limpo==="") return null;
+  const n = Number(limpo);
+  return isNaN(n) ? null : n;
+}
+// Formata um valor (number ou texto já digitado) pro padrão brasileiro
+// "10.000,00", sempre com 2 casas decimais. Usado pra exibir o campo de
+// valor formatado (ao carregar e ao sair do campo).
+export function fMoedaInput(v){
+  const n = typeof v==="number" ? v : parseMoedaInput(v);
+  if(n==null||isNaN(n)) return "";
+  return n.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+// Sanitiza o que foi digitado num campo de valor enquanto o usuário ainda
+// está digitando: só dígitos e uma vírgula, no máximo 2 casas depois dela.
+// Não insere separador de milhar aqui (isso só acontece em fMoedaInput, ao
+// sair do campo) pra não brigar com a posição do cursor durante a digitação.
+export function sanitizarMoedaInput(v){
+  let s = String(v||"").replace(/[^\d,]/g,"");
+  const i = s.indexOf(",");
+  if(i!==-1) s = s.slice(0,i+1) + s.slice(i+1).replace(/,/g,"").slice(0,2);
+  return s;
+}
 export function fillTpl(tpl, d){
   return tpl
     .replace(/\{\{nome\}\}/g, d.representante||"")
