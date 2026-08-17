@@ -90,6 +90,8 @@ export default function App() {
   const [showAprovarPr, setShowAprovarPr] = useState<string | null>(null);
   const [dataAprovacaoInput, setDataAprovacaoInput] = useState(hoje);
   const [dataAprovacaoErr, setDataAprovacaoErr] = useState("");
+  const [showFiltroImpressao, setShowFiltroImpressao] = useState(false);
+  const [filtroImp, setFiltroImp] = useState({tipo:"todos",de:"",ate:"",cliente:"",responsavel:""});
   const [prorr, setProrr] = useState({novoVencimento:"",motivo:""});
   const [prorrErr, setProrrErr] = useState("");
   const [editU, setEditU] = useState<string | null>(null);
@@ -332,7 +334,7 @@ export default function App() {
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
           <div style={{display:"flex",gap:8}}>
-            <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={imprimirProrrogacoes}><Printer size={13}/>Imprimir</button>
+            <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={()=>{setFiltroImp({tipo:"todos",de:"",ate:"",cliente:"",responsavel:""});setShowFiltroImpressao(true);}}><Printer size={13}/>Imprimir</button>
             {!isDemo&&<button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>}
           </div>
         </div>
@@ -973,54 +975,114 @@ export default function App() {
     setProrrogacoes(prev=>prev.filter(x=>x.id!==id));
   }
 
-  // Imprime a lista completa de Prorrogação de Boletos, ordenada por
-  // vencimento crescente. Como pr.vencimento é "YYYY-MM-DD", a comparação
-  // de string já respeita a ordem cronológica (ano, depois mês, depois dia).
-  function imprimirProrrogacoes(){
+  // Imprime a lista de Prorrogação de Boletos, filtrada conforme escolhido
+  // no modal (ver showFiltroImpressao). Pendentes ordenadas por vencimento
+  // crescente, concluídas por data de aprovação decrescente — como as
+  // datas são "YYYY-MM-DD", a comparação de string já respeita a ordem
+  // cronológica sem precisar converter pra Date.
+  // filtros: {tipo:"todos"|"pendente"|"concluido", de, ate, cliente, responsavel}.
+  // "Cliente" no pedido do relatório corresponde ao campo "Fornecedor" já
+  // existente (a NF é negociada com um fornecedor, não há cadastro de
+  // cliente nessa tela). "Responsável" filtra por quem incluiu a NF
+  // (criadoPor) — não existe um responsável distinto "pela prorrogação"
+  // gravado por registro, só no log de auditoria (texto livre, sem vínculo
+  // direto à linha), então não é usado aqui pra não fabricar um dado que
+  // não existe de fato na pendência.
+  function imprimirProrrogacoes(filtros){
+    const f = filtros || {tipo:"todos",de:"",ate:"",cliente:"",responsavel:""};
+    const dentroPeriodo = function(pr){
+      if(!f.de&&!f.ate) return true;
+      if(!pr.vencimento) return false;
+      if(f.de&&pr.vencimento<f.de) return false;
+      if(f.ate&&pr.vencimento>f.ate) return false;
+      return true;
+    };
+    const base = prorrogacoes.filter(function(pr){
+      return (!f.cliente||pr.fornecedor.toLowerCase().includes(f.cliente.toLowerCase()))
+        && (!f.responsavel||pr.criadoPor===f.responsavel)
+        && dentroPeriodo(pr);
+    });
     // Concluída (Prorrogação Aprovada) sai da lista de pendentes e vai pra
     // sua própria seção — um registro nunca aparece nas duas ao mesmo tempo.
     // Recusado fica junto dos pendentes pra nenhuma NF cadastrada ficar de
     // fora do relatório impresso.
-    const pendentes=prorrogacoes.filter(function(pr){ return pr.situacao!=="Prorrogação Aprovada"; }).sort((a,b)=>{
+    const pendentes=base.filter(function(pr){ return pr.situacao!=="Prorrogação Aprovada"; }).sort((a,b)=>{
       if(!a.vencimento) return 1;
       if(!b.vencimento) return -1;
       return a.vencimento<b.vencimento?-1:a.vencimento>b.vencimento?1:0;
     });
-    const concluidas=prorrogacoes.filter(function(pr){ return pr.situacao==="Prorrogação Aprovada"; }).sort((a,b)=>{
+    const concluidas=base.filter(function(pr){ return pr.situacao==="Prorrogação Aprovada"; }).sort((a,b)=>{
       if(!a.dataAprovacao) return 1;
       if(!b.dataAprovacao) return -1;
       return a.dataAprovacao<b.dataAprovacao?1:a.dataAprovacao>b.dataAprovacao?-1:0;
     });
+    const totalExibido = f.tipo==="pendente"?pendentes.length:f.tipo==="concluido"?concluidas.length:base.length;
+    const tituloTipo = {todos:"Todos",pendente:"Pendentes",concluido:"Concluídos"}[f.tipo]||"Todos";
+
     const w=window.open("","_blank");
     if(!w) return;
     w.opener=null;
-    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{margin:2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#111}h1{font-size:16pt;margin:0 0 4px}h2{font-size:13pt;margin:28px 0 10px;padding-top:18px;border-top:1px solid #ccc}h2:first-of-type{margin-top:22px;padding-top:0;border-top:none}.sub{font-size:10pt;color:#555;margin-bottom:18px}.vazio{font-size:10.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;border-collapse:collapse}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #ddd;font-size:10.5pt}th{background:#f2f2f2;font-weight:600}.r{margin-top:32px;font-size:9pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:10px}@media print{button{display:none}}</style></head><body></body></html>");
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:landscape;margin:1.5cm}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;color:#111}h1{font-size:16pt;margin:0 0 4px}h2{font-size:13pt;margin:26px 0 10px;padding-top:16px;border-top:1px solid #ccc}h2:first-of-type{margin-top:20px;padding-top:0;border-top:none}.sub{font-size:10pt;color:#555;margin:2px 0}.meta{margin-bottom:16px}.status{display:inline-block;font-size:11pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:5px 12px;margin:10px 0 16px}.status-pendente{background:#FFFBEB;color:#B45309}.status-concluido{background:#F0FDF4;color:#15803D}.vazio{font-size:10.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;border-collapse:collapse}th,td{padding:7px 9px;text-align:left;border-bottom:1px solid #ddd;font-size:10pt}th{background:#f2f2f2;font-weight:600}.r{margin-top:28px;font-size:9pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:10px}@media print{button{display:none}}</style></head><body></body></html>");
     w.document.close();
-    w.document.title="Prorrogação de Boletos";
+    w.document.title="Relatório de Boletos Prorrogados";
     const h1=w.document.createElement("h1");
-    h1.textContent="Prorrogação de Boletos";
-    const sub=w.document.createElement("div");
-    sub.className="sub";
-    sub.textContent=prorrogacoes.length+" NF"+(prorrogacoes.length===1?"":"s")+" cadastrada"+(prorrogacoes.length===1?"":"s")+" — ordenado por vencimento — gerado em "+new Date().toLocaleDateString("pt-BR");
+    h1.textContent="BP-Visionn — Relatório de Boletos Prorrogados";
     w.document.body.appendChild(h1);
-    w.document.body.appendChild(sub);
 
-    function criarTabela(lista){
+    const meta=w.document.createElement("div");
+    meta.className="meta";
+    const agora=new Date();
+    const linhasMeta=[
+      "Tipo de relatório: "+tituloTipo,
+      "Gerado em "+agora.toLocaleDateString("pt-BR")+" às "+agora.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
+    ];
+    if(f.de||f.ate) linhasMeta.push("Período: "+(f.de?fData(f.de):"início")+" a "+(f.ate?fData(f.ate):"hoje"));
+    if(f.cliente) linhasMeta.push("Fornecedor: "+f.cliente);
+    if(f.responsavel){ const ur=users.find(u=>u.id===f.responsavel); linhasMeta.push("Responsável pela solicitação: "+(ur?ur.name:"—")); }
+    linhasMeta.push(totalExibido+" registro"+(totalExibido===1?"":"s")+" exibido"+(totalExibido===1?"":"s"));
+    linhasMeta.forEach(function(txt){
+      const l=w.document.createElement("div");
+      l.className="sub";
+      l.textContent=txt;
+      meta.appendChild(l);
+    });
+    w.document.body.appendChild(meta);
+
+    if(f.tipo==="pendente"||f.tipo==="concluido"){
+      const badge=w.document.createElement("div");
+      badge.className="status status-"+f.tipo;
+      badge.textContent="STATUS: "+(f.tipo==="pendente"?"PENDENTE":"CONCLUÍDO");
+      w.document.body.appendChild(badge);
+    }
+
+    const colunasBase=[
+      {h:"Fornecedor", get:function(pr){ return pr.fornecedor; }},
+      {h:"NF", get:function(pr){ return pr.nf; }},
+      {h:"Valor", get:function(pr){ return Number(pr.valor)>0?fBRL(pr.valor):"—"; }},
+      {h:"Vencimento", get:function(pr){ return pr.vencimento?fData(pr.vencimento):"—"; }},
+      {h:"Estado", get:function(pr){ return pr.estado; }},
+      {h:"Solicitado em", get:function(pr){ return pr.criadoEm?fData(pr.criadoEm):"—"; }},
+      {h:"Solicitado por", get:function(pr){ const u=users.find(function(x){return x.id===pr.criadoPor;}); return u?u.name:"—"; }},
+      {h:"Situação", get:function(pr){ return pr.situacao; }},
+    ];
+    const colunaAprovacao={h:"Aprovado em", get:function(pr){ return pr.dataAprovacao?fData(pr.dataAprovacao):"—"; }};
+
+    function criarTabela(lista, colunas){
       const table=w.document.createElement("table");
       const thead=w.document.createElement("thead");
       const trh=w.document.createElement("tr");
-      ["Fornecedor","NF","Valor","Vencimento","Estado","Situação","Aprovada em"].forEach(function(h){
+      colunas.forEach(function(c){
         const th=w.document.createElement("th");
-        th.textContent=h;
+        th.textContent=c.h;
         trh.appendChild(th);
       });
       thead.appendChild(trh);
       const tbody=w.document.createElement("tbody");
       lista.forEach(function(pr){
         const tr=w.document.createElement("tr");
-        [pr.fornecedor,pr.nf,Number(pr.valor)>0?fBRL(pr.valor):"—",pr.vencimento?fData(pr.vencimento):"—",pr.estado,pr.situacao,pr.dataAprovacao?fData(pr.dataAprovacao):"—"].forEach(function(v){
+        colunas.forEach(function(c){
           const td=w.document.createElement("td");
-          td.textContent=v||"—";
+          td.textContent=c.get(pr)||"—";
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
@@ -1030,26 +1092,34 @@ export default function App() {
       return table;
     }
 
-    function criarSecao(titulo, lista, msgVazio){
-      const h2=w.document.createElement("h2");
-      h2.textContent=titulo;
-      w.document.body.appendChild(h2);
+    function criarSecao(titulo, lista, colunas, msgVazio){
+      if(titulo){
+        const h2=w.document.createElement("h2");
+        h2.textContent=titulo;
+        w.document.body.appendChild(h2);
+      }
       if(lista.length===0){
         const vazio=w.document.createElement("div");
         vazio.className="vazio";
         vazio.textContent=msgVazio;
         w.document.body.appendChild(vazio);
       } else {
-        w.document.body.appendChild(criarTabela(lista));
+        w.document.body.appendChild(criarTabela(lista, colunas));
       }
     }
 
-    criarSecao("Prorrogações Pendentes", pendentes, "Nenhuma NF pendente no momento.");
-    criarSecao("Prorrogações Concluídas", concluidas, "Nenhuma prorrogação aprovada até o momento.");
+    if(f.tipo==="pendente"){
+      criarSecao(null, pendentes, colunasBase, "Nenhuma NF pendente no momento.");
+    } else if(f.tipo==="concluido"){
+      criarSecao(null, concluidas, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
+    } else {
+      criarSecao("Prorrogações Pendentes", pendentes, colunasBase, "Nenhuma NF pendente no momento.");
+      criarSecao("Prorrogações Concluídas", concluidas, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
+    }
 
     const rodape=w.document.createElement("div");
     rodape.className="r";
-    rodape.textContent="Documento gerado pelo BP-Visionn — "+new Date().toLocaleDateString("pt-BR");
+    rodape.textContent="Documento gerado pelo BP-Visionn — "+agora.toLocaleDateString("pt-BR")+" às "+agora.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
     w.document.body.appendChild(rodape);
     w.print();
     w.onafterprint=function(){w.close();};
@@ -1946,6 +2016,44 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* MODAL FILTROS DE IMPRESSÃO (Prorrogação de Boletos) */}
+      {showFiltroImpressao&&(()=>{
+        const responsaveisComRegistro=users.filter(u=>prorrogacoes.some(pr=>pr.criadoPor===u.id));
+        return (
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={()=>setShowFiltroImpressao(false)}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:460,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Printer size={22} color={D.blue}/></div>
+            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Imprimir Boletos Prorrogados</div>
+            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>Escolha o que deve entrar no relatório.</div>
+
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
+              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Tipo de relatório</label>
+                <select style={st.inp} value={filtroImp.tipo} onChange={e=>setFiltroImp(p=>({...p,tipo:e.target.value}))}>
+                  <option value="todos">Todos</option>
+                  <option value="pendente">Pendentes</option>
+                  <option value="concluido">Concluídos</option>
+                </select>
+              </div>
+              <div><label style={st.lbl}>Vencimento de</label><input type="date" style={st.inp} value={filtroImp.de} onChange={e=>setFiltroImp(p=>({...p,de:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Vencimento até</label><input type="date" style={st.inp} value={filtroImp.ate} onChange={e=>setFiltroImp(p=>({...p,ate:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Fornecedor (opcional)</label><input style={st.inp} placeholder="Buscar por nome" value={filtroImp.cliente} onChange={e=>setFiltroImp(p=>({...p,cliente:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Responsável pela solicitação</label>
+                <select style={st.inp} value={filtroImp.responsavel} onChange={e=>setFiltroImp(p=>({...p,responsavel:e.target.value}))}>
+                  <option value="">Todos</option>
+                  {responsaveisComRegistro.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={{display:"flex",gap:10,marginTop:20}}>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setShowFiltroImpressao(false)}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={()=>{imprimirProrrogacoes(filtroImp);setShowFiltroImpressao(false);}}><Printer size={14}/>Gerar relatório</button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
 
       {/* MODAL CONFIRMAR */}
       {confirm!==null&&(
