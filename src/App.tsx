@@ -1022,7 +1022,7 @@ export default function App() {
     const w=window.open("","_blank");
     if(!w) return;
     w.opener=null;
-    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:landscape;margin:1.5cm}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;color:#111}h1{font-size:16pt;margin:0 0 4px}h2{font-size:13pt;margin:26px 0 10px;padding-top:16px;border-top:1px solid #ccc}h2:first-of-type{margin-top:20px;padding-top:0;border-top:none}.sub{font-size:10pt;color:#555;margin:2px 0}.meta{margin-bottom:16px}.status{display:inline-block;font-size:11pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:5px 12px;margin:10px 0 16px}.status-pendente{background:#FFFBEB;color:#B45309}.status-concluido{background:#F0FDF4;color:#15803D}.vazio{font-size:10.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;border-collapse:collapse}th,td{padding:7px 9px;text-align:left;border-bottom:1px solid #ddd;font-size:10pt}th{background:#f2f2f2;font-weight:600}.r{margin-top:28px;font-size:9pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:10px}@media print{button{display:none}}</style></head><body></body></html>");
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:A4 portrait;margin:1.2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111}h1{font-size:14pt;margin:0 0 4px}h2{font-size:12pt;margin:20px 0 8px;padding-top:12px;border-top:1px solid #ccc}h2:first-of-type{margin-top:16px;padding-top:0;border-top:none}.sub{font-size:9pt;color:#555;margin:2px 0}.meta{margin-bottom:14px}.status{display:inline-block;font-size:10.5pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:4px 11px;margin:8px 0 14px}.status-pendente{background:#FFFBEB;color:#B45309}.status-concluido{background:#F0FDF4;color:#15803D}.vazio{font-size:9.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;table-layout:fixed;border-collapse:collapse}th,td{padding:5px 6px;text-align:left;border-bottom:1px solid #ddd;font-size:8.5pt;word-break:break-word;overflow-wrap:break-word}th{background:#f2f2f2;font-weight:600}thead{display:table-header-group}tr{page-break-inside:avoid}.r{margin-top:22px;font-size:8.5pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:8px}@media print{button{display:none}}</style></head><body></body></html>");
     w.document.close();
     w.document.title="Relatório de Boletos Prorrogados";
     const h1=w.document.createElement("h1");
@@ -1055,25 +1055,31 @@ export default function App() {
       w.document.body.appendChild(badge);
     }
 
+    // "peso" define a largura relativa da coluna (não um "%" fixo), pra
+    // caber em A4 retrato tanto com 8 colunas (pendentes) quanto com 9
+    // (concluídas, +Aprovado em) sem sobrar nem faltar largura — o % real
+    // de cada uma é peso/somaDosPesos das colunas realmente exibidas.
     const colunasBase=[
-      {h:"Fornecedor", get:function(pr){ return pr.fornecedor; }},
-      {h:"NF", get:function(pr){ return pr.nf; }},
-      {h:"Valor", get:function(pr){ return Number(pr.valor)>0?fBRL(pr.valor):"—"; }},
-      {h:"Vencimento", get:function(pr){ return pr.vencimento?fData(pr.vencimento):"—"; }},
-      {h:"Estado", get:function(pr){ return pr.estado; }},
-      {h:"Solicitado em", get:function(pr){ return pr.criadoEm?fData(pr.criadoEm):"—"; }},
-      {h:"Solicitado por", get:function(pr){ const u=users.find(function(x){return x.id===pr.criadoPor;}); return u?u.name:"—"; }},
-      {h:"Situação", get:function(pr){ return pr.situacao; }},
+      {h:"Fornecedor", peso:3, get:function(pr){ return pr.fornecedor; }},
+      {h:"NF", peso:1.4, get:function(pr){ return pr.nf; }},
+      {h:"Valor", peso:1.4, get:function(pr){ return Number(pr.valor)>0?fBRL(pr.valor):"—"; }},
+      {h:"Vencimento", peso:1.4, get:function(pr){ return pr.vencimento?fData(pr.vencimento):"—"; }},
+      {h:"Estado", peso:1.2, get:function(pr){ return pr.estado; }},
+      {h:"Solicitado em", peso:1.5, get:function(pr){ return pr.criadoEm?fData(pr.criadoEm):"—"; }},
+      {h:"Solicitado por", peso:2.2, get:function(pr){ const u=users.find(function(x){return x.id===pr.criadoPor;}); return u?u.name:"—"; }},
+      {h:"Situação", peso:2.6, get:function(pr){ return pr.situacao; }},
     ];
-    const colunaAprovacao={h:"Aprovado em", get:function(pr){ return pr.dataAprovacao?fData(pr.dataAprovacao):"—"; }};
+    const colunaAprovacao={h:"Aprovado em", peso:1.5, get:function(pr){ return pr.dataAprovacao?fData(pr.dataAprovacao):"—"; }};
 
     function criarTabela(lista, colunas){
+      const somaPesos=colunas.reduce(function(s,c){ return s+c.peso; },0);
       const table=w.document.createElement("table");
       const thead=w.document.createElement("thead");
       const trh=w.document.createElement("tr");
       colunas.forEach(function(c){
         const th=w.document.createElement("th");
         th.textContent=c.h;
+        th.style.width=(c.peso/somaPesos*100)+"%";
         trh.appendChild(th);
       });
       thead.appendChild(trh);
