@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { supabase } from "./lib/supabase";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock } from "lucide-react";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
 import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput } from "./lib/helpers";
@@ -77,6 +77,10 @@ export default function App() {
   const [modEdit, setModEdit] = useState("");
   const [search, setSearch] = useState("");
   const [fStatus, setFStatus] = useState("todos");
+  const [fResponsavel, setFResponsavel] = useState("");
+  const [showRespFiltro, setShowRespFiltro] = useState(false);
+  const [buscaRespFiltro, setBuscaRespFiltro] = useState("");
+  const respFiltroRef = useRef<HTMLDivElement | null>(null);
   const [newT, setNewT] = useState({fornecedor:"",valor:"",vencimento:"",responsavel:"",obs:""});
   const [newC, setNewC] = useState({representanteId:"",cpfCnpj:"",porcentagem:"",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"});
   const [newPr, setNewPr] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno",valor:"" as number | string});
@@ -126,7 +130,7 @@ export default function App() {
   // filtro aqui é defesa em profundidade do lado do cliente, não a proteção
   // principal.
   const tVis = (isAdmin ? tarefas : isDemo ? tarefas.filter(t=>t.responsavel===demoResponsavelId) : tarefas.filter(t=>t.responsavel===(user&&user.id)))
-    .filter(t=>(fStatus==="todos"||t.status===fStatus)&&(!search||t.fornecedor.toLowerCase().includes(search.toLowerCase())));
+    .filter(t=>(fStatus==="todos"||t.status===fStatus)&&(!fResponsavel||t.responsavel===fResponsavel)&&(!search||t.fornecedor.toLowerCase().includes(search.toLowerCase())));
   const pends    = tarefas.filter(t=>t.status==="pendente"||t.status==="vencido");
   const pendsVis = isAdmin ? pends : isDemo ? pends.filter(t=>t.responsavel===demoResponsavelId) : pends.filter(t=>t.responsavel===(user&&user.id));
   const unread   = notifs.filter(n=>!n.read).length;
@@ -141,6 +145,12 @@ export default function App() {
 
   useEffect(()=>{
     function h(e){ if(notifRef.current&&!notifRef.current.contains(e.target)) setShowNotif(false); }
+    document.addEventListener("mousedown",h);
+    return ()=>document.removeEventListener("mousedown",h);
+  },[]);
+
+  useEffect(()=>{
+    function h(e){ if(respFiltroRef.current&&!respFiltroRef.current.contains(e.target)) setShowRespFiltro(false); }
     document.addEventListener("mousedown",h);
     return ()=>document.removeEventListener("mousedown",h);
   },[]);
@@ -410,6 +420,10 @@ export default function App() {
   // aba Tarefas dependendo do perfil (ver "tarefasNoGridFin" acima) sem
   // duplicar o JSX nem sua lógica.
   function renderTarefasSecao(){
+    const funcionarios = users.filter(u=>u.role==="func");
+    const funcSelecionado = fResponsavel ? funcionarios.find(u=>u.id===fResponsavel) : null;
+    const funcOpcoes = funcionarios.filter(u=>u.name.toLowerCase().includes(buscaRespFiltro.toLowerCase()));
+    const pendenciasSelecionado = fResponsavel ? tarefas.filter(t=>t.responsavel===fResponsavel&&(t.status==="pendente"||t.status==="vencido")).length : 0;
     return (
       <>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
@@ -418,9 +432,43 @@ export default function App() {
             <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={{...st.inp,width:"auto",fontSize:13}}>
               <option value="todos">Todos</option><option value="pendente">Pendente</option><option value="vencido">Urgente</option><option value="prorrogado">Prorrogado</option><option value="pago">Concluída</option>
             </select>
+            {isAdmin&&(
+              <div ref={respFiltroRef} style={{position:"relative"}}>
+                <button type="button" onClick={()=>{setShowRespFiltro(p=>!p);setBuscaRespFiltro("");}} style={{...st.inp,width:"auto",minWidth:180,fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"space-between",gap:8,cursor:"pointer"}}>
+                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:funcSelecionado?D.text:D.muted}}>{funcSelecionado?funcSelecionado.name:"Todos os funcionários"}</span>
+                  <ChevronDown size={14} color={D.muted}/>
+                </button>
+                {showRespFiltro&&(
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,width:260,background:D.white,borderRadius:12,border:"1px solid "+D.border,boxShadow:"0 8px 30px rgba(0,0,0,0.12)",zIndex:100,overflow:"hidden"}}>
+                    <div style={{padding:8,borderBottom:"1px solid "+D.border}}>
+                      <input autoFocus placeholder="Buscar funcionário..." style={{...st.inp,fontSize:13}} value={buscaRespFiltro} onChange={e=>setBuscaRespFiltro(e.target.value)}/>
+                    </div>
+                    <div style={{maxHeight:240,overflowY:"auto"}}>
+                      <div onClick={()=>{setFResponsavel("");setShowRespFiltro(false);}} style={{padding:"9px 12px",cursor:"pointer",fontSize:13,fontWeight:!fResponsavel?700:500,color:!fResponsavel?D.blue:D.text,background:!fResponsavel?D.blueSoft:"transparent"}}>Todos os funcionários</div>
+                      {funcOpcoes.map(u=>{
+                        const qtd = tarefas.filter(x=>x.responsavel===u.id&&(x.status==="pendente"||x.status==="vencido")).length;
+                        const sel = fResponsavel===u.id;
+                        return (
+                          <div key={u.id} onClick={()=>{setFResponsavel(u.id);setShowRespFiltro(false);}} style={{padding:"9px 12px",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,fontWeight:sel?700:500,color:sel?D.blue:D.text,background:sel?D.blueSoft:"transparent"}}>
+                            <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.name}</span>
+                            <span style={{fontSize:11,color:D.muted,flexShrink:0}}>{qtd} pend.</span>
+                          </div>
+                        );
+                      })}
+                      {funcOpcoes.length===0&&<div style={{padding:"14px 12px",fontSize:12,color:D.muted,textAlign:"center"}}>Nenhum funcionário encontrado.</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {isAdmin&&<button style={st.btnBlue} onClick={()=>setShowTForm(p=>!p)}><Plus size={15}/>Nova Tarefa</button>}
           </div>
         </div>
+        {isAdmin&&funcSelecionado&&(
+          <div style={{fontSize:13,color:D.muted,marginTop:-10,marginBottom:16}}>
+            <strong style={{color:D.text}}>{funcSelecionado.name}</strong> — {pendenciasSelecionado} pendência{pendenciasSelecionado===1?"":"s"}
+          </div>
+        )}
         {showTForm&&(
           <div className="bv-card" style={{...st.card,borderColor:D.blue,marginBottom:16}}>
             <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Nova Tarefa</div>
