@@ -179,6 +179,22 @@ export function mapSupervisorRow(row){
   };
 }
 
+// Converte uma linha da tabela funcionarios (cadastro do RH) para a UI.
+export function mapFuncionarioRow(row){
+  return {
+    id: row.id,
+    nome: row.nome,
+    telefone: row.telefone || "",
+    dataEntrada: row.data_entrada || "",
+    tipoVinculo: row.tipo_vinculo,
+    valeTransporte: !!row.vale_transporte,
+    valeRefeicao: !!row.vale_refeicao,
+    observacoes: row.observacoes || "",
+    status: row.status,
+    dataSaida: row.data_saida || "",
+  };
+}
+
 export function validarImagem(file){
   if(!TIPOS_IMG_PERMITIDOS.includes(file.type)) return {ok:false, erro:"Formato não suportado. Envie uma imagem PNG, JPG ou JPEG."};
   if(file.size>TAMANHO_MAX_IMG) return {ok:false, erro:"Arquivo muito grande. O limite é 5MB."};

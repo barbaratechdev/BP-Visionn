@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { supabase } from "./lib/supabase";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock } from "lucide-react";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
 import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput } from "./lib/helpers";
@@ -11,6 +11,7 @@ import Calendario from "./components/Calendario";
 import Mensagens from "./components/Mensagens";
 import Acessos from "./components/Acessos";
 import Supervisores from "./components/Supervisores";
+import RH from "./components/RH";
 import MiniCalendario from "./components/MiniCalendario";
 import StatusDonutCard from "./components/StatusDonutCard";
 import GoogleIcon from "./components/GoogleIcon";
@@ -118,7 +119,16 @@ export default function App() {
 
   const isAdmin = user && user.role==="admin";
   const isFin   = user && user.setor==="Financeiro";
+  const isRH    = user && user.setor==="RH";
   const isDemo  = user && user.role==="demo";
+  // Aba Supervisores: além de admin, liberada nominalmente pra Esmeralda,
+  // Carol (Financeiro) e Ana — não existe controle de acesso por pessoa no
+  // sistema, então o critério aqui é o primeiro nome do perfil
+  // (case-insensitive, \b pra não pegar "Carolina"/"Mariana" etc.).
+  const isSupervisoresExtra = !!(user && user.name && /\b(esmeralda|carol|ana)\b/i.test(user.name));
+  // Dentro da aba, incluir/editar supervisor é liberado pra Esmeralda e Ana
+  // (não pra Carol) — desativar continua exclusivo de admin.
+  const podeEditarSupervisores = !!(user && user.name && /\b(esmeralda|ana)\b/i.test(user.name));
   // Funcionária do financeiro: na aba Tarefas ela vê o grid de Prorrogação de
   // Boletos + Calendário — a lista de Tarefas entra na coluna principal desse
   // mesmo grid (logo abaixo de Prorrogação), em vez de ficar solta depois
@@ -1191,9 +1201,10 @@ export default function App() {
     {id:"pendencias",label:"Pendências",Icon:Clock,show:true},
     {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:isAdmin||isFin||isDemo},
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
+    {id:"rh",label:"RH",Icon:Briefcase,show:isAdmin||isRH},
     {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin||isDemo},
-    {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin||isDemo},
-    {id:"supervisores",label:"Supervisores",Icon:UserCog,show:true},
+    {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin||isRH||isDemo},
+    {id:"supervisores",label:"Supervisores",Icon:UserCog,show:isAdmin||isSupervisoresExtra||isRH},
     {id:"calendario",label:"Calendário",Icon:Calendar,show:true},
     {id:"auditoria",label:"Auditoria",Icon:ClipboardList,show:isAdmin||isDemo||isFin},
     {id:"config",label:"Configurações",Icon:Settings,show:!isDemo},
@@ -1711,7 +1722,7 @@ export default function App() {
           )}
 
           {/* REPRESENTANTES */}
-          {tab==="representantes"&&(isAdmin||isFin||isDemo)&&(
+          {tab==="representantes"&&(isAdmin||isFin||isRH||isDemo)&&(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
                 <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Representantes</div><div style={{fontSize:13,color:D.muted}}>{representantesVisiveis.length} de {representantes.length} representante(s)</div></div>
@@ -1786,8 +1797,13 @@ export default function App() {
           )}
 
           {/* SUPERVISORES */}
-          {tab==="supervisores"&&(
-            <Supervisores D={D} st={st} isAdmin={isAdmin} isDemo={isDemo} addA={addA} addN={addN}/>
+          {tab==="supervisores"&&(isAdmin||isSupervisoresExtra||isRH)&&(
+            <Supervisores D={D} st={st} isAdmin={isAdmin} isDemo={isDemo} podeEditar={isAdmin||podeEditarSupervisores||isRH} addA={addA} addN={addN}/>
+          )}
+
+          {/* RH */}
+          {tab==="rh"&&(isAdmin||isRH)&&(
+            <RH D={D} st={st} addA={addA} addN={addN}/>
           )}
 
           {/* CALENDÁRIO */}
