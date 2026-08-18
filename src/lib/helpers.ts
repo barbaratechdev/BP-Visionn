@@ -17,6 +17,11 @@ const SITUACAO_LABEL = { "Aguardando retorno":"Aguardando", "Em negociação":"A
 export function situacaoLabel(s){ return SITUACAO_LABEL[s]||s; }
 // Situações que devem contar/filtrar junto de "Aguardando" (ver acima).
 export function ehAguardando(s){ return s==="Aguardando retorno"||s==="Em negociação"; }
+// Prioridade de exibição da listagem/relatório de Prorrogação de Boletos:
+// Aguardando (0) → Recusado (1) → Aprovado (2), nunca por fornecedor/NF/
+// data. Um valor de situação fora dos 4 conhecidos vai pro fim (3) em vez
+// de cair silenciosamente num dos 3 baldes existentes.
+export function ordemSituacao(s){ return ehAguardando(s)?0:s==="Recusado"?1:s==="Prorrogação Aprovada"?2:3; }
 export function fBRL(v){ return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
 
 // Converte o texto de um campo de valor (ex.: "10.543,33", "10543,33" ou

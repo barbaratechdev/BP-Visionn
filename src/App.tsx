@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando } from "./lib/helpers";
+import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
@@ -341,7 +341,11 @@ export default function App() {
   // Com "limite" definido, mostra só os N mais recentes e um link "Ver
   // todas"; sem limite (página própria), mostra a lista completa.
   function renderProrrogacoesCard(limite?:number){
-    const lista = limite ? prorrogacoes.slice(0,limite) : prorrogacoes;
+    // Listagem sempre agrupada por status — Aguardando → Recusado →
+    // Aprovado — nunca por fornecedor/NF/vencimento/data de cadastro.
+    // Sort estável: dentro do mesmo status, mantém a ordem original.
+    const ordenadas = prorrogacoes.slice().sort((a,b)=>ordemSituacao(a.situacao)-ordemSituacao(b.situacao));
+    const lista = limite ? ordenadas.slice(0,limite) : ordenadas;
     return (
       <div className="bv-card" style={{...st.card,marginBottom:20}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -1148,8 +1152,8 @@ export default function App() {
       criarSecao(null, recusado, colunasBase, "Nenhuma NF recusada no momento.");
     } else {
       criarSecao("Aguardando", aguardando, colunasBase, "Nenhuma NF aguardando no momento.");
-      criarSecao("Aprovado", aprovado, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
       criarSecao("Recusado", recusado, colunasBase, "Nenhuma NF recusada no momento.");
+      criarSecao("Aprovado", aprovado, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
     }
 
     const rodape=w.document.createElement("div");
