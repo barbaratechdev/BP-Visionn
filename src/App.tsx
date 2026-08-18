@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel } from "./lib/helpers";
+import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando } from "./lib/helpers";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
@@ -329,7 +329,10 @@ export default function App() {
       });
     }
   }
-  function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.blueSoft,c:D.blueText},"Prorrogação Aprovada":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
+  // "Em negociação" recebe a mesma cor de "Aguardando retorno" — as duas
+  // aparecem pro usuário como "Aguardando" (ver situacaoLabel), então
+  // precisam da mesma cor pra não parecer duas coisas diferentes.
+  function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.orangeSoft,c:D.orangeText},"Prorrogação Aprovada":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
   function roleLabel(r){ return r==="admin"?"Supervisora":r==="demo"?"Demonstração":"Funcionária"; }
 
   // Card "Prorrogação de Boletos": formulário de inclusão + tabela. Extraído
@@ -362,7 +365,7 @@ export default function App() {
               </div>
               <div><label style={st.lbl}>Situação</label>
                 <select style={st.inp} value={newPr.situacao} onChange={e=>setNewPr(p=>({...p,situacao:e.target.value}))}>
-                  <option value="Aguardando retorno">Aguardando</option><option value="Em negociação">Em negociação</option><option value="Recusado">Recusado</option>
+                  <option value="Aguardando retorno">Aguardando</option><option value="Recusado">Recusado</option>
                 </select>
               </div>
             </div>
@@ -392,7 +395,9 @@ export default function App() {
                   <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
                   <td data-label="Situação" style={{padding:"10px 8px"}}>
                     <select value={pr.situacao} disabled={isDemo} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
-                      <option value="Aguardando retorno">Aguardando</option><option value="Em negociação">Em negociação</option><option value="Prorrogação Aprovada">Aprovado</option><option value="Recusado">Recusado</option>
+                      <option value="Aguardando retorno">Aguardando</option>
+                      {pr.situacao==="Em negociação"&&<option value="Em negociação" style={{display:"none"}}>Aguardando</option>}
+                      <option value="Prorrogação Aprovada">Aprovado</option><option value="Recusado">Recusado</option>
                     </select>
                     {pr.situacao==="Prorrogação Aprovada"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>Aprovado em {fData(pr.dataAprovacao)}</div>}
                   </td>
@@ -990,14 +995,17 @@ export default function App() {
   // crescente, concluídas por data de aprovação decrescente — como as
   // datas são "YYYY-MM-DD", a comparação de string já respeita a ordem
   // cronológica sem precisar converter pra Date.
-  // filtros: {tipo:"todos"|"pendente"|"concluido", de, ate, cliente, responsavel}.
-  // "Cliente" no pedido do relatório corresponde ao campo "Fornecedor" já
-  // existente (a NF é negociada com um fornecedor, não há cadastro de
-  // cliente nessa tela). "Responsável" filtra por quem incluiu a NF
-  // (criadoPor) — não existe um responsável distinto "pela prorrogação"
-  // gravado por registro, só no log de auditoria (texto livre, sem vínculo
-  // direto à linha), então não é usado aqui pra não fabricar um dado que
-  // não existe de fato na pendência.
+  // filtros: {tipo:"todos"|"aguardando"|"aprovado"|"recusado", de, ate, cliente, responsavel}.
+  // Os 3 tipos são mutuamente exclusivos e batem 1:1 com o que aparece na
+  // tela (ver situacaoLabel/ehAguardando em lib/helpers): um registro
+  // "Em negociação" conta como "aguardando" — nunca aparece junto de
+  // "recusado" nem é ignorado. "Cliente" no pedido do relatório
+  // corresponde ao campo "Fornecedor" já existente (a NF é negociada com
+  // um fornecedor, não há cadastro de cliente nessa tela). "Responsável"
+  // filtra por quem incluiu a NF (criadoPor) — não existe um responsável
+  // distinto "pela prorrogação" gravado por registro, só no log de
+  // auditoria (texto livre, sem vínculo direto à linha), então não é
+  // usado aqui pra não fabricar um dado que não existe de fato na pendência.
   function imprimirProrrogacoes(filtros){
     const f = filtros || {tipo:"todos",de:"",ate:"",cliente:"",responsavel:""};
     const dentroPeriodo = function(pr){
@@ -1012,27 +1020,30 @@ export default function App() {
         && (!f.responsavel||pr.criadoPor===f.responsavel)
         && dentroPeriodo(pr);
     });
-    // Concluída (Prorrogação Aprovada) sai da lista de pendentes e vai pra
-    // sua própria seção — um registro nunca aparece nas duas ao mesmo tempo.
-    // Recusado fica junto dos pendentes pra nenhuma NF cadastrada ficar de
-    // fora do relatório impresso.
-    const pendentes=base.filter(function(pr){ return pr.situacao!=="Prorrogação Aprovada"; }).sort((a,b)=>{
+    // 3 grupos mutuamente exclusivos — cada NF cai em exatamente um.
+    const aguardando=base.filter(function(pr){ return ehAguardando(pr.situacao); }).sort((a,b)=>{
       if(!a.vencimento) return 1;
       if(!b.vencimento) return -1;
       return a.vencimento<b.vencimento?-1:a.vencimento>b.vencimento?1:0;
     });
-    const concluidas=base.filter(function(pr){ return pr.situacao==="Prorrogação Aprovada"; }).sort((a,b)=>{
+    const aprovado=base.filter(function(pr){ return pr.situacao==="Prorrogação Aprovada"; }).sort((a,b)=>{
       if(!a.dataAprovacao) return 1;
       if(!b.dataAprovacao) return -1;
       return a.dataAprovacao<b.dataAprovacao?1:a.dataAprovacao>b.dataAprovacao?-1:0;
     });
-    const totalExibido = f.tipo==="pendente"?pendentes.length:f.tipo==="concluido"?concluidas.length:base.length;
-    const tituloTipo = {todos:"Todos",pendente:"Pendentes",concluido:"Aprovados"}[f.tipo]||"Todos";
+    const recusado=base.filter(function(pr){ return pr.situacao==="Recusado"; }).sort((a,b)=>{
+      if(!a.vencimento) return 1;
+      if(!b.vencimento) return -1;
+      return a.vencimento<b.vencimento?-1:a.vencimento>b.vencimento?1:0;
+    });
+    const porTipo = {aguardando:aguardando,aprovado:aprovado,recusado:recusado};
+    const totalExibido = porTipo[f.tipo] ? porTipo[f.tipo].length : base.length;
+    const tituloTipo = {todos:"Todos",aguardando:"Aguardando",aprovado:"Aprovado",recusado:"Recusado"}[f.tipo]||"Todos";
 
     const w=window.open("","_blank");
     if(!w) return;
     w.opener=null;
-    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:A4 portrait;margin:1.2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111}h1{font-size:14pt;margin:0 0 4px}h2{font-size:12pt;margin:20px 0 8px;padding-top:12px;border-top:1px solid #ccc}h2:first-of-type{margin-top:16px;padding-top:0;border-top:none}.sub{font-size:9pt;color:#555;margin:2px 0}.meta{margin-bottom:14px}.status{display:inline-block;font-size:10.5pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:4px 11px;margin:8px 0 14px}.status-pendente{background:#FFFBEB;color:#B45309}.status-concluido{background:#F0FDF4;color:#15803D}.vazio{font-size:9.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;table-layout:fixed;border-collapse:collapse}th,td{padding:5px 6px;text-align:left;border-bottom:1px solid #ddd;font-size:8.5pt;word-break:break-word;overflow-wrap:break-word}th{background:#f2f2f2;font-weight:600}td.data-col{white-space:nowrap;overflow:visible;word-break:normal;overflow-wrap:normal}thead{display:table-header-group}tr{page-break-inside:avoid}.r{margin-top:22px;font-size:8.5pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:8px}@media print{button{display:none}}</style></head><body></body></html>");
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:A4 portrait;margin:1.2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111}h1{font-size:14pt;margin:0 0 4px}h2{font-size:12pt;margin:20px 0 8px;padding-top:12px;border-top:1px solid #ccc}h2:first-of-type{margin-top:16px;padding-top:0;border-top:none}.sub{font-size:9pt;color:#555;margin:2px 0}.meta{margin-bottom:14px}.status{display:inline-block;font-size:10.5pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:4px 11px;margin:8px 0 14px}.status-aguardando{background:#FFFBEB;color:#B45309}.status-aprovado{background:#F0FDF4;color:#15803D}.status-recusado{background:#FEF2F2;color:#B91C1C}.vazio{font-size:9.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;table-layout:fixed;border-collapse:collapse}th,td{padding:5px 6px;text-align:left;border-bottom:1px solid #ddd;font-size:8.5pt;word-break:break-word;overflow-wrap:break-word}th{background:#f2f2f2;font-weight:600}td.data-col{white-space:nowrap;overflow:visible;word-break:normal;overflow-wrap:normal}thead{display:table-header-group}tr{page-break-inside:avoid}.r{margin-top:22px;font-size:8.5pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:8px}@media print{button{display:none}}</style></head><body></body></html>");
     w.document.close();
     w.document.title="Relatório de Boletos Prorrogados";
     const h1=w.document.createElement("h1");
@@ -1058,17 +1069,17 @@ export default function App() {
     });
     w.document.body.appendChild(meta);
 
-    if(f.tipo==="pendente"||f.tipo==="concluido"){
+    if(f.tipo==="aguardando"||f.tipo==="aprovado"||f.tipo==="recusado"){
       const badge=w.document.createElement("div");
       badge.className="status status-"+f.tipo;
-      badge.textContent="STATUS: "+(f.tipo==="pendente"?"PENDENTE":"APROVADO");
+      badge.textContent="STATUS: "+tituloTipo.toUpperCase();
       w.document.body.appendChild(badge);
     }
 
     // "peso" define a largura relativa da coluna (não um "%" fixo), pra
-    // caber em A4 retrato tanto com 8 colunas (pendentes) quanto com 9
-    // (concluídas, +Aprovado em) sem sobrar nem faltar largura — o % real
-    // de cada uma é peso/somaDosPesos das colunas realmente exibidas.
+    // caber em A4 retrato tanto com 8 colunas (aguardando/recusado) quanto
+    // com 9 (aprovado, +Aprovado em) sem sobrar nem faltar largura — o %
+    // real de cada uma é peso/somaDosPesos das colunas realmente exibidas.
     // Vencimento/Solicitado em/Aprovado em mostram data "DD/MM/AAAA" —
     // marcadas dataCol pra nunca quebrar linha (ver .data-col no <style>
     // acima) e com peso maior que o resto, que tem texto mais curto agora
@@ -1129,13 +1140,16 @@ export default function App() {
       }
     }
 
-    if(f.tipo==="pendente"){
-      criarSecao(null, pendentes, colunasBase, "Nenhuma NF pendente no momento.");
-    } else if(f.tipo==="concluido"){
-      criarSecao(null, concluidas, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
+    if(f.tipo==="aguardando"){
+      criarSecao(null, aguardando, colunasBase, "Nenhuma NF aguardando no momento.");
+    } else if(f.tipo==="aprovado"){
+      criarSecao(null, aprovado, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
+    } else if(f.tipo==="recusado"){
+      criarSecao(null, recusado, colunasBase, "Nenhuma NF recusada no momento.");
     } else {
-      criarSecao("Prorrogações Pendentes", pendentes, colunasBase, "Nenhuma NF pendente no momento.");
-      criarSecao("Prorrogações Concluídas", concluidas, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
+      criarSecao("Aguardando", aguardando, colunasBase, "Nenhuma NF aguardando no momento.");
+      criarSecao("Aprovado", aprovado, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
+      criarSecao("Recusado", recusado, colunasBase, "Nenhuma NF recusada no momento.");
     }
 
     const rodape=w.document.createElement("div");
@@ -2081,8 +2095,9 @@ export default function App() {
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Tipo de relatório</label>
                 <select style={st.inp} value={filtroImp.tipo} onChange={e=>setFiltroImp(p=>({...p,tipo:e.target.value}))}>
                   <option value="todos">Todos</option>
-                  <option value="pendente">Pendentes</option>
-                  <option value="concluido">Aprovados</option>
+                  <option value="aguardando">Aguardando</option>
+                  <option value="aprovado">Aprovado</option>
+                  <option value="recusado">Recusado</option>
                 </select>
               </div>
               <div><label style={st.lbl}>Vencimento de</label><input type="date" style={st.inp} value={filtroImp.de} onChange={e=>setFiltroImp(p=>({...p,de:e.target.value}))}/></div>
