@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Plus, Check, X } from "lucide-react";
 import { MESES, DSEM, TIPO_EV } from "../constants";
+import { situacaoLabel } from "../lib/helpers";
 
 export default function Calendario(p) {
   const D = p.D; const st = p.st;
@@ -26,7 +27,7 @@ export default function Calendario(p) {
 
   const evP = p.prorrogacoes
     .filter(pr => pr.vencimento && pr.vencimento.indexOf(mStr)===0)
-    .map(pr => ({id:"p"+pr.id,data:pr.vencimento,titulo:"NF "+pr.nf+" - "+pr.fornecedor,tipo:"lembrete",responsavel:"",descricao:"Situação: "+pr.situacao,hora:"",auto:true}));
+    .map(pr => ({id:"p"+pr.id,data:pr.vencimento,titulo:"NF "+pr.nf+" - "+pr.fornecedor,tipo:"lembrete",responsavel:"",descricao:"Situação: "+situacaoLabel(pr.situacao),hora:"",auto:true}));
 
   const evM = p.eventos.filter(e => e.data.indexOf(mStr)===0);
   const todos = evT.concat(evP).concat(evM);

@@ -5,6 +5,14 @@ export function getIn(n){ return n.split(" ").map(w=>w[0]).slice(0,2).join("").t
 // Nome a mostrar na tela/relatórios: a versão curta (nomeExibicao), quando
 // a pessoa tiver uma cadastrada, senão o nome completo. Nunca o contrário.
 export function nomeVisivel(u){ return (u&&u.nomeExibicao)||(u&&u.name)||""; }
+// Texto exibido pra situação de uma NF em Prorrogação de Boletos — só
+// traduz o rótulo na tela; o valor salvo em pendencias.situacao continua
+// exatamente "Aguardando retorno" / "Prorrogação Aprovada" (filtros,
+// eCor e a lógica de aprovação seguem comparando com esses valores
+// internos). "Em negociação" e "Recusado" não têm rótulo curto pedido,
+// então caem no "|| s" e aparecem como estão salvos.
+const SITUACAO_LABEL = { "Aguardando retorno":"Aguardando", "Prorrogação Aprovada":"Aprovado" };
+export function situacaoLabel(s){ return SITUACAO_LABEL[s]||s; }
 export function fBRL(v){ return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
 
 // Converte o texto de um campo de valor (ex.: "10.543,33", "10543,33" ou

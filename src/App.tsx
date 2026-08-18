@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel } from "./lib/helpers";
+import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel } from "./lib/helpers";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
@@ -362,7 +362,7 @@ export default function App() {
               </div>
               <div><label style={st.lbl}>Situação</label>
                 <select style={st.inp} value={newPr.situacao} onChange={e=>setNewPr(p=>({...p,situacao:e.target.value}))}>
-                  <option>Aguardando retorno</option><option>Em negociação</option><option>Recusado</option>
+                  <option value="Aguardando retorno">Aguardando</option><option value="Em negociação">Em negociação</option><option value="Recusado">Recusado</option>
                 </select>
               </div>
             </div>
@@ -392,9 +392,9 @@ export default function App() {
                   <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
                   <td data-label="Situação" style={{padding:"10px 8px"}}>
                     <select value={pr.situacao} disabled={isDemo} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
-                      <option>Aguardando retorno</option><option>Em negociação</option><option>Prorrogação Aprovada</option><option>Recusado</option>
+                      <option value="Aguardando retorno">Aguardando</option><option value="Em negociação">Em negociação</option><option value="Prorrogação Aprovada">Aprovado</option><option value="Recusado">Recusado</option>
                     </select>
-                    {pr.situacao==="Prorrogação Aprovada"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>Aprovada em {fData(pr.dataAprovacao)}</div>}
+                    {pr.situacao==="Prorrogação Aprovada"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>Aprovado em {fData(pr.dataAprovacao)}</div>}
                   </td>
                   <td style={{padding:"10px 8px",display:"flex",gap:4}}>
                     {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
@@ -930,7 +930,7 @@ export default function App() {
     if(error) return;
     const anterior=prorrogacoes.find(x=>x.id===id);
     setProrrogacoes(prev=>prev.map(x=>x.id===id?{...x,situacao}:x));
-    if(anterior&&anterior.situacao!==situacao) addA("Status alterado",anterior.fornecedor,anterior.situacao+" → "+situacao);
+    if(anterior&&anterior.situacao!==situacao) addA("Status alterado",anterior.fornecedor,situacaoLabel(anterior.situacao)+" → "+situacaoLabel(situacao));
   }
 
   // "Prorrogação Aprovada" exige informar quando a aprovação aconteceu —
@@ -953,7 +953,7 @@ export default function App() {
     }).eq("id", showAprovarPr);
     if(error){ setDataAprovacaoErr("Não foi possível salvar. Tente novamente."); return; }
     setProrrogacoes(prev=>prev.map(x=>x.id===showAprovarPr?{...x,situacao:"Prorrogação Aprovada",dataAprovacao:dataAprovacaoInput}:x));
-    addA("Status alterado",pr?pr.fornecedor:"",(pr?pr.situacao:"")+" → Prorrogação Aprovada — Data da aprovação: "+fData(dataAprovacaoInput));
+    addA("Status alterado",pr?pr.fornecedor:"",(pr?situacaoLabel(pr.situacao):"")+" → Aprovado — Data da aprovação: "+fData(dataAprovacaoInput));
     setShowAprovarPr(null);
   }
 
@@ -1027,7 +1027,7 @@ export default function App() {
       return a.dataAprovacao<b.dataAprovacao?1:a.dataAprovacao>b.dataAprovacao?-1:0;
     });
     const totalExibido = f.tipo==="pendente"?pendentes.length:f.tipo==="concluido"?concluidas.length:base.length;
-    const tituloTipo = {todos:"Todos",pendente:"Pendentes",concluido:"Concluídos"}[f.tipo]||"Todos";
+    const tituloTipo = {todos:"Todos",pendente:"Pendentes",concluido:"Aprovados"}[f.tipo]||"Todos";
 
     const w=window.open("","_blank");
     if(!w) return;
@@ -1061,7 +1061,7 @@ export default function App() {
     if(f.tipo==="pendente"||f.tipo==="concluido"){
       const badge=w.document.createElement("div");
       badge.className="status status-"+f.tipo;
-      badge.textContent="STATUS: "+(f.tipo==="pendente"?"PENDENTE":"CONCLUÍDO");
+      badge.textContent="STATUS: "+(f.tipo==="pendente"?"PENDENTE":"APROVADO");
       w.document.body.appendChild(badge);
     }
 
@@ -1077,7 +1077,7 @@ export default function App() {
       {h:"Estado", peso:1.2, get:function(pr){ return pr.estado; }},
       {h:"Solicitado em", peso:1.5, get:function(pr){ return pr.criadoEm?fData(pr.criadoEm):"—"; }},
       {h:"Solicitado por", peso:2.2, get:function(pr){ const u=users.find(function(x){return x.id===pr.criadoPor;}); return u?nomeVisivel(u):"—"; }},
-      {h:"Situação", peso:2.6, get:function(pr){ return pr.situacao; }},
+      {h:"Situação", peso:2.6, get:function(pr){ return situacaoLabel(pr.situacao); }},
     ];
     const colunaAprovacao={h:"Aprovado em", peso:1.5, get:function(pr){ return pr.dataAprovacao?fData(pr.dataAprovacao):"—"; }};
 
@@ -2049,7 +2049,7 @@ export default function App() {
         <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={()=>setShowAprovarPr(null)}>
           <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:380,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
             <div style={{width:48,height:48,borderRadius:12,background:D.greenSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><CheckCircle size={22} color={D.green}/></div>
-            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Prorrogação Aprovada</div>
+            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Aprovado</div>
             <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{(prorrogacoes.find(x=>x.id===showAprovarPr)||{fornecedor:""}).fornecedor} — informe a data em que a prorrogação do boleto foi aprovada.</div>
             <label style={st.lbl}>Data da aprovação da prorrogação</label>
             <input type="date" autoFocus style={st.inp} value={dataAprovacaoInput} onChange={e=>{setDataAprovacaoInput(e.target.value);setDataAprovacaoErr("");}}/>
@@ -2077,7 +2077,7 @@ export default function App() {
                 <select style={st.inp} value={filtroImp.tipo} onChange={e=>setFiltroImp(p=>({...p,tipo:e.target.value}))}>
                   <option value="todos">Todos</option>
                   <option value="pendente">Pendentes</option>
-                  <option value="concluido">Concluídos</option>
+                  <option value="concluido">Aprovados</option>
                 </select>
               </div>
               <div><label style={st.lbl}>Vencimento de</label><input type="date" style={st.inp} value={filtroImp.de} onChange={e=>setFiltroImp(p=>({...p,de:e.target.value}))}/></div>
