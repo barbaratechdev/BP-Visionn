@@ -2,6 +2,9 @@ import { hoje, TIPOS_IMG_PERMITIDOS, TAMANHO_MAX_IMG } from "../constants";
 import type { User, Tarefa, Contrato, AuditEntry } from "../types";
 
 export function getIn(n){ return n.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
+// Nome a mostrar na tela/relatórios: a versão curta (nomeExibicao), quando
+// a pessoa tiver uma cadastrada, senão o nome completo. Nunca o contrário.
+export function nomeVisivel(u){ return (u&&u.nomeExibicao)||(u&&u.name)||""; }
 export function fBRL(v){ return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
 
 // Converte o texto de um campo de valor (ex.: "10.543,33", "10543,33" ou
@@ -68,6 +71,7 @@ export function mapProfileRow(row): User {
     email: row.email,
     status: row.status,
     lastAccess: row.last_access ? fmtData(row.last_access) : undefined,
+    nomeExibicao: row.nome_exibicao || "",
   };
 }
 

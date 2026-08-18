@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput } from "./lib/helpers";
+import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel } from "./lib/helpers";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
@@ -98,6 +98,8 @@ export default function App() {
   const [editN, setEditN] = useState("");
   const [editS, setEditS] = useState("");
   const [editSetor, setEditSetor] = useState("");
+  const [nomeExibicaoInput, setNomeExibicaoInput] = useState("");
+  const [nomeExibicaoErr, setNomeExibicaoErr] = useState("");
   const [showNewU, setShowNewU] = useState(false);
   const [newU, setNewU] = useState({name:"",setor:"",role:"func",email:"",senha:""});
   const [newUErr, setNewUErr] = useState("");
@@ -167,6 +169,14 @@ export default function App() {
     return ()=>document.removeEventListener("mousedown",h);
   },[]);
 
+  // Preenche o campo de edição do nome de exibição sempre que troca de
+  // usuário logado (login/logout) — não a cada re-render, pra não apagar
+  // o que a Supervisora está digitando se algo mais no app atualizar
+  // "user" nesse meio-tempo (ex.: status de presença).
+  useEffect(()=>{
+    setNomeExibicaoInput(user?user.nomeExibicao||"":"");
+  },[user&&user.id]);
+
 
   useEffect(()=>{
     let ativo = true;
@@ -186,7 +196,7 @@ export default function App() {
       // Sem "email" de propósito: a coluna foi revogada para "authenticated"
       // no banco (ver migration 20260811160000) — só é lida sob demanda via
       // get_user_email(), quando a Supervisora clica em "Ver e-mail".
-      const { data, error } = await supabase.from("profiles").select("id,name,role,setor,initials,color,photo_url,status,last_access").order("name");
+      const { data, error } = await supabase.from("profiles").select("id,name,role,setor,initials,color,photo_url,status,last_access,nome_exibicao").order("name");
       if(!ativo) return null;
       if(error||!data){ return null; }
       const lista = data.map(mapProfileRow);
@@ -314,7 +324,7 @@ export default function App() {
     if(user){
       supabase.from("auditoria").insert({
         tipo, referencia:tarefa, detalhe,
-        usuario_id:user.id, usuario_nome:user.name,
+        usuario_id:user.id, usuario_nome:nomeVisivel(user),
         tarefa_id:tarefaId||null,
       });
     }
@@ -374,7 +384,7 @@ export default function App() {
                 <tr style={{borderBottom:"1px solid "+D.border}}>
                   <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>
                     {pr.fornecedor}
-                    <div style={{fontSize:10,color:D.muted,fontWeight:400,marginTop:2}}>Incluído por {criador?criador.name:"—"}</div>
+                    <div style={{fontSize:10,color:D.muted,fontWeight:400,marginTop:2}}>Incluído por {criador?nomeVisivel(criador):"—"}</div>
                   </td>
                   <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
                   <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
@@ -1066,7 +1076,7 @@ export default function App() {
       {h:"Vencimento", peso:1.4, get:function(pr){ return pr.vencimento?fData(pr.vencimento):"—"; }},
       {h:"Estado", peso:1.2, get:function(pr){ return pr.estado; }},
       {h:"Solicitado em", peso:1.5, get:function(pr){ return pr.criadoEm?fData(pr.criadoEm):"—"; }},
-      {h:"Solicitado por", peso:2.2, get:function(pr){ const u=users.find(function(x){return x.id===pr.criadoPor;}); return u?u.name:"—"; }},
+      {h:"Solicitado por", peso:2.2, get:function(pr){ const u=users.find(function(x){return x.id===pr.criadoPor;}); return u?nomeVisivel(u):"—"; }},
       {h:"Situação", peso:2.6, get:function(pr){ return pr.situacao; }},
     ];
     const colunaAprovacao={h:"Aprovado em", peso:1.5, get:function(pr){ return pr.dataAprovacao?fData(pr.dataAprovacao):"—"; }};
@@ -1172,6 +1182,21 @@ export default function App() {
     setEditU(null); setEditN(""); setEditS(""); setEditSetor("");
   }
 
+  // Nome de exibição: só a Supervisora tem esse controle na tela (ver "Meu
+  // Perfil" abaixo); o gatilho proteger_profiles_role_setor também bloqueia
+  // no banco quem não é admin, então isso não depende só de esconder botão.
+  // Nome completo (profiles.name) nunca é tocado aqui.
+  async function salvarNomeExibicao(){
+    if(!isAdmin||!user) return;
+    const valor=nomeExibicaoInput.trim();
+    const { error } = await supabase.from("profiles").update({ nome_exibicao: valor||null }).eq("id", user.id);
+    if(error){ setNomeExibicaoErr("Não foi possível salvar. Tente novamente."); return; }
+    const up=users.map(u=>u.id===user.id?{...u,nomeExibicao:valor}:u);
+    setUsers(up); setUser(up.find(u=>u.id===user.id));
+    setNomeExibicaoErr("");
+    addA("Edição de informações",user.name,"Nome de exibição atualizado"+(valor?" para \""+valor+"\"":" (removido, volta a usar o nome completo)"));
+  }
+
   // E-mail de outro usuário só é buscado quando a Supervisora clica em "Ver
   // e-mail" — a coluna nem vem na listagem (ver sincronizarUsuarios). O
   // backend (get_user_email, security definer) confere is_admin() de novo,
@@ -1253,7 +1278,7 @@ export default function App() {
       const cores = ["#2563EB","#8B5CF6","#F59E0B","#22C55E","#EF4444"];
       const { data: atualizado, error: updErr } = await supabase.from("profiles").update({
         setor, role: newU.role, initials: getIn(nome), color: cores[users.length%cores.length],
-      }).eq("id", created.id).select("id,name,role,setor,initials,color,photo_url,status,last_access").single();
+      }).eq("id", created.id).select("id,name,role,setor,initials,color,photo_url,status,last_access,nome_exibicao").single();
       if(updErr || !atualizado){
         setNewUErr("Usuário criado no login, mas não foi possível salvar setor/cargo. Edite pela lista de Equipe.");
         return;
@@ -1476,7 +1501,7 @@ export default function App() {
             )}
           </div>
           <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={D.white} size={32}/>
-          <div className="bv-header-username"><div style={{fontSize:13,fontWeight:600,color:D.text}}>{user.name}</div><div style={{fontSize:11,color:D.muted}}>{user.setor}</div></div>
+          <div className="bv-header-username"><div style={{fontSize:13,fontWeight:600,color:D.text}}>{nomeVisivel(user)}</div><div style={{fontSize:11,color:D.muted}}>{user.setor}</div></div>
           <button style={{...st.btn,padding:"6px 10px",border:"none",background:D.bg}} onClick={doLogout}><LogOut size={15} color={D.muted}/></button>
         </div>
       </div>
@@ -1488,7 +1513,7 @@ export default function App() {
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 4px",marginBottom:16}}>
             <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={dark?D.white:"#f8fafc"} size={36}/>
             <div style={{minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:D.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Olá, {user.name}!</div>
+              <div style={{fontSize:13,fontWeight:600,color:D.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Olá, {nomeVisivel(user)}!</div>
               <div style={{fontSize:11,color:D.muted}}>{roleLabel(user.role)}</div>
             </div>
           </div>
@@ -1619,7 +1644,7 @@ export default function App() {
             <div>
               {!isAdmin&&!isDemo&&(
                 <div style={{marginBottom:20}}>
-                  <div style={{fontSize:16,fontWeight:700,color:D.text,marginBottom:4}}>Olá, {user.name}! 👋</div>
+                  <div style={{fontSize:16,fontWeight:700,color:D.text,marginBottom:4}}>Olá, {nomeVisivel(user)}! 👋</div>
                   <div style={{fontSize:13,color:D.muted,marginBottom:14}}>{user.setor}</div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:10,marginBottom:16}}>
                     {[
@@ -1945,8 +1970,22 @@ export default function App() {
                   )}
                 </div>
                 <div style={{flex:1,minWidth:220}}>
-                  <div style={{fontWeight:700,fontSize:18,color:D.text}}>{user.name}</div>
-                  <div style={{fontSize:13,color:D.muted,marginTop:2}}>{user.setor} · {roleLabel(user.role)}</div>
+                  {isAdmin?(
+                    <>
+                      <div style={{fontSize:11,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,fontWeight:600}}>Nome completo</div>
+                      <div style={{fontWeight:700,fontSize:18,color:D.text,marginBottom:14}}>{user.name}</div>
+                      <label style={st.lbl}>Nome de exibição</label>
+                      <div style={{display:"flex",gap:8,maxWidth:320}}>
+                        <input style={st.inp} placeholder={user.name} value={nomeExibicaoInput} onChange={e=>{setNomeExibicaoInput(e.target.value);setNomeExibicaoErr("");}}/>
+                        {nomeExibicaoInput.trim()!==(user.nomeExibicao||"")&&<button style={{...st.btnBlue,padding:"0 14px"}} title="Salvar nome de exibição" onClick={salvarNomeExibicao}><Save size={14}/></button>}
+                      </div>
+                      <div style={{fontSize:11,color:D.muted,marginTop:5}}>Usado no lugar do nome completo na tela e em relatórios impressos. Deixe em branco pra voltar a usar o nome completo.</div>
+                      {nomeExibicaoErr&&<div style={{fontSize:12,color:D.redText,marginTop:6,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{nomeExibicaoErr}</div>}
+                    </>
+                  ):(
+                    <div style={{fontWeight:700,fontSize:18,color:D.text}}>{user.name}</div>
+                  )}
+                  <div style={{fontSize:13,color:D.muted,marginTop:12}}>{user.setor} · {roleLabel(user.role)}</div>
                   <div style={{fontSize:13,color:D.muted,marginTop:12}}>{user.email||"E-mail não informado"}</div>
                   <div style={{fontSize:12,color:D.muted,marginTop:12}}>Último acesso: {user.lastAccess||"—"}</div>
                 </div>
