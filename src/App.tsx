@@ -110,7 +110,6 @@ export default function App() {
   const [delUserLoading, setDelUserLoading] = useState(false);
   const [delUserErr, setDelUserErr] = useState("");
   const [revealedEmails, setRevealedEmails] = useState<Record<string,string>>({});
-  const [emailLoadingId, setEmailLoadingId] = useState<string | null>(null);
   const [emailErr, setEmailErr] = useState<Record<string,string>>({});
   const [editT, setEditT] = useState<string | null>(null);
   const [editTData, setEditTData] = useState({fornecedor:"",valor:"" as number | string,vencimento:"",responsavel:"",obs:"",status:"pendente"});
@@ -125,6 +124,14 @@ export default function App() {
   const isFin   = user && user.setor==="Financeiro";
   const isRH    = user && user.setor==="RH";
   const isDemo  = user && user.role==="demo";
+  // Aba RH: liberada pontualmente pra Maria K (setor cadastrado é
+  // "RH - Cadastro", que não bate com o valor exato "RH" checado acima) —
+  // por id, não por nome, pra não depender de texto e não arriscar
+  // liberar a aba pra outra pessoa com nome parecido. Não altera o setor
+  // real dela no banco. Escopado só à aba RH, sem estender
+  // Representantes/Supervisores (que hoje acompanham isRH).
+  const ID_RH_TELA_EXTRA = "273eca2f-509e-424a-a12e-bcf3ce7c7a7e";
+  const isRHTelaExtra = !!(user && user.id===ID_RH_TELA_EXTRA);
   // Aba Supervisores: além de admin, liberada nominalmente pra Esmeralda,
   // Carol (Financeiro) e Ana — não existe controle de acesso por pessoa no
   // sistema, então o critério aqui é o primeiro nome do perfil
@@ -343,8 +350,20 @@ export default function App() {
   function renderProrrogacoesCard(limite?:number){
     // Listagem sempre agrupada por status — Aguardando → Recusado →
     // Aprovado — nunca por fornecedor/NF/vencimento/data de cadastro.
-    // Sort estável: dentro do mesmo status, mantém a ordem original.
-    const ordenadas = prorrogacoes.slice().sort((a,b)=>ordemSituacao(a.situacao)-ordemSituacao(b.situacao));
+    // Dentro de Aprovado, ordena pela data de conclusão (dataAprovacao)
+    // decrescente — mais recente no topo — igual ao relatório impresso
+    // (ver imprimirProrrogacoes). Nos demais grupos, sort estável: mantém
+    // a ordem original.
+    const ordenadas = prorrogacoes.slice().sort((a,b)=>{
+      const oa=ordemSituacao(a.situacao), ob=ordemSituacao(b.situacao);
+      if(oa!==ob) return oa-ob;
+      if(a.situacao==="Prorrogação Aprovada"&&b.situacao==="Prorrogação Aprovada"){
+        if(!a.dataAprovacao) return 1;
+        if(!b.dataAprovacao) return -1;
+        return a.dataAprovacao<b.dataAprovacao?1:a.dataAprovacao>b.dataAprovacao?-1:0;
+      }
+      return 0;
+    });
     const lista = limite ? ordenadas.slice(0,limite) : ordenadas;
     return (
       <div className="bv-card" style={{...st.card,marginBottom:20}}>
@@ -535,7 +554,14 @@ export default function App() {
                     {t.obs&&<div style={{fontSize:12,color:D.muted,marginTop:4,fontStyle:"italic"}}>{t.obs}</div>}
                   </div>
                 </div>
-                <Badge status={t.status}/>
+                {isAdmin?(()=>{const sc=TAREFA_STATUS_COR[t.status]||TAREFA_STATUS_COR.pendente; return (
+                  <select value={t.status} onChange={e=>{const v=e.target.value; if(v==="pago"){setConfirm(t.id);} else {mudarStatusTarefa(t.id,v);}}} style={{fontSize:11,fontWeight:600,background:sc.bg,color:sc.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
+                    <option value="pendente">Pendente</option>
+                    <option value="vencido">Urgente</option>
+                    <option value="pago">Concluído</option>
+                    {t.status==="prorrogado"&&<option value="prorrogado" style={{display:"none"}}>Prorrogado</option>}
+                  </select>
+                );})():<Badge status={t.status}/>}
               </div>
               {t.historico&&t.historico.length>0&&(
                 <div style={{marginTop:10,padding:"8px 12px",background:D.bg,borderRadius:8,fontSize:12,color:D.muted,borderLeft:"3px solid "+D.blue}}>
@@ -725,6 +751,26 @@ export default function App() {
     if(error) return;
     setTarefas(prev=>prev.map(x=>x.id===id?{...x,status:"pendente"}:x));
     addA("Status alterado",t.fornecedor,"Concluída → Pendente",id);
+  }
+
+  const TAREFA_STATUS_LABEL = { pendente:"Pendente", vencido:"Urgente", pago:"Concluída", prorrogado:"Prorrogado" };
+  // Mesmas cores do Badge (components/Badge.tsx) — fixas, não seguem o tema
+  // dark/light, pra ficar visualmente idêntico ao badge estático que esse
+  // seletor substitui pra quem é admin.
+  const TAREFA_STATUS_COR = { pendente:{bg:"#FFFBEB",c:"#B45309"}, vencido:{bg:"#FEF2F2",c:"#B91C1C"}, pago:{bg:"#F0FDF4",c:"#15803D"}, prorrogado:{bg:"#EFF6FF",c:"#1D4ED8"} };
+  // Troca direta de status a partir do seletor no card da tarefa (mesmo
+  // padrão do select de Situação em Prorrogação de Boletos) — some pra
+  // "pago" passa pelo modal de confirmação (setConfirm), o resto muda na
+  // hora. Só "pendente" recalcula vencido/pendente pela data (mesma regra
+  // de salvarEditT); Urgente e Prorrogado são escolhas explícitas.
+  async function mudarStatusTarefa(id,novoStatus){
+    if(bloqueadoDemo()) return;
+    const t=tarefas.find(x=>x.id===id); if(!t||t.status===novoStatus) return;
+    const status = novoStatus==="pendente" ? (t.vencimento<hoje?"vencido":"pendente") : novoStatus;
+    const { error } = await supabase.from("tarefas").update({ status }).eq("id", id);
+    if(error) return;
+    setTarefas(prev=>prev.map(x=>x.id===id?{...x,status}:x));
+    addA("Status alterado",t.fornecedor,(TAREFA_STATUS_LABEL[t.status]||t.status)+" → "+(TAREFA_STATUS_LABEL[status]||status),id);
   }
 
   async function prorrogar(id){
@@ -1095,7 +1141,7 @@ export default function App() {
       {h:"Vencimento", peso:1.7, dataCol:true, get:function(pr){ return pr.vencimento?fData(pr.vencimento):"—"; }},
       {h:"Estado", peso:0.9, get:function(pr){ return pr.estado; }},
       {h:"Solicitado em", peso:1.7, dataCol:true, get:function(pr){ return pr.criadoEm?fData(pr.criadoEm):"—"; }},
-      {h:"Solicitado por", peso:1.8, get:function(pr){ const u=users.find(function(x){return x.id===pr.criadoPor;}); return u?nomeVisivel(u):"—"; }},
+      {h:"Incluso por", peso:1.8, get:function(pr){ const u=users.find(function(x){return x.id===pr.criadoPor;}); return u?nomeVisivel(u):"—"; }},
       {h:"Situação", peso:1.6, get:function(pr){ return situacaoLabel(pr.situacao); }},
     ];
     const colunaAprovacao={h:"Aprovado em", peso:1.7, dataCol:true, get:function(pr){ return pr.dataAprovacao?fData(pr.dataAprovacao):"—"; }};
@@ -1220,22 +1266,35 @@ export default function App() {
     addA("Edição de informações",user.name,"Nome de exibição atualizado"+(valor?" para \""+valor+"\"":" (removido, volta a usar o nome completo)"));
   }
 
-  // E-mail de outro usuário só é buscado quando a Supervisora clica em "Ver
-  // e-mail" — a coluna nem vem na listagem (ver sincronizarUsuarios). O
-  // backend (get_user_email, security definer) confere is_admin() de novo,
-  // então mesmo essa chamada não adianta nada pra quem não é Supervisora.
+  // E-mail de outro usuário: a coluna nem vem na listagem geral (ver
+  // sincronizarUsuarios) — só chega por essa chamada, buscada uma vez por
+  // pessoa automaticamente ao abrir Configurações > Equipe (ver o useEffect
+  // que dispara isso pra cada usuário). O backend (get_user_email, security
+  // definer) confere is_admin() de novo, então mesmo essa chamada não
+  // adianta nada pra quem não é Supervisora — a restrição de verdade
+  // continua no banco, isso aqui só tira o clique extra da UI.
   async function verEmail(id){
     if(bloqueadoDemo()) return;
-    if(revealedEmails[id]) return;
-    setEmailLoadingId(id); setEmailErr(p=>({...p,[id]:""}));
+    if(revealedEmails[id]||emailErr[id]) return;
+    setEmailErr(p=>({...p,[id]:""}));
     const { data, error } = await supabase.rpc("get_user_email", { target_id: id });
-    setEmailLoadingId(null);
     if(error || typeof data!=="string"){
       setEmailErr(p=>({...p,[id]:"Não foi possível carregar o e-mail."}));
       return;
     }
     setRevealedEmails(p=>({...p,[id]:data}));
   }
+
+  // Carrega o e-mail de toda a Equipe automaticamente assim que a lista de
+  // usuários chega pra Supervisora — antes exigia clique em "Ver e-mail"
+  // por pessoa; a proteção (get_user_email é admin-only no banco) continua
+  // a mesma, só a UI deixou de exigir a ação manual. Não faz nada pra quem
+  // não é admin: users vem populado igual pra todo mundo (diretório), mas
+  // só a Supervisora consegue de fato ler o e-mail via essa RPC.
+  useEffect(()=>{
+    if(!isAdmin||users.length===0) return;
+    users.forEach(u=>{ verEmail(u.id); });
+  },[isAdmin, users]);
 
   function abrirConfirmDelUser(id,name){
     if(bloqueadoDemo()) return;
@@ -1325,7 +1384,7 @@ export default function App() {
     {id:"pendencias",label:"Pendências",Icon:Clock,show:true},
     {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:isAdmin||isFin||isDemo},
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
-    {id:"rh",label:"RH",Icon:Briefcase,show:isAdmin||isRH},
+    {id:"rh",label:"RH",Icon:Briefcase,show:isAdmin||isRH||isRHTelaExtra},
     {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin||isDemo},
     {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin||isRH||isDemo},
     {id:"supervisores",label:"Supervisores",Icon:UserCog,show:isAdmin||isSupervisoresExtra||isRH},
@@ -1926,7 +1985,7 @@ export default function App() {
           )}
 
           {/* RH */}
-          {tab==="rh"&&(isAdmin||isRH)&&(
+          {tab==="rh"&&(isAdmin||isRH||isRHTelaExtra)&&(
             <RH D={D} st={st} addA={addA} addN={addN}/>
           )}
 
@@ -2038,15 +2097,15 @@ export default function App() {
                         <>
                           <div style={{fontWeight:500,fontSize:14,color:D.text}}>{u.name}</div>
                           <div style={{fontSize:12,color:D.muted,marginTop:2}}>{u.setor} · {roleLabel(u.role)}</div>
-                          {revealedEmails[u.id]&&<div style={{fontSize:12,color:D.muted,marginTop:2}}>{revealedEmails[u.id]}</div>}
+                          <div style={{fontSize:12,color:D.muted,marginTop:2}}>{revealedEmails[u.id]||(emailErr[u.id]?"":"Carregando e-mail...")}</div>
                           {emailErr[u.id]&&<div style={{fontSize:11,color:D.redText,marginTop:2}}>{emailErr[u.id]}</div>}
+                          <div style={{fontSize:11,color:D.muted,marginTop:2}}>Último acesso: {u.lastAccess||"—"}</div>
                         </>
                       )}
                     </div>
                     {editU!==u.id&&(
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <span style={{fontSize:12,background:u.role==="admin"?D.blueSoft:D.bg,color:u.role==="admin"?D.blueText:D.muted,borderRadius:20,padding:"3px 10px",fontWeight:500}}>{u.setor}</span>
-                        {!revealedEmails[u.id]&&<button style={{...st.btn,padding:"6px 8px"}} title="Ver e-mail" disabled={emailLoadingId===u.id} onClick={()=>verEmail(u.id)}><Mail size={13} color={D.muted}/></button>}
                         <button style={{...st.btn,padding:"6px 8px"}} onClick={()=>{setEditU(u.id);setEditN(u.name);setEditS("");setEditSetor(u.setor);}}><Pencil size={13} color={D.muted}/></button>
                         {u.id!==user.id&&<button style={{...st.btn,padding:"6px 8px",color:D.redText,borderColor:D.red+"44"}} title="Excluir usuário" onClick={()=>abrirConfirmDelUser(u.id,u.name)}><Trash2 size={13}/></button>}
                       </div>
