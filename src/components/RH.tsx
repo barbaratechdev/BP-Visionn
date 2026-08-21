@@ -4,8 +4,9 @@ import { supabase } from "../lib/supabase";
 import { fData, mapFuncionarioRow } from "../lib/helpers";
 import { hoje } from "../constants";
 import Av from "./Av";
+import Ferias from "./Ferias";
 
-const FORM_VAZIO = {id:null,nome:"",telefone:"",dataEntrada:hoje,tipoVinculo:"Efetivo",valeTransporte:false,valeRefeicao:false,observacoes:"",status:"Ativo",dataSaida:""};
+const FORM_VAZIO = {id:null,nome:"",setor:"",telefone:"",dataEntrada:hoje,tipoVinculo:"Efetivo",valeTransporte:false,valeRefeicao:false,observacoes:"",status:"Ativo",dataSaida:""};
 
 // Aba "RH" — cadastro de funcionários da empresa, mantido pelo setor de
 // RH. Separado de "profiles" (contas de login), "representantes"
@@ -19,6 +20,7 @@ const FORM_VAZIO = {id:null,nome:"",telefone:"",dataEntrada:hoje,tipoVinculo:"Ef
 // situação, sem camada extra de permissão nominal.
 export default function RH(p) {
   const D = p.D, st = p.st, addA = p.addA, addN = p.addN;
+  const [aba, setAba] = useState("funcionarios");
   const [lista, setLista] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
@@ -44,7 +46,7 @@ export default function RH(p) {
   }
 
   function abrirEditar(f){
-    setForm({id:f.id,nome:f.nome,telefone:f.telefone,dataEntrada:f.dataEntrada,tipoVinculo:f.tipoVinculo,valeTransporte:f.valeTransporte,valeRefeicao:f.valeRefeicao,observacoes:f.observacoes,status:f.status,dataSaida:f.dataSaida});
+    setForm({id:f.id,nome:f.nome,setor:f.setor,telefone:f.telefone,dataEntrada:f.dataEntrada,tipoVinculo:f.tipoVinculo,valeTransporte:f.valeTransporte,valeRefeicao:f.valeRefeicao,observacoes:f.observacoes,status:f.status,dataSaida:f.dataSaida});
     setFormErr(""); setShowForm(true);
   }
 
@@ -56,6 +58,7 @@ export default function RH(p) {
     setSalvando(true); setFormErr("");
     const payload = {
       nome: form.nome.trim(),
+      setor: form.setor.trim()||null,
       telefone: form.telefone||null,
       data_entrada: form.dataEntrada||hoje,
       tipo_vinculo: form.tipoVinculo,
@@ -91,10 +94,20 @@ export default function RH(p) {
     (!busca || f.nome.toLowerCase().includes(busca.toLowerCase()) || f.telefone.includes(busca))
   );
 
-  if(loading) return <div style={{textAlign:"center",padding:"2rem",color:D.muted,fontSize:13}}>Carregando funcionários...</div>;
-
   return (
     <div>
+      <div style={{display:"flex",gap:4,marginBottom:20,background:D.bg,borderRadius:10,padding:4,width:"fit-content"}}>
+        {[{id:"funcionarios",label:"👥 Funcionários"},{id:"ferias",label:"🏖️ Férias"}].map(a=>(
+          <button key={a.id} onClick={()=>setAba(a.id)} style={{padding:"7px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:aba===a.id?600:400,background:aba===a.id?D.white:"transparent",color:aba===a.id?D.text:D.muted}}>{a.label}</button>
+        ))}
+      </div>
+
+      {aba==="ferias"?(
+        <Ferias D={D} st={st} addA={addA} addN={addN} funcionarios={lista}/>
+      ):loading?(
+        <div style={{textAlign:"center",padding:"2rem",color:D.muted,fontSize:13}}>Carregando funcionários...</div>
+      ):(
+      <>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
         <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>RH</div><div style={{fontSize:13,color:D.muted}}>{visiveis.length} funcionário(s)</div></div>
         <button style={st.btnBlue} onClick={abrirNovo}><Plus size={15}/>Novo Funcionário</button>
@@ -130,7 +143,7 @@ export default function RH(p) {
         {visiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum funcionário encontrado.</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Funcionário","Telefone","Vínculo","VT","VR","Data de início","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Funcionário","Setor","Telefone","Vínculo","VT","VR","Data de início","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
             <tbody>{visiveis.map(f=>(
               <tr key={f.id} style={{borderBottom:"1px solid "+D.border}}>
                 <td data-label="Funcionário" style={{padding:"10px 8px"}}>
@@ -139,6 +152,7 @@ export default function RH(p) {
                     <div style={{fontWeight:500,color:D.text}}>{f.nome}</div>
                   </div>
                 </td>
+                <td data-label="Setor" style={{padding:"10px 8px",color:D.muted}}>{f.setor||"—"}</td>
                 <td data-label="Telefone" style={{padding:"10px 8px",color:D.muted}}>{f.telefone||"—"}</td>
                 <td data-label="Vínculo" style={{padding:"10px 8px",color:D.muted}}>{f.tipoVinculo}</td>
                 <td data-label="VT" style={{padding:"10px 8px",color:D.muted}}>{f.valeTransporte?"Sim":"Não"}</td>
@@ -168,6 +182,7 @@ export default function RH(p) {
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome completo</label><input autoFocus style={st.inp} value={form.nome} onChange={e=>{setForm(f=>({...f,nome:e.target.value}));setFormErr("");}}/></div>
+              <div><label style={st.lbl}>Setor</label><input style={st.inp} placeholder="Ex.: Financeiro" value={form.setor} onChange={e=>setForm(f=>({...f,setor:e.target.value}))}/></div>
               <div><label style={st.lbl}>Número de telefone</label><input style={st.inp} value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))}/></div>
               <div><label style={st.lbl}>Data de início</label><input type="date" style={st.inp} value={form.dataEntrada} onChange={e=>setForm(f=>({...f,dataEntrada:e.target.value}))}/></div>
               <div><label style={st.lbl}>Tipo de vínculo</label>
@@ -228,6 +243,7 @@ export default function RH(p) {
             <div style={{fontSize:11,fontWeight:600,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:6}}>Dados do vínculo</div>
             <div style={{background:D.bg,borderRadius:10,padding:"4px 14px",marginBottom:16}}>
               {[
+                {label:"Setor", value:detalheDe.setor||"—"},
                 {label:"Telefone", value:detalheDe.telefone||"—"},
                 {label:"Data de início", value:detalheDe.dataEntrada?fData(detalheDe.dataEntrada):"—"},
                 {label:"Tipo de vínculo", value:detalheDe.tipoVinculo},
@@ -252,6 +268,8 @@ export default function RH(p) {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

@@ -205,6 +205,7 @@ export function mapFuncionarioRow(row){
   return {
     id: row.id,
     nome: row.nome,
+    setor: row.setor || "",
     telefone: row.telefone || "",
     dataEntrada: row.data_entrada || "",
     tipoVinculo: row.tipo_vinculo,
@@ -213,6 +214,25 @@ export function mapFuncionarioRow(row){
     observacoes: row.observacoes || "",
     status: row.status,
     dataSaida: row.data_saida || "",
+  };
+}
+
+// Converte uma linha da tabela ferias (+ funcionarios aninhado, via
+// funcionario_id) para a UI. "dias" vem pronto do banco (coluna gerada
+// dias_corridos) — nunca recalculado no cliente.
+export function mapFeriasRow(row){
+  return {
+    id: row.id,
+    funcionarioId: row.funcionario_id,
+    funcionarioNome: row.funcionarios ? row.funcionarios.nome : "",
+    funcionarioSetor: row.funcionarios ? (row.funcionarios.setor || "") : "",
+    periodoAquisitivoInicio: row.periodo_aquisitivo_inicio || "",
+    periodoAquisitivoFim: row.periodo_aquisitivo_fim || "",
+    dataInicio: row.data_inicio || "",
+    dataFim: row.data_fim || "",
+    dias: row.dias_corridos==null ? "" : row.dias_corridos,
+    status: row.status,
+    observacoes: row.observacoes || "",
   };
 }
 
