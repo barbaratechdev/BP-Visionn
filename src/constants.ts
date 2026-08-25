@@ -16,3 +16,9 @@ export const AUDIT_IC = { "Tarefa criada":"✅","Status alterado":"🔄","Respon
 
 export const TIPOS_IMG_PERMITIDOS = ["image/png","image/jpeg"];
 export const TAMANHO_MAX_IMG = 5*1024*1024;
+
+// Localidades/filiais onde a empresa tem funcionários (RH > Funcionários).
+// Lista fechada — mesmos valores checados no banco (ver
+// 20260821000020_funcionarios_estado_filial.sql), então o seletor nunca
+// grava algo fora do que o check constraint aceita.
+export const ESTADOS_FILIAL = ["PA — Benevides","PA — Ananindeua (Filial)","MA","PI"];

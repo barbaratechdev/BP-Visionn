@@ -1,12 +1,27 @@
 import { useEffect, useState } from "react";
 import { Plus, Search, X, Pencil, Eye, Save, AlertCircle, Briefcase } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { fData, mapFuncionarioRow } from "../lib/helpers";
-import { hoje } from "../constants";
+import { fData, fTempoDeEmpresa, mapFuncionarioRow } from "../lib/helpers";
+import { hoje, ESTADOS_FILIAL } from "../constants";
 import Av from "./Av";
 import Ferias from "./Ferias";
 
-const FORM_VAZIO = {id:null,nome:"",setor:"",telefone:"",dataEntrada:hoje,tipoVinculo:"Efetivo",valeTransporte:false,valeRefeicao:false,observacoes:"",status:"Ativo",dataSaida:""};
+const FORM_VAZIO = {id:null,nome:"",setor:"",estadoFilial:"",telefone:"",dataEntrada:hoje,tipoVinculo:"Efetivo",valeTransporte:false,valeRefeicao:false,observacoes:"",status:"Ativo",dataSaida:""};
+
+// Traduz o erro do Supabase pra uma mensagem útil sem despejar jargão de
+// banco pra quem não é dev (a tela é usada pelo RH, não por devs) — mas
+// também sem esconder o problema atrás da mesma mensagem genérica sempre.
+// O erro completo (code/message/details/hint) sempre vai pro console,
+// pra quem for investigar ter o dado real na mão.
+function mensagemErroSalvarFuncionario(error){
+  console.error("Erro ao salvar funcionário (funcionarios):", error);
+  if(!error) return "Não foi possível salvar. Verifique os dados e tente novamente.";
+  if(error.code==="42501") return "Você não tem permissão para cadastrar ou editar funcionários. Fale com a administração do sistema.";
+  if(error.code==="23502") return "Preencha todos os campos obrigatórios antes de salvar.";
+  if(error.code==="23514") return "Um dos valores informados não é válido — confira os campos Estado/Filial, Tipo de vínculo e Status.";
+  if(error.code==="23505") return "Já existe um registro com esses dados.";
+  return "Não foi possível salvar"+(error.code?" (código "+error.code+")":"")+". Se o problema continuar, informe esse código ao suporte.";
+}
 
 // Aba "RH" — cadastro de funcionários da empresa, mantido pelo setor de
 // RH. Separado de "profiles" (contas de login), "representantes"
@@ -46,7 +61,7 @@ export default function RH(p) {
   }
 
   function abrirEditar(f){
-    setForm({id:f.id,nome:f.nome,setor:f.setor,telefone:f.telefone,dataEntrada:f.dataEntrada,tipoVinculo:f.tipoVinculo,valeTransporte:f.valeTransporte,valeRefeicao:f.valeRefeicao,observacoes:f.observacoes,status:f.status,dataSaida:f.dataSaida});
+    setForm({id:f.id,nome:f.nome,setor:f.setor,estadoFilial:f.estadoFilial,telefone:f.telefone,dataEntrada:f.dataEntrada,tipoVinculo:f.tipoVinculo,valeTransporte:f.valeTransporte,valeRefeicao:f.valeRefeicao,observacoes:f.observacoes,status:f.status,dataSaida:f.dataSaida});
     setFormErr(""); setShowForm(true);
   }
 
@@ -59,6 +74,7 @@ export default function RH(p) {
     const payload = {
       nome: form.nome.trim(),
       setor: form.setor.trim()||null,
+      estado_filial: form.estadoFilial||null,
       telefone: form.telefone||null,
       data_entrada: form.dataEntrada||hoje,
       tipo_vinculo: form.tipoVinculo,
@@ -73,7 +89,7 @@ export default function RH(p) {
       : supabase.from("funcionarios").insert(payload).select().single();
     const { data, error } = await query;
     setSalvando(false);
-    if(error||!data){ setFormErr("Não foi possível salvar. Verifique os dados e tente novamente."); return; }
+    if(error||!data){ setFormErr(mensagemErroSalvarFuncionario(error)); return; }
     const linha = mapFuncionarioRow(data);
     setLista(prev=>{
       const semEle = prev.filter(f=>f.id!==linha.id);
@@ -143,7 +159,7 @@ export default function RH(p) {
         {visiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum funcionário encontrado.</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Funcionário","Setor","Telefone","Vínculo","VT","VR","Data de início","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Funcionário","Setor","Estado/Filial","Telefone","Vínculo","VT","VR","Data de início","Tempo de empresa","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
             <tbody>{visiveis.map(f=>(
               <tr key={f.id} style={{borderBottom:"1px solid "+D.border}}>
                 <td data-label="Funcionário" style={{padding:"10px 8px"}}>
@@ -153,11 +169,13 @@ export default function RH(p) {
                   </div>
                 </td>
                 <td data-label="Setor" style={{padding:"10px 8px",color:D.muted}}>{f.setor||"—"}</td>
+                <td data-label="Estado/Filial" style={{padding:"10px 8px",color:D.muted}}>{f.estadoFilial||"—"}</td>
                 <td data-label="Telefone" style={{padding:"10px 8px",color:D.muted}}>{f.telefone||"—"}</td>
                 <td data-label="Vínculo" style={{padding:"10px 8px",color:D.muted}}>{f.tipoVinculo}</td>
                 <td data-label="VT" style={{padding:"10px 8px",color:D.muted}}>{f.valeTransporte?"Sim":"Não"}</td>
                 <td data-label="VR" style={{padding:"10px 8px",color:D.muted}}>{f.valeRefeicao?"Sim":"Não"}</td>
                 <td data-label="Data de início" style={{padding:"10px 8px",color:D.muted}}>{f.dataEntrada?fData(f.dataEntrada):"—"}</td>
+                <td data-label="Tempo de empresa" style={{padding:"10px 8px",color:D.muted}}>{fTempoDeEmpresa(f.dataEntrada)}</td>
                 <td data-label="Status" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:f.status==="Ativo"?D.greenSoft:D.redSoft,color:f.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{f.status}</span></td>
                 <td style={{padding:"10px 8px"}}>
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
@@ -183,6 +201,12 @@ export default function RH(p) {
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome completo</label><input autoFocus style={st.inp} value={form.nome} onChange={e=>{setForm(f=>({...f,nome:e.target.value}));setFormErr("");}}/></div>
               <div><label style={st.lbl}>Setor</label><input style={st.inp} placeholder="Ex.: Financeiro" value={form.setor} onChange={e=>setForm(f=>({...f,setor:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Estado/Filial</label>
+                <select style={st.inp} value={form.estadoFilial} onChange={e=>setForm(f=>({...f,estadoFilial:e.target.value}))}>
+                  <option value="">Selecione...</option>
+                  {ESTADOS_FILIAL.map(ef=><option key={ef} value={ef}>{ef}</option>)}
+                </select>
+              </div>
               <div><label style={st.lbl}>Número de telefone</label><input style={st.inp} value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))}/></div>
               <div><label style={st.lbl}>Data de início</label><input type="date" style={st.inp} value={form.dataEntrada} onChange={e=>setForm(f=>({...f,dataEntrada:e.target.value}))}/></div>
               <div><label style={st.lbl}>Tipo de vínculo</label>
@@ -244,8 +268,10 @@ export default function RH(p) {
             <div style={{background:D.bg,borderRadius:10,padding:"4px 14px",marginBottom:16}}>
               {[
                 {label:"Setor", value:detalheDe.setor||"—"},
+                {label:"Estado/Filial", value:detalheDe.estadoFilial||"—"},
                 {label:"Telefone", value:detalheDe.telefone||"—"},
                 {label:"Data de início", value:detalheDe.dataEntrada?fData(detalheDe.dataEntrada):"—"},
+                {label:"Tempo de empresa", value:fTempoDeEmpresa(detalheDe.dataEntrada)},
                 {label:"Tipo de vínculo", value:detalheDe.tipoVinculo},
                 {label:"Vale-Transporte", value:detalheDe.valeTransporte?"Sim":"Não"},
                 {label:"Vale-Refeição", value:detalheDe.valeRefeicao?"Sim":"Não"},
