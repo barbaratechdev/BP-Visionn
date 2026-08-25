@@ -53,6 +53,19 @@ export function sanitizarMoedaInput(v){
   if(i!==-1) s = s.slice(0,i+1) + s.slice(i+1).replace(/,/g,"").slice(0,2);
   return s;
 }
+// Mesma sanitização de sanitizarMoedaInput, mas já com o separador de
+// milhar aplicado na parte inteira — pra campos que precisam mostrar a
+// máscara completa a cada tecla digitada (onChange), não só ao sair do
+// campo (isso fica a cargo de fMoedaInput, que também arredonda/completa
+// as 2 casas decimais). Nunca mexe na parte decimal digitada até aqui —
+// só agrupa milhar na parte inteira, sem forçar ",00" no meio da digitação.
+export function fMoedaInputLive(v){
+  const s = sanitizarMoedaInput(v);
+  if(s==="") return "";
+  const [inteira, decimal] = s.split(",");
+  const inteiraComPontos = inteira.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return decimal===undefined ? inteiraComPontos : inteiraComPontos+","+decimal;
+}
 export function fillTpl(tpl, d){
   return tpl
     .replace(/\{\{nome\}\}/g, d.representante||"")
@@ -72,6 +85,47 @@ export function fData(iso){
   if(!iso) return "";
   const [y,m,d] = iso.split("-");
   return d+"/"+m+"/"+y;
+}
+
+// Tempo de empresa (anos/meses/dias corridos) a partir da data de início —
+// sempre calculado na hora, nunca gravado: se a data de início mudar, o
+// resultado muda junto, sem precisar editar nada à parte. "+T00:00:00" pra
+// interpretar como hora local (não UTC meia-noite, que voltaria um dia num
+// fuso atrás de UTC como o do Brasil — mesmo cuidado de fData acima).
+// Retorna null se não há data de início ou se ela está no futuro.
+export function tempoDeEmpresa(dataEntradaIso){
+  if(!dataEntradaIso) return null;
+  const inicio = new Date(dataEntradaIso+"T00:00:00");
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  if(inicio > hoje) return null;
+  let anos = hoje.getFullYear() - inicio.getFullYear();
+  let meses = hoje.getMonth() - inicio.getMonth();
+  let dias = hoje.getDate() - inicio.getDate();
+  if(dias < 0){
+    meses -= 1;
+    dias += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate();
+  }
+  if(meses < 0){
+    anos -= 1;
+    meses += 12;
+  }
+  return {anos, meses, dias};
+}
+
+// Formata o resultado de tempoDeEmpresa em texto — omite as unidades
+// zeradas à esquerda (ex.: menos de 1 ano mostra só "8 meses", não
+// "0 anos, 8 meses"), sempre no plural/singular correto em pt-BR.
+export function fTempoDeEmpresa(dataEntradaIso){
+  const t = tempoDeEmpresa(dataEntradaIso);
+  if(!t) return "—";
+  const {anos, meses, dias} = t;
+  if(anos===0&&meses===0&&dias===0) return "Hoje";
+  const partes = [];
+  if(anos>0) partes.push(anos+(anos===1?" ano":" anos"));
+  if(meses>0) partes.push(meses+(meses===1?" mês":" meses"));
+  if(dias>0||partes.length===0) partes.push(dias+(dias===1?" dia":" dias"));
+  if(partes.length===1) return partes[0];
+  return partes.slice(0,-1).join(", ")+" e "+partes[partes.length-1];
 }
 
 // Converte uma linha da tabela profiles (Supabase) para o formato usado pela UI.
@@ -206,6 +260,7 @@ export function mapFuncionarioRow(row){
     id: row.id,
     nome: row.nome,
     setor: row.setor || "",
+    estadoFilial: row.estado_filial || "",
     telefone: row.telefone || "",
     dataEntrada: row.data_entrada || "",
     tipoVinculo: row.tipo_vinculo,

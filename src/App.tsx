@@ -7,6 +7,7 @@ import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
+import CampoValor from "./components/CampoValor";
 import Calendario from "./components/Calendario";
 import Mensagens from "./components/Mensagens";
 import Acessos from "./components/Acessos";
@@ -29,6 +30,13 @@ export default function App() {
 
   const [users, setUsers] = useState<UserType[]>([]);
   const [user, setUser]   = useState<UserType | null>(null);
+  // E-mail da própria conta logada, vindo direto da sessão autenticada do
+  // Supabase Auth (supabase.auth.getSession()/onAuthStateChange) — nunca
+  // da tabela "profiles", cuja coluna email é lida só sob demanda por
+  // get_user_email() (admin-only, ver sincronizarUsuarios abaixo). Cada
+  // sessão só enxerga o próprio e-mail por natureza do Auth, então isso
+  // nunca expõe e-mail de outra pessoa.
+  const [meuEmail, setMeuEmail] = useState("");
   const [demoMsg, setDemoMsg] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -119,6 +127,12 @@ export default function App() {
   const [demoResponsavelId, setDemoResponsavelId] = useState<string | null>(null);
   const [demoFuncionariosTeste, setDemoFuncionariosTeste] = useState<string[]>([]);
   const notifRef = useRef<HTMLDivElement | null>(null);
+  // Guarda o id do usuário da última sessão já processada — usado só pra
+  // distinguir um "SIGNED_IN" de login de verdade de um "SIGNED_IN"
+  // reemitido pelo supabase-js quando a aba volta a ficar visível/em foco
+  // (renovação de token em segundo plano, sem ação nenhuma do usuário).
+  // Ver o listener onAuthStateChange logo abaixo.
+  const ultimoUserIdRef = useRef<string | null>(null);
 
   const isAdmin = user && user.role==="admin";
   const isFin   = user && user.setor==="Financeiro";
@@ -283,6 +297,8 @@ export default function App() {
     supabase.auth.getSession().then(async ({data})=>{
       if(!ativo) return;
       if(data.session&&data.session.user){
+        ultimoUserIdRef.current = data.session.user.id;
+        setMeuEmail(data.session.user.email||"");
         await marcarOnline(data.session.user.id);
         const logado = await sincronizarUsuarios(data.session.user.id) || fallbackProfile(data.session.user);
         if(!ativo) return;
@@ -302,18 +318,27 @@ export default function App() {
     const { data: sub } = supabase.auth.onAuthStateChange((event, novaSessao)=>{
       setAuthLoading(false);
       if(event==="PASSWORD_RECOVERY") setPasswordRecovery(true);
-      if(event==="SIGNED_OUT") setUser(null);
+      if(event==="SIGNED_OUT"){ setUser(null); setMeuEmail(""); ultimoUserIdRef.current = null; }
       if((event==="SIGNED_IN"||event==="USER_UPDATED")&&novaSessao&&novaSessao.user){
+        setMeuEmail(novaSessao.user.email||"");
+        // supabase-js reemite "SIGNED_IN" quando a aba volta a ficar
+        // visível/em foco (renovação de token em segundo plano), sem ser
+        // um login novo — sem essa distinção, voltar de outro app/aba
+        // (ex.: WhatsApp) resetava a navegação pra tela inicial e fechava
+        // qualquer seção/formulário aberto, mesmo sem o usuário ter feito
+        // nada. Só tratamos como login de verdade quando o id muda.
+        const ehLoginNovo = event==="SIGNED_IN" && ultimoUserIdRef.current!==novaSessao.user.id;
+        ultimoUserIdRef.current = novaSessao.user.id;
         const aposMarcar = event==="SIGNED_IN" ? marcarOnline(novaSessao.user.id) : Promise.resolve();
         aposMarcar.then(()=>sincronizarUsuarios(novaSessao.user.id)).then(logado=>{
           if(!ativo) return;
           const perfil = logado||fallbackProfile(novaSessao.user);
           if(!logado) setUser(perfil);
-          if(event==="SIGNED_IN") setTab(perfil.role==="admin"?"painel":"tarefas");
+          if(ehLoginNovo) setTab(perfil.role==="admin"?"painel":"tarefas");
           carregarDemoResponsavelPermitido(perfil);
           carregarDemoFuncionariosTeste(perfil);
         });
-        if(event==="SIGNED_IN"){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarRepresentantes(); carregarAuditoria(); }
+        if(ehLoginNovo){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarRepresentantes(); carregarAuditoria(); }
       }
     });
 
@@ -379,7 +404,7 @@ export default function App() {
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
               <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newPr.fornecedor} onChange={e=>setNewPr(p=>({...p,fornecedor:e.target.value}))}/></div>
               <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} placeholder="NF-000" value={newPr.nf} onChange={e=>setNewPr(p=>({...p,nf:e.target.value}))}/></div>
-              <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={newPr.valor} onChange={e=>setNewPr(p=>({...p,valor:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Valor (opcional)</label><CampoValor style={st.inp} value={newPr.valor} onChange={v=>setNewPr(p=>({...p,valor:v}))} onBlur={()=>setNewPr(p=>({...p,valor:fMoedaInput(p.valor)}))}/></div>
               <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
               <div><label style={st.lbl}>Estado</label>
                 <select style={st.inp} value={newPr.estado} onChange={e=>setNewPr(p=>({...p,estado:e.target.value}))}>
@@ -435,7 +460,7 @@ export default function App() {
                       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
                         <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editPrData.fornecedor} onChange={e=>setEditPrData(p=>({...p,fornecedor:e.target.value}))}/></div>
                         <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} value={editPrData.nf} onChange={e=>setEditPrData(p=>({...p,nf:e.target.value}))}/></div>
-                        <div><label style={st.lbl}>Valor (opcional)</label><input type="number" style={st.inp} value={editPrData.valor} onChange={e=>setEditPrData(p=>({...p,valor:e.target.value}))}/></div>
+                        <div><label style={st.lbl}>Valor (opcional)</label><CampoValor style={st.inp} value={editPrData.valor} onChange={v=>setEditPrData(p=>({...p,valor:v}))} onBlur={()=>setEditPrData(p=>({...p,valor:fMoedaInput(p.valor)}))}/></div>
                         <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editPrData.vencimento} onChange={e=>setEditPrData(p=>({...p,vencimento:e.target.value}))}/></div>
                         <div><label style={st.lbl}>Estado</label>
                           <select style={st.inp} value={editPrData.estado} onChange={e=>setEditPrData(p=>({...p,estado:e.target.value}))}>
@@ -970,7 +995,7 @@ export default function App() {
       vencimento: newPr.vencimento || null,
       estado: newPr.estado,
       situacao: newPr.situacao,
-      valor: newPr.valor===""?null:Number(newPr.valor),
+      valor: newPr.valor===""?null:parseMoedaInput(newPr.valor),
       created_by: user?user.id:null,
     }).select().single();
     if(error||!data) return;
@@ -1014,7 +1039,7 @@ export default function App() {
 
   function abrirEditPr(pr){
     setEditPr(pr.id);
-    setEditPrData({fornecedor:pr.fornecedor,nf:pr.nf,vencimento:pr.vencimento,estado:pr.estado,valor:pr.valor??""});
+    setEditPrData({fornecedor:pr.fornecedor,nf:pr.nf,vencimento:pr.vencimento,estado:pr.estado,valor:pr.valor!=null?fMoedaInput(pr.valor):""});
   }
 
   async function salvarEditPr(){
@@ -1025,10 +1050,10 @@ export default function App() {
       numero_nf: editPrData.nf,
       vencimento: editPrData.vencimento || null,
       estado: editPrData.estado,
-      valor: editPrData.valor===""?null:Number(editPrData.valor),
+      valor: editPrData.valor===""?null:parseMoedaInput(editPrData.valor),
     }).eq("id", editPr);
     if(error) return;
-    setProrrogacoes(prev=>prev.map(x=>x.id===editPr?{...x,fornecedor:editPrData.fornecedor,nf:editPrData.nf,vencimento:editPrData.vencimento,estado:editPrData.estado,valor:editPrData.valor===""?null:Number(editPrData.valor)}:x));
+    setProrrogacoes(prev=>prev.map(x=>x.id===editPr?{...x,fornecedor:editPrData.fornecedor,nf:editPrData.nf,vencimento:editPrData.vencimento,estado:editPrData.estado,valor:editPrData.valor===""?null:parseMoedaInput(editPrData.valor)}:x));
     addA("NF editada",editPrData.fornecedor,"Dados atualizados por "+(user?user.name:""));
     setEditPr(null);
   }
@@ -2068,7 +2093,7 @@ export default function App() {
                     <div style={{fontWeight:700,fontSize:18,color:D.text}}>{user.name}</div>
                   )}
                   <div style={{fontSize:13,color:D.muted,marginTop:12}}>{user.setor} · {roleLabel(user.role)}</div>
-                  <div style={{fontSize:13,color:D.muted,marginTop:12}}>{user.email||"E-mail não informado"}</div>
+                  <div style={{fontSize:13,color:D.muted,marginTop:12}}>{meuEmail||"E-mail não informado"}</div>
                   <div style={{fontSize:12,color:D.muted,marginTop:12}}>Último acesso: {user.lastAccess||"—"}</div>
                 </div>
               </div>
