@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
+import { getIn, fBRL, fData, fDataHoraBR, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
@@ -426,7 +426,7 @@ export default function App() {
         {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Data de Inclusão","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
             <tbody>{lista.map(pr=>{
               const ec=eCor(pr.situacao);
               const criador=users.find(u=>u.id===pr.criadoPor);
@@ -441,6 +441,7 @@ export default function App() {
                   <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
                   <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
                   <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
+                  <td data-label="Data de Inclusão" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{pr.criadoEmHora?fDataHoraBR(pr.criadoEmHora):"—"}</td>
                   <td data-label="Situação" style={{padding:"10px 8px"}}>
                     <select value={pr.situacao} disabled={isDemo} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
                       <option value="Aguardando retorno">Aguardando</option>
@@ -456,7 +457,7 @@ export default function App() {
                 </tr>
                 {editPr===pr.id&&(
                   <tr>
-                    <td colSpan={7} style={{padding:14,background:D.bg}}>
+                    <td colSpan={8} style={{padding:14,background:D.bg}}>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
                         <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editPrData.fornecedor} onChange={e=>setEditPrData(p=>({...p,fornecedor:e.target.value}))}/></div>
                         <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} value={editPrData.nf} onChange={e=>setEditPrData(p=>({...p,nf:e.target.value}))}/></div>
@@ -467,6 +468,7 @@ export default function App() {
                             <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
                           </select>
                         </div>
+                        <div><label style={st.lbl}>Data de inclusão</label><div style={{...st.inp,background:D.bg,color:D.muted,cursor:"default"}}>{pr.criadoEmHora?fDataHoraBR(pr.criadoEmHora):"—"}</div></div>
                       </div>
                       <div style={{display:"flex",gap:8,marginTop:10}}>
                         <button style={st.btnBlue} onClick={salvarEditPr}><Save size={13}/>Salvar</button>
@@ -1118,7 +1120,7 @@ export default function App() {
     const w=window.open("","_blank");
     if(!w) return;
     w.opener=null;
-    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:A4 portrait;margin:1.2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111}h1{font-size:14pt;margin:0 0 4px}h2{font-size:12pt;margin:20px 0 8px;padding-top:12px;border-top:1px solid #ccc}h2:first-of-type{margin-top:16px;padding-top:0;border-top:none}.sub{font-size:9pt;color:#555;margin:2px 0}.meta{margin-bottom:14px}.status{display:inline-block;font-size:10.5pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:4px 11px;margin:8px 0 14px}.status-aguardando{background:#FFFBEB;color:#B45309}.status-aprovado{background:#F0FDF4;color:#15803D}.status-recusado{background:#FEF2F2;color:#B91C1C}.vazio{font-size:9.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;table-layout:fixed;border-collapse:collapse}th,td{padding:5px 6px;text-align:left;border-bottom:1px solid #ddd;font-size:8.5pt;word-break:break-word;overflow-wrap:break-word}th{background:#f2f2f2;font-weight:600}td.data-col{white-space:nowrap;overflow:visible;word-break:normal;overflow-wrap:normal}thead{display:table-header-group}tr{page-break-inside:avoid}.r{margin-top:22px;font-size:8.5pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:8px}@media print{button{display:none}}</style></head><body></body></html>");
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:A4 landscape;margin:1.2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111}h1{font-size:14pt;margin:0 0 4px}h2{font-size:12pt;margin:20px 0 8px;padding-top:12px;border-top:1px solid #ccc}h2:first-of-type{margin-top:16px;padding-top:0;border-top:none}.sub{font-size:9pt;color:#555;margin:2px 0}.meta{margin-bottom:14px}.status{display:inline-block;font-size:10.5pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:4px 11px;margin:8px 0 14px}.status-aguardando{background:#FFFBEB;color:#B45309}.status-aprovado{background:#F0FDF4;color:#15803D}.status-recusado{background:#FEF2F2;color:#B91C1C}.vazio{font-size:9.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;table-layout:fixed;border-collapse:collapse}th,td{padding:5px 6px;text-align:left;border-bottom:1px solid #ddd;font-size:8.5pt;word-break:break-word;overflow-wrap:break-word}th{background:#f2f2f2;font-weight:600}td.data-col{white-space:nowrap;overflow:visible;word-break:normal;overflow-wrap:normal}thead{display:table-header-group}tr{page-break-inside:avoid}.r{margin-top:22px;font-size:8.5pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:8px}@media print{button{display:none}}</style></head><body></body></html>");
     w.document.close();
     w.document.title="Relatório de Boletos Prorrogados";
     const h1=w.document.createElement("h1");

@@ -86,6 +86,18 @@ export function fData(iso){
   const [y,m,d] = iso.split("-");
   return d+"/"+m+"/"+y;
 }
+// Formata um timestamp completo (coluna timestamptz, ex.: created_at) pra
+// "DD/MM/AAAA às HH:MM" — sempre no horário de Brasília
+// (America/Sao_Paulo), independente do fuso do navegador de quem está
+// vendo a tela, já que timestamptz é armazenado em UTC internamente.
+export function fDataHoraBR(iso){
+  if(!iso) return "";
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return "";
+  const data = d.toLocaleDateString("pt-BR",{timeZone:"America/Sao_Paulo"});
+  const hora = d.toLocaleTimeString("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",minute:"2-digit"});
+  return data+" às "+hora;
+}
 
 // Tempo de empresa (anos/meses/dias corridos) a partir da data de início —
 // sempre calculado na hora, nunca gravado: se a data de início mudar, o
@@ -177,8 +189,13 @@ export function mapTarefaRow(row): Tarefa {
 }
 
 // Converte uma linha da tabela pendencias (NFs em negociação com fornecedores) para a UI.
+// "criadoEm" fica como só a data (usado no relatório impresso, coluna
+// "Solicitado em" — nunca mexer no formato dele); "criadoEmHora" guarda o
+// timestamp completo (created_at é timestamptz, preenchido automaticamente
+// pelo banco no insert e nunca reenviado no update — ver addNF/salvarEditPr
+// em App.tsx), usado na coluna "Data de Inclusão" da listagem em tela.
 export function mapPendenciaRow(row){
-  return { id: row.id, fornecedor: row.fornecedor, nf: row.numero_nf, vencimento: row.vencimento || "", estado: row.estado, situacao: row.situacao, valor: row.valor, criadoPor: row.created_by, dataAprovacao: row.data_aprovacao_prorrogacao || "", criadoEm: row.created_at ? row.created_at.split("T")[0] : "" };
+  return { id: row.id, fornecedor: row.fornecedor, nf: row.numero_nf, vencimento: row.vencimento || "", estado: row.estado, situacao: row.situacao, valor: row.valor, criadoPor: row.created_by, dataAprovacao: row.data_aprovacao_prorrogacao || "", criadoEm: row.created_at ? row.created_at.split("T")[0] : "", criadoEmHora: row.created_at || "" };
 }
 
 // Converte uma linha da tabela contratos (+ representantes aninhado, via representante_id) para a UI.
