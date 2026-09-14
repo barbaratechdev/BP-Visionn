@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fDataHoraBR, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
+import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
@@ -147,13 +147,13 @@ export default function App() {
   const ID_RH_TELA_EXTRA = "273eca2f-509e-424a-a12e-bcf3ce7c7a7e";
   const isRHTelaExtra = !!(user && user.id===ID_RH_TELA_EXTRA);
   // Aba Supervisores: além de admin, liberada nominalmente pra Esmeralda,
-  // Carol (Financeiro) e Ana — não existe controle de acesso por pessoa no
-  // sistema, então o critério aqui é o primeiro nome do perfil
+  // Carol (Financeiro), Ana e Paulo — não existe controle de acesso por
+  // pessoa no sistema, então o critério aqui é o primeiro nome do perfil
   // (case-insensitive, \b pra não pegar "Carolina"/"Mariana" etc.).
-  const isSupervisoresExtra = !!(user && user.name && /\b(esmeralda|carol|ana)\b/i.test(user.name));
-  // Dentro da aba, incluir/editar supervisor é liberado pra Esmeralda e Ana
-  // (não pra Carol) — desativar continua exclusivo de admin.
-  const podeEditarSupervisores = !!(user && user.name && /\b(esmeralda|ana)\b/i.test(user.name));
+  const isSupervisoresExtra = !!(user && user.name && /\b(esmeralda|carol|ana|paulo)\b/i.test(user.name));
+  // Dentro da aba, incluir/editar supervisor é liberado pra Esmeralda, Ana e
+  // Paulo (não pra Carol) — desativar continua exclusivo de admin.
+  const podeEditarSupervisores = !!(user && user.name && /\b(esmeralda|ana|paulo)\b/i.test(user.name));
   // Funcionária do financeiro: na aba Tarefas ela vê o grid de Prorrogação de
   // Boletos + Calendário — a lista de Tarefas entra na coluna principal desse
   // mesmo grid (logo abaixo de Prorrogação), em vez de ficar solta depois
@@ -1973,7 +1973,7 @@ export default function App() {
                 {representantesVisiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum representante encontrado.</div>:(
                   <div style={{overflowX:"auto"}}>
                   <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Nome","CPF ou CNPJ","Região","Supervisor","Status","Vínculo","Entrada","Saída",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+                    <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Nome","CPF ou CNPJ","Região","Supervisor","Status","Vínculo","Entrada","Tempo de casa","Saída",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                     <tbody>{representantesVisiveis.map(r=>{
                       const sup = users.find(u=>u.id===r.supervisorId);
                       const diasVinculo = diasParaVencerVinculo(r);
@@ -1994,6 +1994,7 @@ export default function App() {
                             )}
                           </td>
                           <td data-label="Entrada" style={{padding:"10px 8px",color:D.muted}}>{r.dataEntrada||"—"}</td>
+                          <td data-label="Tempo de casa" style={{padding:"10px 8px",color:D.muted}}>{fTempoDeEmpresa(r.dataEntrada)}</td>
                           <td data-label="Saída" style={{padding:"10px 8px",color:D.muted}}>{r.dataSaida||"—"}</td>
                           <td style={{padding:"10px 8px"}}>{!isDemo&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarRep(r)}><Pencil size={12}/>Editar</button>}</td>
                         </tr>

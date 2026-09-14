@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Search, X, Pencil, Eye, UserX, Save, AlertCircle, IdCard } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { fData, mapSupervisorRow, validarImagem, lerComoDataURL } from "../lib/helpers";
+import { fData, fTempoDeEmpresa, mapSupervisorRow, validarImagem, lerComoDataURL } from "../lib/helpers";
 import { hoje } from "../constants";
 import Av from "./Av";
 
@@ -15,7 +15,7 @@ const FORM_VAZIO = {id:null,nome:"",cpf:"",email:"",telefone:"",dataNascimento:"
 // (RPC que já mascara campos sensíveis pra Demonstração no banco), igual
 // padrão de Mensagens/Acessos: não passa pelo useEffect gigante do App.tsx.
 export default function Supervisores(p) {
-  const D = p.D, st = p.st, isAdmin = p.isAdmin, isDemo = p.isDemo, addA = p.addA, addN = p.addN;
+  const D = p.D, st = p.st, isAdmin = p.isAdmin, isDemo = p.isDemo, podeEditar = p.podeEditar, addA = p.addA, addN = p.addN;
   const [lista, setLista] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
@@ -59,7 +59,7 @@ export default function Supervisores(p) {
   }
 
   async function salvar(){
-    if(!isAdmin) return;
+    if(!podeEditar) return;
     if(!form.nome.trim()){ setFormErr("Informe o nome completo."); return; }
     setSalvando(true); setFormErr("");
     const payload = {
@@ -119,7 +119,7 @@ export default function Supervisores(p) {
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
         <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Supervisores</div><div style={{fontSize:13,color:D.muted}}>{visiveis.length} cadastrado(s)</div></div>
-        {isAdmin&&<button style={st.btnBlue} onClick={abrirNovo}><Plus size={15}/>Novo Supervisor</button>}
+        {podeEditar&&<button style={st.btnBlue} onClick={abrirNovo}><Plus size={15}/>Novo Supervisor</button>}
       </div>
 
       {isDemo&&<div style={{fontSize:12,color:D.muted,background:D.bg,borderRadius:10,padding:"9px 12px",marginBottom:14}}>Modo Demonstração: CPF/CNPJ, e-mail, telefone, data de nascimento e observações não são exibidos.</div>}
@@ -155,7 +155,7 @@ export default function Supervisores(p) {
         {visiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum supervisor encontrado.</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Supervisor","CPF ou CNPJ","Telefone","Região","Data de início","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Supervisor","CPF ou CNPJ","Telefone","Região","Data de início","Tempo de casa","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
             <tbody>{visiveis.map(s=>(
               <tr key={s.id} style={{borderBottom:"1px solid "+D.border}}>
                 <td data-label="Supervisor" style={{padding:"10px 8px"}}>
@@ -171,11 +171,12 @@ export default function Supervisores(p) {
                 <td data-label="Telefone" style={{padding:"10px 8px",color:D.muted}}>{s.telefone||"—"}</td>
                 <td data-label="Região" style={{padding:"10px 8px",color:D.muted}}>{s.regiao}</td>
                 <td data-label="Data de início" style={{padding:"10px 8px",color:D.muted}}>{s.dataInicio?fData(s.dataInicio):"—"}</td>
+                <td data-label="Tempo de casa" style={{padding:"10px 8px",color:D.muted}}>{fTempoDeEmpresa(s.dataInicio)}</td>
                 <td data-label="Status" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:s.status==="Ativo"?D.greenSoft:D.redSoft,color:s.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{s.status}</span></td>
                 <td style={{padding:"10px 8px"}}>
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
                     <button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Ver detalhes" onClick={()=>setDetalheDe(s)}><Eye size={12}/></button>
-                    {isAdmin&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Editar" onClick={()=>abrirEditar(s)}><Pencil size={12}/></button>}
+                    {podeEditar&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Editar" onClick={()=>abrirEditar(s)}><Pencil size={12}/></button>}
                     {isAdmin&&s.status==="Ativo"&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} title="Desativar" onClick={()=>setConfirmDesativar(s)}><UserX size={12}/></button>}
                   </div>
                 </td>
@@ -275,6 +276,7 @@ export default function Supervisores(p) {
                 {label:"Cargo", value:detalheDe.cargo||"—"},
                 {label:"Região", value:detalheDe.regiao||"—"},
                 {label:"Data de início", value:detalheDe.dataInicio?fData(detalheDe.dataInicio):"—"},
+                {label:"Tempo de empresa", value:fTempoDeEmpresa(detalheDe.dataInicio)},
                 {label:"Data de término", value:detalheDe.dataFim?fData(detalheDe.dataFim):"—"},
                 {label:"Status", value:detalheDe.status},
               ].map((r,i)=>(
@@ -286,10 +288,10 @@ export default function Supervisores(p) {
             </div>
             {detalheDe.observacoes&&<div style={{fontSize:12.5,color:D.muted,fontStyle:"italic",padding:"0 2px"}}>{detalheDe.observacoes}</div>}
 
-            {isAdmin&&(
+            {(podeEditar||isAdmin)&&(
               <div style={{display:"flex",gap:8,marginTop:18}}>
-                <button style={{...st.btn,flex:1,justifyContent:"center"}} onClick={()=>{setDetalheDe(null);abrirEditar(detalheDe);}}><Pencil size={13}/>Editar</button>
-                {detalheDe.status==="Ativo"&&<button style={{...st.btn,flex:1,justifyContent:"center",color:D.redText,borderColor:D.red+"44"}} onClick={()=>setConfirmDesativar(detalheDe)}><UserX size={13}/>Desativar</button>}
+                {podeEditar&&<button style={{...st.btn,flex:1,justifyContent:"center"}} onClick={()=>{setDetalheDe(null);abrirEditar(detalheDe);}}><Pencil size={13}/>Editar</button>}
+                {isAdmin&&detalheDe.status==="Ativo"&&<button style={{...st.btn,flex:1,justifyContent:"center",color:D.redText,borderColor:D.red+"44"}} onClick={()=>setConfirmDesativar(detalheDe)}><UserX size={13}/>Desativar</button>}
               </div>
             )}
           </div>
