@@ -311,6 +311,18 @@ export default function App() {
       if(data.session&&data.session.user){
         ultimoUserIdRef.current = data.session.user.id;
         setMeuEmail(data.session.user.email||"");
+        // Sessão persistida (supabase-js guarda em localStorage por padrão —
+        // ver src/lib/supabase.ts) sendo retomada num carregamento de
+        // página de verdade: pra quem usa o sistema todo dia sem nunca
+        // precisar digitar a senha de novo, isso é o "acesso" real do dia a
+        // dia, e sem isso registrar_login() (chamada só em doLogin()) nunca
+        // disparava — daí "Total de acessos"/"Último acesso" ficarem
+        // travados na última vez que alguém de fato logou com senha. Roda
+        // uma vez só (este efeito não tem dependências, dispara uma vez por
+        // boot do app) — nunca no re-disparo de SIGNED_IN por troca de
+        // aba/foco (esse caso é outro código, mais abaixo, e não chama
+        // isto).
+        supabase.rpc("registrar_login", { p_event_type: "acesso" }).then(({error})=>{ if(error) console.error("Erro ao registrar acesso:", error); });
         await marcarOnline(data.session.user.id);
         const logado = await sincronizarUsuarios(data.session.user.id) || fallbackProfile(data.session.user);
         if(!ativo) return;
@@ -697,8 +709,11 @@ export default function App() {
     if(error){ setLoginErr("E-mail ou senha incorretos."); return; }
     // Registra o acesso pro histórico da Supervisora — só aqui, no momento
     // exato de um login de verdade (nunca em refresh de página ou troca de
-    // aba). Não trava o login se isso falhar por algum motivo.
-    supabase.rpc("registrar_login");
+    // aba). Não trava o login se isso falhar por algum motivo, mas o erro
+    // vai pro console — antes era engolido em silêncio, o que escondia uma
+    // falha real (ver getSession() abaixo pro outro lado do problema: sessão
+    // retomada sem novo login nunca chamava isso).
+    supabase.rpc("registrar_login").then(({error})=>{ if(error) console.error("Erro ao registrar login:", error); });
     setLoginSenha("");
   }
 
@@ -1635,7 +1650,7 @@ export default function App() {
             )}
           </div>
           <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={D.white} size={32}/>
-          <div className="bv-header-username"><div style={{fontSize:13,fontWeight:600,color:D.text}}>{nomeVisivel(user)}</div><div style={{fontSize:11,color:D.muted}}>{user.setor}</div></div>
+          <div className="bv-header-username"><div style={{fontSize:13,fontWeight:600,color:D.text}}>{nomeVisivel(user)}</div><div style={{fontSize:11,color:D.muted}}>{roleLabel(user.role)}</div></div>
           <button style={{...st.btn,padding:"6px 10px",border:"none",background:D.bg}} onClick={doLogout}><LogOut size={15} color={D.muted}/></button>
         </div>
       </div>
@@ -1645,9 +1660,14 @@ export default function App() {
         {/* SIDEBAR */}
         <div className={"bv-sidebar"+(showDrawer?" open":"")} style={{width:250,background:SIDEBAR.bg,borderRight:"1px solid "+SIDEBAR.border,padding:"1.15rem 0.9rem",flexShrink:0,overflowY:"auto",display:"flex",flexDirection:"column"}}>
           {/* MARCA — identidade fixa do sidebar, independente do tema
-              claro/escuro do conteúdo (ver SIDEBAR em constants.ts) */}
+              claro/escuro do conteúdo (ver SIDEBAR em constants.ts).
+              Ícone: logo oficial fornecida pela usuária (public/logo-visionn-icon.png,
+              recortado do arquivo original enviado — "LOGO VISIONN.pdf",
+              ícone geométrico roxo/azul substituindo o raio usado antes). */}
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"2px 4px 16px",marginBottom:14,borderBottom:"1px solid "+SIDEBAR.border}}>
-            <div style={{width:38,height:38,borderRadius:10,background:SIDEBAR.active,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Receipt size={18} color="#fff"/></div>
+            <div style={{width:38,height:38,borderRadius:10,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <img src="/logo-visionn-icon.png" alt="BP-Visionn" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+            </div>
             <div style={{minWidth:0}}>
               <div style={{fontSize:16,fontWeight:700,color:SIDEBAR.text,letterSpacing:"-0.3px",whiteSpace:"nowrap"}}>BP-Visionn</div>
               <div style={{fontSize:11,color:SIDEBAR.textMuted}}>Gestão Inteligente</div>
@@ -1670,12 +1690,17 @@ export default function App() {
           ))}
 
           <div style={{marginTop:"auto",paddingTop:14,borderTop:"1px solid "+SIDEBAR.border,display:"flex",flexDirection:"column",gap:8}}>
+            {/* Composição inferior da sidebar (águia + logo Carvalho +
+                slogan) — public/sidebar-carvalho.png é a arte final
+                fornecida pela usuária (mais uma variante escolhida por ela),
+                usada como está, sem nenhum recorte, filtro ou ajuste de
+                opacidade/brilho aplicado por nós. */}
+            <img src="/sidebar-carvalho.png" alt="Carvalho Distribuidora" style={{width:"calc(100% + 28px)",marginLeft:-14,marginRight:-14,display:"block"}}/>
             <button onClick={()=>setDark(p=>!p)} style={{...st.btn,width:"100%",justifyContent:"space-between",background:SIDEBAR.hover,border:"1px solid "+SIDEBAR.border,color:SIDEBAR.text}}>
               <span style={{display:"flex",alignItems:"center",gap:8}}>{dark?<Moon size={15} color={D.blue}/>:<Sun size={15} color={D.orange}/>}Modo escuro</span>
               <span className={"bv-switch"+(dark?" on":"")}><span className="bv-switch-knob"/></span>
             </button>
             <button onClick={doLogout} style={{...st.btn,width:"100%",justifyContent:"center",color:SIDEBAR.danger,background:SIDEBAR.hover,border:"1px solid "+SIDEBAR.border}}><LogOut size={15}/>Sair</button>
-            <div style={{fontSize:10,color:SIDEBAR.textMuted,textAlign:"center",marginTop:4,lineHeight:1.5}}>Organização hoje.<br/>Resultados amanhã.<br/>BP-Visionn v1.0.0</div>
           </div>
         </div>
 
@@ -1684,7 +1709,7 @@ export default function App() {
           {/* DASHBOARD */}
           {tab==="painel"&&(isAdmin||isDemo)&&(
             <div>
-              <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Dashboard</div><div style={{fontSize:13,color:D.muted}}>Bem-vinda, Bárbara!</div></div>
+              <div style={{marginBottom:20}}><div style={{fontSize:22,fontWeight:800,color:D.text,letterSpacing:"-0.3px"}}>Dashboard</div><div style={{fontSize:13,color:D.muted,marginTop:2}}>Bem-vinda, {nomeVisivel(user).split(" ")[0]} ao BP-Visionn</div></div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:20}}>
                 {/* highlight usa a variante *Text (mais escura), não a cor
                     base + alpha: o número precisa ler forte — o alpha
@@ -2061,7 +2086,7 @@ export default function App() {
 
           {/* RH */}
           {tab==="rh"&&(isAdmin||isRH||isRHTelaExtra)&&(
-            <RH D={D} st={st} addA={addA} addN={addN}/>
+            <RH D={D} st={st} addA={addA} addN={addN} user={user}/>
           )}
 
           {/* CALENDÁRIO */}

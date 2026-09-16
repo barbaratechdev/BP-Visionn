@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { Plus, Search, X, Pencil, Eye, Save, AlertCircle, Briefcase } from "lucide-react";
+import { Plus, Search, Pencil, Eye, Save, AlertCircle, Briefcase, AlertTriangle } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { fData, fTempoDeEmpresa, mapFuncionarioRow } from "../lib/helpers";
+import { fData, mapFuncionarioRow, mapFeriasRow, mapExameRow, nomeVisivel } from "../lib/helpers";
 import { hoje, ESTADOS_FILIAL } from "../constants";
 import { useDraggable } from "../lib/useDraggable";
 import Av from "./Av";
 import Ferias from "./Ferias";
+import FuncionarioPerfil from "./FuncionarioPerfil";
+import RHAlertas from "./RHAlertas";
 
-const FORM_VAZIO = {id:null,nome:"",setor:"",estadoFilial:"",telefone:"",dataEntrada:hoje,tipoVinculo:"Efetivo",valeTransporte:false,valeRefeicao:false,observacoes:"",status:"Ativo",dataSaida:""};
+const FORM_VAZIO = {id:null,nome:"",cargo:"",cpf:"",dataNascimento:"",email:"",setor:"",estadoFilial:"",telefone:"",dataEntrada:hoje,tipoVinculo:"Efetivo",valeTransporte:false,valeRefeicao:false,observacoes:"",status:"Ativo",dataSaida:""};
 
 // Traduz o erro do Supabase pra uma mensagem útil sem despejar jargão de
 // banco pra quem não é dev (a tela é usada pelo RH, não por devs) — mas
@@ -30,29 +32,50 @@ function mensagemErroSalvarFuncionario(error){
 // (estrutura do CRM): aqui é o cadastro de pessoal em si (telefone,
 // vínculo empregatício, VT/VR, observações) — ver
 // 20260817000000_rh_perfil_e_funcionarios.sql. RLS restringe leitura e
-// escrita a quem tem profiles.setor='RH' (ou admin) — a aba só é
-// renderizada pra esse mesmo público (ver App.tsx), então dentro dela
-// qualquer pessoa autorizada a abrir já pode cadastrar/editar/mudar
-// situação, sem camada extra de permissão nominal.
+// escrita a quem consegue gerenciar funcionários
+// (pode_gerenciar_funcionarios()) — a aba só é renderizada pra esse mesmo
+// público (ver App.tsx), então dentro dela qualquer pessoa autorizada a
+// abrir já pode cadastrar/editar/mudar situação, sem camada extra de
+// permissão nominal.
+//
+// Clicar num funcionário abre o perfil completo (FuncionarioPerfil.tsx —
+// salário/histórico, exames periódicos, documentos e a linha do tempo de
+// ocorrências, ver 20260915000000_rh_perfil_completo.sql), em vez do antigo
+// modal de detalhes. RH.tsx continua sendo o único ponto que busca
+// "funcionarios" (e agora também um retrato leve de "ferias"/
+// "funcionario_exames", só o suficiente pras colunas da lista e pros
+// Alertas de RH) — o resto do perfil (salário, documentos, histórico) é
+// carregado sob demanda dentro de FuncionarioPerfil, só quando aquele
+// funcionário é aberto.
 export default function RH(p) {
   const D = p.D, st = p.st, addA = p.addA, addN = p.addN;
+  const usuarioNome = nomeVisivel(p.user);
   const [aba, setAba] = useState("funcionarios");
   const [lista, setLista] = useState([]);
+  const [feriasList, setFeriasList] = useState([]);
+  const [examesList, setExamesList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroVinculo, setFiltroVinculo] = useState("todos");
+  const [filtroIds, setFiltroIds] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   const [formErr, setFormErr] = useState("");
   const [salvando, setSalvando] = useState(false);
-  const [detalheDe, setDetalheDe] = useState(null);
+  const [funcionarioAbertoId, setFuncionarioAbertoId] = useState(null);
   const { dragStyle, dragHandleProps, resetDrag } = useDraggable();
 
   async function carregar(){
     setLoading(true);
-    const { data, error } = await supabase.from("funcionarios").select("*").order("nome");
-    if(!error&&data) setLista(data.map(mapFuncionarioRow));
+    const [func, fer, ex] = await Promise.all([
+      supabase.from("funcionarios").select("*").order("nome"),
+      supabase.from("ferias").select("*"),
+      supabase.from("funcionario_exames").select("*"),
+    ]);
+    if(!func.error&&func.data) setLista(func.data.map(mapFuncionarioRow));
+    if(!fer.error&&fer.data) setFeriasList(fer.data.map(mapFeriasRow));
+    if(!ex.error&&ex.data) setExamesList(ex.data.map(mapExameRow));
     setLoading(false);
   }
 
@@ -63,7 +86,7 @@ export default function RH(p) {
   }
 
   function abrirEditar(f){
-    setForm({id:f.id,nome:f.nome,setor:f.setor,estadoFilial:f.estadoFilial,telefone:f.telefone,dataEntrada:f.dataEntrada,tipoVinculo:f.tipoVinculo,valeTransporte:f.valeTransporte,valeRefeicao:f.valeRefeicao,observacoes:f.observacoes,status:f.status,dataSaida:f.dataSaida});
+    setForm({id:f.id,nome:f.nome,cargo:f.cargo,cpf:f.cpf,dataNascimento:f.dataNascimento,email:f.email,setor:f.setor,estadoFilial:f.estadoFilial,telefone:f.telefone,dataEntrada:f.dataEntrada,tipoVinculo:f.tipoVinculo,valeTransporte:f.valeTransporte,valeRefeicao:f.valeRefeicao,observacoes:f.observacoes,status:f.status,dataSaida:f.dataSaida});
     setFormErr(""); setShowForm(true); resetDrag();
   }
 
@@ -75,6 +98,10 @@ export default function RH(p) {
     setSalvando(true); setFormErr("");
     const payload = {
       nome: form.nome.trim(),
+      cargo: form.cargo.trim()||null,
+      cpf: form.cpf.trim()||null,
+      data_nascimento: form.dataNascimento||null,
+      email: form.email.trim()||null,
       setor: form.setor.trim()||null,
       estado_filial: form.estadoFilial||null,
       telefone: form.telefone||null,
@@ -106,22 +133,56 @@ export default function RH(p) {
     fecharForm();
   }
 
+  // Resumo por funcionário (próximo exame + situação das férias), usado
+  // tanto na coluna da lista quanto nos Alertas — sempre derivado de
+  // feriasList/examesList (já carregados acima), nunca uma consulta extra.
+  function resumoDoFuncionario(funcionarioId){
+    const examesDoFunc = examesList.filter(e=>e.funcionarioId===funcionarioId).sort((a,b)=>b.ano-a.ano);
+    const ultimoExame = examesDoFunc[0]||null;
+    const feriasDoFunc = feriasList.filter(x=>x.funcionarioId===funcionarioId).sort((a,b)=>(b.periodoAquisitivoInicio||"").localeCompare(a.periodoAquisitivoInicio||""));
+    const ultimaFerias = feriasDoFunc[0]||null;
+    return {
+      proximoExame: ultimoExame&&ultimoExame.dataProximoExame ? fData(ultimoExame.dataProximoExame) : "—",
+      situacaoFerias: ultimaFerias ? ultimaFerias.status : "—",
+    };
+  }
+
   const visiveis = lista.filter(f=>
     (filtroStatus==="todos"||f.status===filtroStatus) &&
     (filtroVinculo==="todos"||f.tipoVinculo===filtroVinculo) &&
-    (!busca || f.nome.toLowerCase().includes(busca.toLowerCase()) || f.telefone.includes(busca))
+    (!filtroIds||filtroIds.includes(f.id)) &&
+    (!busca || f.nome.toLowerCase().includes(busca.toLowerCase()) || f.telefone.includes(busca) || (f.cargo||"").toLowerCase().includes(busca.toLowerCase()))
   );
+
+  const funcionarioAberto = funcionarioAbertoId ? lista.find(f=>f.id===funcionarioAbertoId) : null;
+
+  function verGrupoDeAlerta(ids){
+    setFiltroIds(ids);
+    setAba("funcionarios");
+  }
 
   return (
     <div>
-      <div style={{display:"flex",gap:4,marginBottom:20,background:D.bg,borderRadius:10,padding:4,width:"fit-content"}}>
-        {[{id:"funcionarios",label:"👥 Funcionários"},{id:"ferias",label:"🏖️ Férias"}].map(a=>(
+      {funcionarioAberto ? (
+        <FuncionarioPerfil
+          funcionario={funcionarioAberto}
+          D={D} st={st} addA={addA} addN={addN}
+          usuarioNome={usuarioNome}
+          onVoltar={()=>setFuncionarioAbertoId(null)}
+          onEditar={()=>abrirEditar(funcionarioAberto)}
+        />
+      ) : (
+      <>
+      <div style={{display:"flex",gap:4,marginBottom:20,background:D.bg,borderRadius:10,padding:4,width:"fit-content",flexWrap:"wrap"}}>
+        {[{id:"funcionarios",label:"👥 Funcionários"},{id:"ferias",label:"🏖️ Férias"},{id:"alertas",label:"⚠️ Alertas de RH"}].map(a=>(
           <button key={a.id} onClick={()=>setAba(a.id)} style={{padding:"7px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:aba===a.id?600:400,background:aba===a.id?D.white:"transparent",color:aba===a.id?D.text:D.muted}}>{a.label}</button>
         ))}
       </div>
 
       {aba==="ferias"?(
         <Ferias D={D} st={st} addA={addA} addN={addN} funcionarios={lista}/>
+      ):aba==="alertas"?(
+        <RHAlertas D={D} st={st} funcionarios={lista} exames={examesList} ferias={feriasList} onVerGrupo={verGrupoDeAlerta}/>
       ):loading?(
         <div style={{textAlign:"center",padding:"2rem",color:D.muted,fontSize:13}}>Carregando funcionários...</div>
       ):(
@@ -131,12 +192,20 @@ export default function RH(p) {
         <button style={st.btnBlue} onClick={abrirNovo}><Plus size={15}/>Novo Funcionário</button>
       </div>
 
+      {filtroIds&&(
+        <div style={{display:"flex",alignItems:"center",gap:10,background:D.orangeSoft,color:D.orangeText,borderRadius:10,padding:"9px 14px",marginBottom:14,fontSize:13}}>
+          <AlertTriangle size={14}/>
+          Filtrado por alerta — {visiveis.length} funcionário(s)
+          <button onClick={()=>setFiltroIds(null)} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:D.orangeText,fontSize:12,fontWeight:600,textDecoration:"underline"}}>Limpar filtro</button>
+        </div>
+      )}
+
       <div className="bv-card" style={{...st.card,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
         <div style={{flex:"1 1 220px"}}>
           <label style={st.lbl}>Pesquisar</label>
           <div style={{position:"relative"}}>
             <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
-            <input style={{...st.inp,paddingLeft:30}} placeholder="Nome ou telefone" value={busca} onChange={e=>setBusca(e.target.value)}/>
+            <input style={{...st.inp,paddingLeft:30}} placeholder="Nome, cargo ou telefone" value={busca} onChange={e=>setBusca(e.target.value)}/>
           </div>
         </div>
         <div style={{flex:"1 1 140px"}}>
@@ -161,41 +230,46 @@ export default function RH(p) {
         {visiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum funcionário encontrado.</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Funcionário","Setor","Estado/Filial","Telefone","Vínculo","VT","VR","Data de início","Tempo de empresa","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-            <tbody>{visiveis.map(f=>(
-              <tr key={f.id} style={{borderBottom:"1px solid "+D.border}}>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Funcionário","Cargo","Setor","Status","Admissão","Próx. exame","Férias",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <tbody>{visiveis.map(f=>{
+              const r = resumoDoFuncionario(f.id);
+              return (
+              <tr key={f.id} style={{borderBottom:"1px solid "+D.border,cursor:"pointer"}} onClick={()=>setFuncionarioAbertoId(f.id)}>
                 <td data-label="Funcionário" style={{padding:"10px 8px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <Av name={f.nome} color={D.blue} size={30}/>
                     <div style={{fontWeight:500,color:D.text}}>{f.nome}</div>
                   </div>
                 </td>
+                <td data-label="Cargo" style={{padding:"10px 8px",color:D.muted}}>{f.cargo||"—"}</td>
                 <td data-label="Setor" style={{padding:"10px 8px",color:D.muted}}>{f.setor||"—"}</td>
-                <td data-label="Estado/Filial" style={{padding:"10px 8px",color:D.muted}}>{f.estadoFilial||"—"}</td>
-                <td data-label="Telefone" style={{padding:"10px 8px",color:D.muted}}>{f.telefone||"—"}</td>
-                <td data-label="Vínculo" style={{padding:"10px 8px",color:D.muted}}>{f.tipoVinculo}</td>
-                <td data-label="VT" style={{padding:"10px 8px",color:D.muted}}>{f.valeTransporte?"Sim":"Não"}</td>
-                <td data-label="VR" style={{padding:"10px 8px",color:D.muted}}>{f.valeRefeicao?"Sim":"Não"}</td>
-                <td data-label="Data de início" style={{padding:"10px 8px",color:D.muted}}>{f.dataEntrada?fData(f.dataEntrada):"—"}</td>
-                <td data-label="Tempo de empresa" style={{padding:"10px 8px",color:D.muted}}>{fTempoDeEmpresa(f.dataEntrada)}</td>
                 <td data-label="Status" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:f.status==="Ativo"?D.greenSoft:D.redSoft,color:f.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{f.status}</span></td>
-                <td style={{padding:"10px 8px"}}>
+                <td data-label="Admissão" style={{padding:"10px 8px",color:D.muted}}>{f.dataEntrada?fData(f.dataEntrada):"—"}</td>
+                <td data-label="Próx. exame" style={{padding:"10px 8px",color:D.muted}}>{r.proximoExame}</td>
+                <td data-label="Férias" style={{padding:"10px 8px",color:D.muted}}>{r.situacaoFerias}</td>
+                <td style={{padding:"10px 8px"}} onClick={e=>e.stopPropagation()}>
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
-                    <button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Ver detalhes" onClick={()=>setDetalheDe(f)}><Eye size={12}/></button>
+                    <button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Ver perfil completo" onClick={()=>setFuncionarioAbertoId(f.id)}><Eye size={12}/></button>
                     <button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Editar" onClick={()=>abrirEditar(f)}><Pencil size={12}/></button>
                   </div>
                 </td>
               </tr>
-            ))}</tbody>
+              );
+            })}</tbody>
           </table>
           </div>
         )}
       </div>
+      </>
+      )}
+      </>
+      )}
 
-      {/* MODAL: cadastro / edição */}
+      {/* MODAL: cadastro / edição — fica acessível tanto na lista quanto de
+          dentro do perfil (aba Dados/Observações chama onEditar). */}
       {showForm&&(
         <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}}>
-          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:560,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",...dragStyle}} onClick={e=>e.stopPropagation()}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:640,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",...dragStyle}} onClick={e=>e.stopPropagation()}>
             <div {...dragHandleProps}>
               <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><Briefcase size={22} color={D.purple}/></div>
               <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:4}}>{form.id?"Editar Funcionário":"Novo Funcionário"}</div>
@@ -204,14 +278,18 @@ export default function RH(p) {
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome completo</label><input autoFocus style={st.inp} value={form.nome} onChange={e=>{setForm(f=>({...f,nome:e.target.value}));setFormErr("");}}/></div>
+              <div><label style={st.lbl}>Cargo</label><input style={st.inp} placeholder="Ex.: Assistente" value={form.cargo} onChange={e=>setForm(f=>({...f,cargo:e.target.value}))}/></div>
               <div><label style={st.lbl}>Setor</label><input style={st.inp} placeholder="Ex.: Financeiro" value={form.setor} onChange={e=>setForm(f=>({...f,setor:e.target.value}))}/></div>
+              <div><label style={st.lbl}>CPF</label><input style={st.inp} value={form.cpf} onChange={e=>setForm(f=>({...f,cpf:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Data de nascimento</label><input type="date" style={st.inp} value={form.dataNascimento} onChange={e=>setForm(f=>({...f,dataNascimento:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Número de telefone</label><input style={st.inp} value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))}/></div>
+              <div><label style={st.lbl}>E-mail</label><input type="email" style={st.inp} value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/></div>
               <div><label style={st.lbl}>Estado/Filial</label>
                 <select style={st.inp} value={form.estadoFilial} onChange={e=>setForm(f=>({...f,estadoFilial:e.target.value}))}>
                   <option value="">Selecione...</option>
                   {ESTADOS_FILIAL.map(ef=><option key={ef} value={ef}>{ef}</option>)}
                 </select>
               </div>
-              <div><label style={st.lbl}>Número de telefone</label><input style={st.inp} value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))}/></div>
               <div><label style={st.lbl}>Data de início</label><input type="date" style={st.inp} value={form.dataEntrada} onChange={e=>setForm(f=>({...f,dataEntrada:e.target.value}))}/></div>
               <div><label style={st.lbl}>Tipo de vínculo</label>
                 <select style={st.inp} value={form.tipoVinculo} onChange={e=>setForm(f=>({...f,tipoVinculo:e.target.value}))}>
@@ -251,55 +329,6 @@ export default function RH(p) {
             </div>
           </div>
         </div>
-      )}
-
-      {/* MODAL: detalhes */}
-      {detalheDe&&(
-        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={()=>setDetalheDe(null)}>
-          <div className="bv-modal-card" style={{background:D.white,borderRadius:16,padding:"1.6rem",maxWidth:420,width:"100%",maxHeight:"85vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <Av name={detalheDe.nome} color={D.blue} size={44}/>
-                <div>
-                  <div style={{fontWeight:700,fontSize:15,color:D.text}}>{detalheDe.nome}</div>
-                  <div style={{fontSize:12,color:D.muted}}>{detalheDe.tipoVinculo}</div>
-                </div>
-              </div>
-              <button onClick={()=>setDetalheDe(null)} style={{...st.btn,padding:"6px 8px",border:"none",background:"transparent"}}><X size={15}/></button>
-            </div>
-
-            <div style={{fontSize:11,fontWeight:600,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:6}}>Dados do vínculo</div>
-            <div style={{background:D.bg,borderRadius:10,padding:"4px 14px",marginBottom:16}}>
-              {[
-                {label:"Setor", value:detalheDe.setor||"—"},
-                {label:"Estado/Filial", value:detalheDe.estadoFilial||"—"},
-                {label:"Telefone", value:detalheDe.telefone||"—"},
-                {label:"Data de início", value:detalheDe.dataEntrada?fData(detalheDe.dataEntrada):"—"},
-                {label:"Tempo de empresa", value:fTempoDeEmpresa(detalheDe.dataEntrada)},
-                {label:"Tipo de vínculo", value:detalheDe.tipoVinculo},
-                {label:"Vale-Transporte", value:detalheDe.valeTransporte?"Sim":"Não"},
-                {label:"Vale-Refeição", value:detalheDe.valeRefeicao?"Sim":"Não"},
-                {label:"Status", value:detalheDe.status},
-                {label:"Data de saída", value:detalheDe.dataSaida?fData(detalheDe.dataSaida):"—"},
-              ].map((r,i)=>(
-                <div key={r.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderTop:i>0?"1px solid "+D.border:"none",gap:10}}>
-                  <span style={{fontSize:12.5,color:D.muted}}>{r.label}</span>
-                  <span style={{fontSize:13,color:D.text,fontWeight:600,textAlign:"right"}}>{r.value}</span>
-                </div>
-              ))}
-            </div>
-            {detalheDe.observacoes&&(<>
-              <div style={{fontSize:11,fontWeight:600,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:6}}>Observações</div>
-              <div style={{fontSize:12.5,color:D.muted,fontStyle:"italic",padding:"0 2px",marginBottom:16}}>{detalheDe.observacoes}</div>
-            </>)}
-
-            <div style={{display:"flex",gap:8}}>
-              <button style={{...st.btn,flex:1,justifyContent:"center"}} onClick={()=>{setDetalheDe(null);abrirEditar(detalheDe);}}><Pencil size={13}/>Editar</button>
-            </div>
-          </div>
-        </div>
-      )}
-      </>
       )}
     </div>
   );

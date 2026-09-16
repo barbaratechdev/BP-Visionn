@@ -12,10 +12,14 @@ export const DARK  = { bg:"#070A13",white:"#0F1526",text:"#F5F7FA",muted:"#8D99A
 // Paleta fixa do menu lateral: identidade própria, independente do toggle
 // "Modo escuro" (que continua controlando só header/conteúdo, via
 // LIGHT/DARK acima) — o sidebar é sempre azul-marinho, por decisão de
-// marca, mesmo com a área principal clara. bgSolid existe porque
-// `background` aceita gradiente, mas `border-color` (ex.: o anel do status
-// online do avatar) não.
-export const SIDEBAR = { bg:"linear-gradient(180deg, #0B2A54 0%, #071A3A 100%)",bgSolid:"#081B3D",border:"rgba(255,255,255,0.08)",hover:"rgba(255,255,255,0.06)",text:"#FFFFFF",textMuted:"#93A9CC",active:"#1264E8",activeShadow:"0 8px 20px rgba(18,100,232,0.35)",danger:"#FCA5A5" };
+// marca, mesmo com a área principal clara. bg começou amostrado pixel a
+// pixel da imagem de referência da usuária (#001E44) e foi escurecido a
+// pedido dela depois. bg = bgSolid de propósito (cor única, sem gradiente).
+// Como o fundo de public/sidebar-carvalho.png (recorte da referência) tem
+// o tom antigo, mais claro, o <img> que usa essa imagem aplica um
+// filter:brightness proporcional (ver App.tsx) só pra não deixar uma
+// costura visível entre a imagem e o novo fundo — não altera o arquivo.
+export const SIDEBAR = { bg:"#001330",bgSolid:"#001330",border:"rgba(255,255,255,0.08)",hover:"rgba(255,255,255,0.06)",text:"#FFFFFF",textMuted:"#93A9CC",active:"#0462FF",activeShadow:"none",danger:"#FCA5A5" };
 
 export const hoje = new Date().toISOString().split("T")[0];
 export const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];

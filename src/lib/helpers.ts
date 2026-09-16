@@ -276,6 +276,10 @@ export function mapFuncionarioRow(row){
   return {
     id: row.id,
     nome: row.nome,
+    cargo: row.cargo || "",
+    cpf: row.cpf || "",
+    dataNascimento: row.data_nascimento || "",
+    email: row.email || "",
     setor: row.setor || "",
     estadoFilial: row.estado_filial || "",
     telefone: row.telefone || "",
@@ -287,6 +291,82 @@ export function mapFuncionarioRow(row){
     status: row.status,
     dataSaida: row.data_saida || "",
   };
+}
+
+// Converte uma linha de funcionario_salarios (histórico salarial) para a UI.
+export function mapSalarioRow(row){
+  return {
+    id: row.id,
+    funcionarioId: row.funcionario_id,
+    dataAlteracao: row.data_alteracao,
+    valor: row.valor==null ? 0 : Number(row.valor),
+    motivo: row.motivo || "",
+    createdAt: row.created_at || "",
+  };
+}
+
+// Converte uma linha de funcionario_exames para a UI.
+export function mapExameRow(row){
+  return {
+    id: row.id,
+    funcionarioId: row.funcionario_id,
+    ano: row.ano,
+    dataExame: row.data_exame || "",
+    dataProximoExame: row.data_proximo_exame || "",
+    status: row.status,
+    observacoes: row.observacoes || "",
+  };
+}
+
+// Converte uma linha de funcionario_documentos para a UI.
+export function mapDocumentoRow(row){
+  return {
+    id: row.id,
+    funcionarioId: row.funcionario_id,
+    tipo: row.tipo,
+    data: row.data || "",
+    descricao: row.descricao || "",
+    observacoes: row.observacoes || "",
+  };
+}
+
+// Converte uma linha de funcionario_ocorrencias (linha do tempo) para a UI.
+export function mapOcorrenciaRow(row){
+  return {
+    id: row.id,
+    funcionarioId: row.funcionario_id,
+    data: row.data || "",
+    tipo: row.tipo,
+    descricao: row.descricao,
+    observacoes: row.observacoes || "",
+    criadoPorNome: row.criado_por_nome || "",
+    createdAt: row.created_at || "",
+  };
+}
+
+// Situação visual do exame periódico — nunca gravada, sempre recalculada a
+// partir do fato guardado no banco (status Realizado/Pendente +
+// data_proximo_exame), mesmo raciocínio de tempoDeEmpresa/situacaoLabel:
+// estado derivado não é persistido. LIMITE_PROX_VENCIMENTO em dias.
+const LIMITE_EXAME_PROX_VENCIMENTO_DIAS = 30;
+export function situacaoExame(exame){
+  const hojeD = new Date(); hojeD.setHours(0,0,0,0);
+  if(exame.status==="Pendente"){
+    if(exame.ano < hojeD.getFullYear()) return "Atrasado";
+    if(exame.dataProximoExame){
+      const prox = new Date(exame.dataProximoExame+"T00:00:00");
+      if(prox < hojeD) return "Atrasado";
+    }
+    return "Pendente";
+  }
+  // Realizado
+  if(exame.dataProximoExame){
+    const prox = new Date(exame.dataProximoExame+"T00:00:00");
+    if(prox < hojeD) return "Atrasado";
+    const dias = Math.round((prox.getTime()-hojeD.getTime())/86400000);
+    if(dias<=LIMITE_EXAME_PROX_VENCIMENTO_DIAS) return "Próximo do vencimento";
+  }
+  return "Realizado";
 }
 
 // Converte uma linha da tabela ferias (+ funcionarios aninhado, via

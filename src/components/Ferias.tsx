@@ -43,12 +43,22 @@ function statusCor(s,D){
 // conta de login, e o RH controla férias de todo o quadro (ver
 // 20260821000010_create_ferias.sql). A lista de funcionários vem por
 // prop (já carregada pelo componente pai, RH.tsx) pra não duplicar a
-// busca. RLS restringe leitura/escrita a quem é RH/admin (is_rh(), mesma
-// função já usada em funcionarios) — esta tela só é alcançável por quem
-// já está dentro da aba RH (ver App.tsx), então nenhuma checagem de
-// permissão adicional é feita aqui client-side.
+// busca. RLS restringe leitura/escrita a quem consegue gerenciar
+// funcionarios (pode_gerenciar_funcionarios(), igualada à mesma regra de
+// "funcionarios" em 20260915000000_rh_perfil_completo.sql) — esta tela só
+// é alcançável por quem já está dentro da aba RH (ver App.tsx), então
+// nenhuma checagem de permissão adicional é feita aqui client-side.
+//
+// `funcionarioFixo` (opcional): usado quando esta tela é embutida dentro
+// da aba "Férias" do perfil individual (FuncionarioPerfil.tsx) — trava a
+// lista/formulário nesse único funcionário (esconde seletor/colunas de
+// quem é o funcionário, já implícito) sem duplicar nenhuma lógica de
+// férias. `onRegistrarOcorrencia`, também opcional, é chamado depois de
+// cada salvamento nesse modo, pra alimentar a linha do tempo do perfil.
 export default function Ferias(p) {
   const D = p.D, st = p.st, addA = p.addA, addN = p.addN, funcionarios = p.funcionarios || [];
+  const funcionarioFixo = p.funcionarioFixo || null;
+  const onRegistrarOcorrencia = p.onRegistrarOcorrencia;
   const [lista, setLista] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
@@ -69,7 +79,7 @@ export default function Ferias(p) {
   useEffect(()=>{ carregar(); },[]);
 
   function abrirNovo(funcionarioId?:string){
-    setForm({...FORM_VAZIO, funcionarioId: funcionarioId||""});
+    setForm({...FORM_VAZIO, funcionarioId: funcionarioId||(funcionarioFixo?funcionarioFixo.id:"")});
     setFormErr(""); setShowForm(true);
   }
 
@@ -109,9 +119,11 @@ export default function Ferias(p) {
     });
     if(form.id){
       addA("Férias editadas", linha.funcionarioNome, "Registro atualizado — Status: "+linha.status);
+      if(onRegistrarOcorrencia) onRegistrarOcorrencia("Férias", "Registro de férias atualizado — status: "+linha.status+".");
     } else {
       addN("Férias cadastradas: "+linha.funcionarioNome);
       addA("Férias cadastradas", linha.funcionarioNome, "Período aquisitivo "+fData(linha.periodoAquisitivoInicio)+" a "+fData(linha.periodoAquisitivoFim));
+      if(onRegistrarOcorrencia) onRegistrarOcorrencia("Férias", "Novo período de férias cadastrado — aquisitivo "+fData(linha.periodoAquisitivoInicio)+" a "+fData(linha.periodoAquisitivoFim)+".");
     }
     fecharForm();
   }
@@ -134,11 +146,13 @@ export default function Ferias(p) {
     const linha = mapFeriasRow(data);
     setLista(prev=>prev.map(x=>x.id===linha.id?linha:x));
     addA("Status alterado",f.funcionarioNome,f.status+" → "+novoStatus);
+    if(onRegistrarOcorrencia) onRegistrarOcorrencia("Férias", "Status das férias alterado: "+f.status+" → "+novoStatus+".");
   }
 
   const visiveis = lista.filter(f=>
+    (funcionarioFixo ? f.funcionarioId===funcionarioFixo.id : true) &&
     (filtroStatus==="todos"||f.status===filtroStatus) &&
-    (!busca || f.funcionarioNome.toLowerCase().includes(busca.toLowerCase()) || (f.funcionarioSetor||"").toLowerCase().includes(busca.toLowerCase()))
+    (funcionarioFixo || !busca || f.funcionarioNome.toLowerCase().includes(busca.toLowerCase()) || (f.funcionarioSetor||"").toLowerCase().includes(busca.toLowerCase()))
   );
 
   const historicoLista = historicoDe ? lista.filter(f=>f.funcionarioId===historicoDe).sort((a,b)=>(b.periodoAquisitivoInicio||"").localeCompare(a.periodoAquisitivoInicio||"")) : [];
@@ -149,18 +163,20 @@ export default function Ferias(p) {
   return (
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
-        <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Controle de Férias</div><div style={{fontSize:13,color:D.muted}}>{visiveis.length} registro(s)</div></div>
+        <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>{funcionarioFixo?"Férias":"Controle de Férias"}</div><div style={{fontSize:13,color:D.muted}}>{visiveis.length} registro(s)</div></div>
         <button style={st.btnBlue} onClick={()=>abrirNovo()}><Plus size={15}/>Nova Férias</button>
       </div>
 
       <div className="bv-card" style={{...st.card,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
-        <div style={{flex:"1 1 220px"}}>
-          <label style={st.lbl}>Pesquisar</label>
-          <div style={{position:"relative"}}>
-            <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
-            <input style={{...st.inp,paddingLeft:30}} placeholder="Funcionário ou setor" value={busca} onChange={e=>setBusca(e.target.value)}/>
+        {!funcionarioFixo&&(
+          <div style={{flex:"1 1 220px"}}>
+            <label style={st.lbl}>Pesquisar</label>
+            <div style={{position:"relative"}}>
+              <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
+              <input style={{...st.inp,paddingLeft:30}} placeholder="Funcionário ou setor" value={busca} onChange={e=>setBusca(e.target.value)}/>
+            </div>
           </div>
-        </div>
+        )}
         <div style={{flex:"1 1 160px"}}>
           <label style={st.lbl}>Status</label>
           <select style={st.inp} value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)}>
@@ -174,11 +190,12 @@ export default function Ferias(p) {
         {visiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum registro de férias encontrado.</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Funcionário","Setor","Período aquisitivo","Início","Término","Dias","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{(funcionarioFixo?["Período aquisitivo","Início","Término","Dias","Status",""]:["Funcionário","Setor","Período aquisitivo","Início","Término","Dias","Status",""]).map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
             <tbody>{visiveis.map(f=>{
               const sc=statusCor(f.status,D);
               return (
               <tr key={f.id} style={{borderBottom:"1px solid "+D.border}}>
+                {!funcionarioFixo&&(<>
                 <td data-label="Funcionário" style={{padding:"10px 8px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <Av name={f.funcionarioNome} color={D.blue} size={30}/>
@@ -186,6 +203,7 @@ export default function Ferias(p) {
                   </div>
                 </td>
                 <td data-label="Setor" style={{padding:"10px 8px",color:D.muted}}>{f.funcionarioSetor||"—"}</td>
+                </>)}
                 <td data-label="Período aquisitivo" style={{padding:"10px 8px",color:D.muted}}>{fData(f.periodoAquisitivoInicio)} a {fData(f.periodoAquisitivoFim)}</td>
                 <td data-label="Início" style={{padding:"10px 8px",color:D.muted}}>{f.dataInicio?fData(f.dataInicio):"—"}</td>
                 <td data-label="Término" style={{padding:"10px 8px",color:D.muted}}>{f.dataFim?fData(f.dataFim):"—"}</td>
@@ -197,7 +215,7 @@ export default function Ferias(p) {
                 </td>
                 <td style={{padding:"10px 8px"}}>
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
-                    <button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Histórico do funcionário" onClick={()=>setHistoricoDe(f.funcionarioId)}><History size={12}/></button>
+                    {!funcionarioFixo&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Histórico do funcionário" onClick={()=>setHistoricoDe(f.funcionarioId)}><History size={12}/></button>}
                     <button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Editar" onClick={()=>abrirEditar(f)}><Pencil size={12}/></button>
                   </div>
                 </td>
@@ -218,12 +236,14 @@ export default function Ferias(p) {
             <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{form.id?"Atualize o registro de férias.":"Cadastre um período de férias pra um funcionário."}</div>
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
-              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Funcionário</label>
-                <select style={st.inp} value={form.funcionarioId} onChange={e=>{setForm(f=>({...f,funcionarioId:e.target.value}));setFormErr("");}} disabled={!!form.id}>
-                  <option value="">Selecione...</option>
-                  {funcionarios.map(fn=><option key={fn.id} value={fn.id}>{fn.nome}{fn.setor?" — "+fn.setor:""}{fn.status==="Inativo"?" (Inativo)":""}</option>)}
-                </select>
-              </div>
+              {!funcionarioFixo&&(
+                <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Funcionário</label>
+                  <select style={st.inp} value={form.funcionarioId} onChange={e=>{setForm(f=>({...f,funcionarioId:e.target.value}));setFormErr("");}} disabled={!!form.id}>
+                    <option value="">Selecione...</option>
+                    {funcionarios.map(fn=><option key={fn.id} value={fn.id}>{fn.nome}{fn.setor?" — "+fn.setor:""}{fn.status==="Inativo"?" (Inativo)":""}</option>)}
+                  </select>
+                </div>
+              )}
               <div><label style={st.lbl}>Início do período aquisitivo</label><input type="date" style={st.inp} value={form.periodoAquisitivoInicio} onChange={e=>setForm(f=>({...f,periodoAquisitivoInicio:e.target.value,periodoAquisitivoFim:f.periodoAquisitivoFim||sugerirFimPeriodo(e.target.value)}))}/></div>
               <div><label style={st.lbl}>Fim do período aquisitivo</label><input type="date" style={st.inp} value={form.periodoAquisitivoFim} onChange={e=>setForm(f=>({...f,periodoAquisitivoFim:e.target.value}))}/></div>
               <div><label style={st.lbl}>Status</label>
