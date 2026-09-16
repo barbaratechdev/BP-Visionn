@@ -7,7 +7,14 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: #0f172a;
-  background: #f8fafc;
+  background: #edf1f7;
+  /* Espelha LIGHT.muted/DARK.muted de src/constants.ts — App.tsx mantém
+     essa variável sincronizada com o tema atual (efeito em App(), a partir
+     do estado "dark"), pra placeholders e o rótulo das tabelas em modo
+     cartão (mobile) acompanharem o tema sem precisar de uma classe global
+     de dark mode (o app não tem uma, é tudo via prop D). O valor aqui é só
+     o fallback do primeiro paint / tela de login (sempre clara). */
+  --bv-muted: #475569;
 }
 
 #root {
@@ -22,7 +29,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #f8fafc;
+  background: #edf1f7;
 }
 
 * {
@@ -35,6 +42,11 @@ body, html {
 
 button, input, select, textarea {
   font: inherit;
+}
+
+::placeholder {
+  color: var(--bv-muted);
+  opacity: 1;
 }
 
 h1,
@@ -106,8 +118,8 @@ button:focus-visible {
 }
 
 .bv-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 4px rgba(15,23,42,0.05), 0 20px 45px rgba(15,23,42,0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(15,23,42,0.05), 0 10px 24px rgba(15,23,42,0.08);
 }
 
 .bv-stat-card {
@@ -115,8 +127,8 @@ button:focus-visible {
 }
 
 .bv-stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 10px rgba(15,23,42,0.06), 0 22px 48px rgba(15,23,42,0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(15,23,42,0.06), 0 12px 28px rgba(15,23,42,0.09);
 }
 
 .bv-nav-item {
@@ -127,15 +139,11 @@ button:focus-visible {
   transform: translateX(2px);
 }
 
-.bv-nav-item.active::before {
-  content: "";
-  position: absolute;
-  left: -0.9rem;
-  top: 22%;
-  bottom: 22%;
-  width: 3px;
-  border-radius: 3px;
-  background: currentColor;
+/* Item ativo já é um preenchimento sólido (SIDEBAR.active, ver App.tsx) —
+   só o inativo ganha um leve destaque de fundo no hover. */
+.bv-nav-item:not(.active):hover {
+  background: rgba(255,255,255,0.06);
+  color: #fff;
 }
 
 .bv-progress-fill {
@@ -296,7 +304,6 @@ button:focus-visible {
     flex-wrap: wrap;
     row-gap: 10px;
   }
-  .bv-header-brand-text,
   .bv-header-username {
     display: none;
   }
@@ -367,7 +374,7 @@ button:focus-visible {
     content: attr(data-label);
     font-weight: 600;
     font-size: 11px;
-    color: #94a3b8;
+    color: var(--bv-muted);
     text-align: left;
     flex-shrink: 0;
   }

@@ -2,7 +2,7 @@ import { TrendingUp } from "lucide-react";
 
 export default function MCard(p) {
   return (
-    <div className="bv-stat-card" style={{background:p.D.white,borderRadius:18,border:"1.5px solid "+(p.highlight||p.D.border),padding:"1.6rem",display:"flex",flexDirection:"column",gap:16,boxShadow:"0 1px 2px rgba(15,23,42,0.04), 0 12px 28px rgba(15,23,42,0.06)"}}>
+    <div className="bv-stat-card" style={{background:p.D.white,borderRadius:14,border:"1px solid "+p.D.border,padding:"1.6rem",display:"flex",flexDirection:"column",gap:16,boxShadow:"0 1px 2px rgba(15,23,42,0.04), 0 8px 20px rgba(15,23,42,0.05)"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div style={{width:46,height:46,borderRadius:13,background:p.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><p.Icon size={22} color={p.color}/></div>
         <div style={{width:26,height:26,borderRadius:"50%",background:p.D.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><TrendingUp size={13} color={p.D.muted}/></div>

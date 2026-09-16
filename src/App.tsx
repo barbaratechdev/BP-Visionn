@@ -2,8 +2,9 @@ import { useState, useRef, useEffect, Fragment } from "react";
 import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
-import { LIGHT, DARK, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
+import { LIGHT, DARK, SIDEBAR, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
 import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
+import { useDraggable } from "./lib/useDraggable";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
 import MCard from "./components/MCard";
@@ -25,8 +26,16 @@ export default function App() {
     lbl:{fontSize:12,color:D.muted,display:"block",marginBottom:5,fontWeight:500},
     btn:{padding:"8px 16px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:13,color:D.text,display:"inline-flex",alignItems:"center",gap:6,fontWeight:500,boxShadow:"0 2px 8px rgba(15,23,42,0.04)",transition:"transform .15s ease, box-shadow .15s ease, background-color .15s ease"},
     btnBlue:{padding:"9px 18px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:13,color:"#fff",display:"inline-flex",alignItems:"center",gap:6,fontWeight:600,boxShadow:"0 10px 24px rgba(37, 99, 235, 0.24)",transition:"transform .15s ease, box-shadow .15s ease, filter .15s ease"},
-    card:{background:D.white,borderRadius:20,border:"1px solid "+D.border,padding:"1.4rem 1.5rem",marginBottom:12,boxShadow:"0 1px 2px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.07)",transition:"transform .18s ease, box-shadow .18s ease"},
+    card:{background:D.white,borderRadius:14,border:"1px solid "+D.border,padding:"1.4rem 1.5rem",marginBottom:12,boxShadow:"0 1px 2px rgba(15,23,42,0.04), 0 10px 24px rgba(15,23,42,0.05)",transition:"transform .18s ease, box-shadow .18s ease"},
   };
+
+  // Sincroniza --bv-muted (definida em index.css) com D.muted do tema atual
+  // — é a única forma de um CSS puro (::placeholder, o rótulo das tabelas em
+  // modo cartão no mobile) acompanhar o dark mode, já que ele é 100% via
+  // prop (D)/estado React, sem classe nem data-attribute no <html>/<body>.
+  useEffect(()=>{
+    document.documentElement.style.setProperty("--bv-muted", D.muted);
+  },[D.muted]);
 
   const [users, setUsers] = useState<UserType[]>([]);
   const [user, setUser]   = useState<UserType | null>(null);
@@ -61,6 +70,8 @@ export default function App() {
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [representantes, setRepresentantes] = useState([]);
   const [showRepForm, setShowRepForm] = useState(false);
+  const { dragStyle: repDragStyle, dragHandleProps: repDragHandleProps, resetDrag: resetRepDrag } = useDraggable();
+  const [confirmDelRep, setConfirmDelRep] = useState<{id:string,nome:string} | null>(null);
   const [repForm, setRepForm] = useState({id:null,nome:"",cpf:"",regiao:"Pará",supervisorId:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:"",numeroCore:"",tipoVinculo:"",vinculoDataInicio:"",vinculoDataTerminoPrevisto:"",statusContrato:"",contratoDataEnvio:"",contratoDataConclusao:""});
   const [repFormErr, setRepFormErr] = useState("");
   const [repSearch, setRepSearch] = useState("");
@@ -146,14 +157,15 @@ export default function App() {
   // Representantes/Supervisores (que hoje acompanham isRH).
   const ID_RH_TELA_EXTRA = "273eca2f-509e-424a-a12e-bcf3ce7c7a7e";
   const isRHTelaExtra = !!(user && user.id===ID_RH_TELA_EXTRA);
-  // Aba Supervisores: além de admin, liberada nominalmente pra Esmeralda,
-  // Carol (Financeiro), Ana e Paulo — não existe controle de acesso por
-  // pessoa no sistema, então o critério aqui é o primeiro nome do perfil
-  // (case-insensitive, \b pra não pegar "Carolina"/"Mariana" etc.).
-  const isSupervisoresExtra = !!(user && user.name && /\b(esmeralda|carol|ana|paulo)\b/i.test(user.name));
-  // Dentro da aba, incluir/editar supervisor é liberado pra Esmeralda, Ana e
-  // Paulo (não pra Carol) — desativar continua exclusivo de admin.
-  const podeEditarSupervisores = !!(user && user.name && /\b(esmeralda|ana|paulo)\b/i.test(user.name));
+  // Aba Supervisores: liberada por perfil pra todo o setor Financeiro
+  // (isFin — mesma regra usada em Representantes/Contratos/Auditoria), mais
+  // uma exceção nominal pra Esmeralda e Ana caso não estejam cadastradas
+  // como Financeiro (\b pra não pegar "Mariana" etc.). Ver
+  // 20260914000000_supervisores_edicao_financeiro.sql pro espelho no banco.
+  const isSupervisoresExtra = !!(isFin || (user && user.name && /\b(esmeralda|ana)\b/i.test(user.name)));
+  // Incluir/editar supervisor segue a mesma regra: todo Financeiro pode,
+  // além da mesma exceção nominal — desativar continua exclusivo de admin.
+  const podeEditarSupervisores = !!(isFin || (user && user.name && /\b(esmeralda|ana)\b/i.test(user.name)));
   // Funcionária do financeiro: na aba Tarefas ela vê o grid de Prorrogação de
   // Boletos + Calendário — a lista de Tarefas entra na coluna principal desse
   // mesmo grid (logo abaixo de Prorrogação), em vez de ficar solta depois
@@ -895,12 +907,12 @@ export default function App() {
 
   function abrirNovoRep(){
     setRepForm({id:null,nome:"",cpf:"",regiao:"Pará",supervisorId:user?user.id:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:"",numeroCore:"",tipoVinculo:"",vinculoDataInicio:"",vinculoDataTerminoPrevisto:"",statusContrato:"",contratoDataEnvio:"",contratoDataConclusao:""});
-    setRepFormErr(""); setShowRepForm(true);
+    setRepFormErr(""); setShowRepForm(true); resetRepDrag();
   }
 
   function abrirEditarRep(r){
     setRepForm({id:r.id,nome:r.nome,cpf:r.cpf,regiao:r.regiao,supervisorId:r.supervisorId,status:r.status,dataEntrada:r.dataEntrada,dataSaida:r.dataSaida,motivoSaida:r.motivoSaida,numeroCore:r.numeroCore,tipoVinculo:r.tipoVinculo,vinculoDataInicio:r.vinculoDataInicio,vinculoDataTerminoPrevisto:r.vinculoDataTerminoPrevisto,statusContrato:r.statusContrato,contratoDataEnvio:r.contratoDataEnvio,contratoDataConclusao:r.contratoDataConclusao});
-    setRepFormErr(""); setShowRepForm(true);
+    setRepFormErr(""); setShowRepForm(true); resetRepDrag();
   }
 
   // Troca de tipo de vínculo = novo período começando: reinicia data de
@@ -961,6 +973,21 @@ export default function App() {
       addN("Novo representante: "+nome); addA("Representante criado",nome,"Região: "+novo.regiao);
     }
     setShowRepForm(false); setRepFormErr("");
+  }
+
+  // Exclusão de verdade (delete, não só some da lista) — RLS
+  // (representantes_delete_admin) só aceita a operação vinda de um admin;
+  // o botão fica escondido pros demais perfis pra não expor uma ação que o
+  // banco vai recusar mesmo assim.
+  async function excluirRepresentante(id){
+    if(bloqueadoDemo()||!isAdmin) return;
+    const r = representantes.find(x=>x.id===id);
+    const { error } = await supabase.from("representantes").delete().eq("id", id);
+    setConfirmDelRep(null);
+    if(error) return;
+    setRepresentantes(prev=>prev.filter(x=>x.id!==id));
+    addA("Representante excluído", r?r.nome:"", "Removido por "+(user?user.name:""));
+    addN("🗑️ Representante excluído: "+(r?r.nome:""));
   }
 
   async function addContrato(){
@@ -1572,19 +1599,17 @@ export default function App() {
   );
 
   return (
-    <div className="bv-page-outer" style={{minHeight:"100vh",background: dark ? "linear-gradient(135deg, "+D.bg+" 0%, "+D.white+" 100%)" : "linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)",padding:"24px",boxSizing:"border-box"}}>
+    <div className="bv-page-outer" style={{minHeight:"100vh",background:"linear-gradient(135deg, "+D.bg+" 0%, "+D.white+" 100%)",padding:"24px",boxSizing:"border-box"}}>
       {demoMsg&&(
         <div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",zIndex:1000,background:D.redSoft,color:D.redText,border:"1px solid "+D.red+"44",borderRadius:12,padding:"10px 18px",fontSize:13,fontWeight:600,boxShadow:"0 12px 30px rgba(0,0,0,0.18)",display:"flex",alignItems:"center",gap:8}}>
           <AlertCircle size={15}/>Você não possui permissão para executar esta ação.
         </div>
       )}
-      <div className="bv-page-card" style={{maxWidth:1600,margin:"0 auto",minHeight:"calc(100vh - 48px)",background:dark?D.bg:D.white,borderRadius:28,overflow:"hidden",boxShadow:"0 24px 70px rgba(15,23,42,0.16)",border:"1px solid "+D.border,display:"flex",flexDirection:"column"}}>
+      <div className="bv-page-card" style={{maxWidth:1600,margin:"0 auto",minHeight:"calc(100vh - 48px)",background:dark?D.bg:D.white,borderRadius:18,overflow:"hidden",boxShadow:"0 16px 48px rgba(15,23,42,0.12)",border:"1px solid "+D.border,display:"flex",flexDirection:"column"}}>
         {/* HEADER */}
       <div className="bv-header" style={{background:D.white,borderBottom:"1px solid "+D.border,padding:"0 28px",height:78,display:"flex",alignItems:"center",justifyContent:"space-between",gap:18,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <button className="bv-hamburger-btn" onClick={()=>setShowDrawer(true)} style={{...st.btn,padding:"7px 9px",border:"none",background:D.bg}}><Menu size={18} color={D.text}/></button>
-          <div style={{width:32,height:32,borderRadius:8,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center"}}><Receipt size={16} color={D.blue}/></div>
-          <span className="bv-header-brand-text" style={{fontWeight:700,fontSize:15,color:D.blue,letterSpacing:"-0.3px"}}>BP-Visionn</span>
         </div>
         <div className="bv-header-search" style={{flex:1,maxWidth:420,position:"relative"}}>
           <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
@@ -1618,29 +1643,39 @@ export default function App() {
       <div style={{display:"flex",flex:1,overflow:"hidden",position:"relative"}}>
         {showDrawer&&<div className="bv-drawer-backdrop" onClick={()=>setShowDrawer(false)}/>}
         {/* SIDEBAR */}
-        <div className={"bv-sidebar"+(showDrawer?" open":"")} style={{width:250,background:dark?D.white:"#f8fafc",borderRight:"1px solid "+D.border,padding:"1.15rem 0.9rem",flexShrink:0,overflowY:"auto",display:"flex",flexDirection:"column"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 4px",marginBottom:16}}>
-            <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={dark?D.white:"#f8fafc"} size={36}/>
+        <div className={"bv-sidebar"+(showDrawer?" open":"")} style={{width:250,background:SIDEBAR.bg,borderRight:"1px solid "+SIDEBAR.border,padding:"1.15rem 0.9rem",flexShrink:0,overflowY:"auto",display:"flex",flexDirection:"column"}}>
+          {/* MARCA — identidade fixa do sidebar, independente do tema
+              claro/escuro do conteúdo (ver SIDEBAR em constants.ts) */}
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"2px 4px 16px",marginBottom:14,borderBottom:"1px solid "+SIDEBAR.border}}>
+            <div style={{width:38,height:38,borderRadius:10,background:SIDEBAR.active,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Receipt size={18} color="#fff"/></div>
             <div style={{minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:D.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Olá, {nomeVisivel(user)}!</div>
-              <div style={{fontSize:11,color:D.muted}}>{roleLabel(user.role)}</div>
+              <div style={{fontSize:16,fontWeight:700,color:SIDEBAR.text,letterSpacing:"-0.3px",whiteSpace:"nowrap"}}>BP-Visionn</div>
+              <div style={{fontSize:11,color:SIDEBAR.textMuted}}>Gestão Inteligente</div>
+            </div>
+          </div>
+
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 4px 16px",marginBottom:14,borderBottom:"1px solid "+SIDEBAR.border}}>
+            <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={SIDEBAR.bgSolid} size={36}/>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600,color:SIDEBAR.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Olá, {nomeVisivel(user)}!</div>
+              <div style={{fontSize:11,color:SIDEBAR.textMuted}}>{roleLabel(user.role)}</div>
             </div>
           </div>
           {NAV.map(n=>(
-            <button key={n.id} className={"bv-nav-item"+(tab===n.id?" active":"")} onClick={()=>{setTab(n.id);setShowDrawer(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:5,position:"relative",background:tab===n.id?D.blueSoft:"transparent",color:tab===n.id?D.blue:D.muted,fontWeight:tab===n.id?600:500,fontSize:13,boxShadow:tab===n.id?"0 8px 20px rgba(37,99,235,0.12)":"none"}}>
+            <button key={n.id} className={"bv-nav-item"+(tab===n.id?" active":"")} onClick={()=>{setTab(n.id);setShowDrawer(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:3,position:"relative",background:tab===n.id?SIDEBAR.active:"transparent",color:tab===n.id?SIDEBAR.text:SIDEBAR.textMuted,fontWeight:tab===n.id?600:500,fontSize:13,boxShadow:tab===n.id?SIDEBAR.activeShadow:"none"}}>
               <n.Icon size={16}/>{n.label}
               {n.id==="pendencias"&&pendsVis.length>0&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{pendsVis.length}</span>}
               {n.id==="mensagens"&&naoLidasChat>0&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{naoLidasChat}</span>}
             </button>
           ))}
 
-          <div style={{marginTop:"auto",paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
-            <button onClick={()=>setDark(p=>!p)} style={{...st.btn,width:"100%",justifyContent:"space-between",background:dark?D.bg:"#fff"}}>
+          <div style={{marginTop:"auto",paddingTop:14,borderTop:"1px solid "+SIDEBAR.border,display:"flex",flexDirection:"column",gap:8}}>
+            <button onClick={()=>setDark(p=>!p)} style={{...st.btn,width:"100%",justifyContent:"space-between",background:SIDEBAR.hover,border:"1px solid "+SIDEBAR.border,color:SIDEBAR.text}}>
               <span style={{display:"flex",alignItems:"center",gap:8}}>{dark?<Moon size={15} color={D.blue}/>:<Sun size={15} color={D.orange}/>}Modo escuro</span>
               <span className={"bv-switch"+(dark?" on":"")}><span className="bv-switch-knob"/></span>
             </button>
-            <button onClick={doLogout} style={{...st.btn,width:"100%",justifyContent:"center",color:D.redText,background:dark?D.bg:"#fff"}}><LogOut size={15}/>Sair</button>
-            <div style={{fontSize:10,color:D.muted,textAlign:"center",marginTop:4}}>© 2026 BP-Visionn<br/>Todos os direitos reservados.</div>
+            <button onClick={doLogout} style={{...st.btn,width:"100%",justifyContent:"center",color:SIDEBAR.danger,background:SIDEBAR.hover,border:"1px solid "+SIDEBAR.border}}><LogOut size={15}/>Sair</button>
+            <div style={{fontSize:10,color:SIDEBAR.textMuted,textAlign:"center",marginTop:4,lineHeight:1.5}}>Organização hoje.<br/>Resultados amanhã.<br/>BP-Visionn v1.0.0</div>
           </div>
         </div>
 
@@ -1651,9 +1686,13 @@ export default function App() {
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Dashboard</div><div style={{fontSize:13,color:D.muted}}>Bem-vinda, Bárbara!</div></div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:20}}>
-                <MCard D={D} label="Pendências" value={tarefas.filter(t=>t.status==="pendente"||t.status==="vencido").length} Icon={Clock} bg={D.orangeSoft} color={D.orange} highlight={D.orange+"66"}/>
-                <MCard D={D} label="Urgentes"   value={tarefas.filter(t=>t.status==="vencido").length} Icon={Zap} bg={D.redSoft} color={D.red} highlight={D.red+"66"}/>
-                <MCard D={D} label="Concluídas" value={tarefas.filter(t=>t.status==="pago").length} Icon={CheckCircle} bg={D.greenSoft} color={D.green} highlight={D.green+"66"}/>
+                {/* highlight usa a variante *Text (mais escura), não a cor
+                    base + alpha: o número precisa ler forte — o alpha
+                    deixava o dígito lavado. Ícone/fundo do quadradinho
+                    (bg/color) continuam na cor base, sem mudança. */}
+                <MCard D={D} label="Pendências" value={tarefas.filter(t=>t.status==="pendente"||t.status==="vencido").length} Icon={Clock} bg={D.orangeSoft} color={D.orange} highlight={D.orangeText}/>
+                <MCard D={D} label="Urgentes"   value={tarefas.filter(t=>t.status==="vencido").length} Icon={Zap} bg={D.redSoft} color={D.red} highlight={D.redText}/>
+                <MCard D={D} label="Concluídas" value={tarefas.filter(t=>t.status==="pago").length} Icon={CheckCircle} bg={D.greenSoft} color={D.green} highlight={D.greenText}/>
                 <MCard D={D} label="Total"      value={tarefas.length} Icon={Receipt} bg={D.blueSoft} color={D.blue}/>
               </div>
               <div className="bv-dash-grid">
@@ -1672,6 +1711,9 @@ export default function App() {
                   const ug=m.filter(t=>t.status==="vencido").length;
                   const pc=m.length>0?Math.round((m.filter(t=>t.status==="pago").length/m.length)*100):0;
                   const pCor = pc>60?D.green:pc>30?D.orange:D.red;
+                  // Barra usa a cor base (pCor); o texto do percentual usa a
+                  // variante *Text, mais escura — mesma cor, mais legível.
+                  const pCorTexto = pc>60?D.greenText:pc>30?D.orangeText:D.redText;
                   return (
                     <div key={fn.id} style={{display:"flex",alignItems:"center",gap:14,marginBottom:18,flexWrap:"wrap"}}>
                       <Av name={fn.name} initials={fn.initials} color={fn.color} photo={fn.photo} size={40}/>
@@ -1681,7 +1723,7 @@ export default function App() {
                       </div>
                       <div style={{flex:1,minWidth:130,display:"flex",alignItems:"center",gap:10}}>
                         <div style={{flex:1,height:8,background:D.gray,borderRadius:20,overflow:"hidden"}}><div className="bv-progress-fill" style={{height:"100%",background:"linear-gradient(90deg, "+pCor+"cc, "+pCor+")",borderRadius:20,width:pc+"%"}}></div></div>
-                        <span style={{fontSize:13,fontWeight:700,color:pCor,minWidth:36,textAlign:"right"}}>{pc}%</span>
+                        <span style={{fontSize:13,fontWeight:700,color:pCorTexto,minWidth:36,textAlign:"right"}}>{pc}%</span>
                       </div>
                       <div style={{textAlign:"center",minWidth:56}}>
                         <div style={{fontSize:15,fontWeight:700,color:D.text}}>{m.length}</div>
@@ -1996,7 +2038,12 @@ export default function App() {
                           <td data-label="Entrada" style={{padding:"10px 8px",color:D.muted}}>{r.dataEntrada||"—"}</td>
                           <td data-label="Tempo de casa" style={{padding:"10px 8px",color:D.muted}}>{fTempoDeEmpresa(r.dataEntrada)}</td>
                           <td data-label="Saída" style={{padding:"10px 8px",color:D.muted}}>{r.dataSaida||"—"}</td>
-                          <td style={{padding:"10px 8px"}}>{!isDemo&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarRep(r)}><Pencil size={12}/>Editar</button>}</td>
+                          <td style={{padding:"10px 8px"}}>
+                            <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
+                              {!isDemo&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarRep(r)}><Pencil size={12}/>Editar</button>}
+                              {isAdmin&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} title="Excluir" onClick={()=>setConfirmDelRep({id:r.id,nome:r.nome})}><Trash2 size={12}/></button>}
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}</tbody>
@@ -2295,11 +2342,13 @@ export default function App() {
         const rGrid={display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:"18px 20px"};
         const rSecao={fontWeight:700,fontSize:13,color:D.text,margin:"26px 0 14px",paddingBottom:8,borderBottom:"1px solid "+D.border,textTransform:"uppercase",letterSpacing:"0.03em"};
         return (
-        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1.5rem"}} onClick={fecharRepForm}>
-          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2.25rem 2.5rem",maxWidth:800,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
-            <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Users size={22} color={D.purple}/></div>
-            <div style={{fontWeight:700,fontSize:18,color:D.text,textAlign:"center",marginBottom:8}}>{repForm.id?"Editar representante":"Novo representante"}</div>
-            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:8}}>{repForm.id?"Atualize os dados do representante.":"Cadastre um representante para vincular a contratos."}</div>
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1.5rem"}}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2.25rem 2.5rem",maxWidth:800,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",...repDragStyle}} onClick={e=>e.stopPropagation()}>
+            <div {...repDragHandleProps}>
+              <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Users size={22} color={D.purple}/></div>
+              <div style={{fontWeight:700,fontSize:18,color:D.text,textAlign:"center",marginBottom:8}}>{repForm.id?"Editar representante":"Novo representante"}</div>
+              <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:8}}>{repForm.id?"Atualize os dados do representante.":"Cadastre um representante para vincular a contratos."}</div>
+            </div>
 
             <div style={{...rSecao,marginTop:22}}>Dados do representante</div>
             <div style={rGrid}>
@@ -2365,6 +2414,21 @@ export default function App() {
         </div>
         );
       })()}
+
+      {/* MODAL: confirmar exclusão de representante */}
+      {confirmDelRep&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:600,padding:"1rem"}} onClick={()=>setConfirmDelRep(null)}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:16,padding:"1.6rem",maxWidth:360,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:44,height:44,borderRadius:12,background:D.redSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><Trash2 size={20} color={D.red}/></div>
+            <div style={{fontWeight:700,fontSize:15,color:D.text,marginBottom:6}}>Excluir representante?</div>
+            <div style={{fontSize:13,color:D.muted,marginBottom:18}}>{confirmDelRep.nome} será removido definitivamente. Essa ação não pode ser desfeita.</div>
+            <div style={{display:"flex",gap:10}}>
+              <button style={{flex:1,padding:"9px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:13,color:D.text,fontWeight:500}} onClick={()=>setConfirmDelRep(null)}>Cancelar</button>
+              <button style={{flex:1,padding:"9px",borderRadius:10,border:"none",background:D.red,cursor:"pointer",fontSize:13,color:"#fff",fontWeight:600}} onClick={()=>excluirRepresentante(confirmDelRep.id)}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { Plus, Search, X, Pencil, Eye, Save, AlertCircle, Briefcase } from "luci
 import { supabase } from "../lib/supabase";
 import { fData, fTempoDeEmpresa, mapFuncionarioRow } from "../lib/helpers";
 import { hoje, ESTADOS_FILIAL } from "../constants";
+import { useDraggable } from "../lib/useDraggable";
 import Av from "./Av";
 import Ferias from "./Ferias";
 
@@ -46,6 +47,7 @@ export default function RH(p) {
   const [formErr, setFormErr] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [detalheDe, setDetalheDe] = useState(null);
+  const { dragStyle, dragHandleProps, resetDrag } = useDraggable();
 
   async function carregar(){
     setLoading(true);
@@ -57,12 +59,12 @@ export default function RH(p) {
   useEffect(()=>{ carregar(); },[]);
 
   function abrirNovo(){
-    setForm(FORM_VAZIO); setFormErr(""); setShowForm(true);
+    setForm(FORM_VAZIO); setFormErr(""); setShowForm(true); resetDrag();
   }
 
   function abrirEditar(f){
     setForm({id:f.id,nome:f.nome,setor:f.setor,estadoFilial:f.estadoFilial,telefone:f.telefone,dataEntrada:f.dataEntrada,tipoVinculo:f.tipoVinculo,valeTransporte:f.valeTransporte,valeRefeicao:f.valeRefeicao,observacoes:f.observacoes,status:f.status,dataSaida:f.dataSaida});
-    setFormErr(""); setShowForm(true);
+    setFormErr(""); setShowForm(true); resetDrag();
   }
 
   function fecharForm(){ setShowForm(false); setFormErr(""); }
@@ -192,11 +194,13 @@ export default function RH(p) {
 
       {/* MODAL: cadastro / edição */}
       {showForm&&(
-        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={fecharForm}>
-          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:560,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
-            <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><Briefcase size={22} color={D.purple}/></div>
-            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:4}}>{form.id?"Editar Funcionário":"Novo Funcionário"}</div>
-            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{form.id?"Atualize os dados do funcionário.":"Cadastre um funcionário da empresa."}</div>
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:560,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",...dragStyle}} onClick={e=>e.stopPropagation()}>
+            <div {...dragHandleProps}>
+              <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><Briefcase size={22} color={D.purple}/></div>
+              <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:4}}>{form.id?"Editar Funcionário":"Novo Funcionário"}</div>
+              <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{form.id?"Atualize os dados do funcionário.":"Cadastre um funcionário da empresa."}</div>
+            </div>
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Nome completo</label><input autoFocus style={st.inp} value={form.nome} onChange={e=>{setForm(f=>({...f,nome:e.target.value}));setFormErr("");}}/></div>

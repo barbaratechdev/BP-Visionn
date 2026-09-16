@@ -3,6 +3,7 @@ import { Plus, Search, X, Pencil, Eye, UserX, Save, AlertCircle, IdCard } from "
 import { supabase } from "../lib/supabase";
 import { fData, fTempoDeEmpresa, mapSupervisorRow, validarImagem, lerComoDataURL } from "../lib/helpers";
 import { hoje } from "../constants";
+import { useDraggable } from "../lib/useDraggable";
 import Av from "./Av";
 
 const FORM_VAZIO = {id:null,nome:"",cpf:"",email:"",telefone:"",dataNascimento:"",cargo:"",regiao:"Pará",dataInicio:hoje,dataFim:"",status:"Ativo",observacoes:""};
@@ -29,6 +30,7 @@ export default function Supervisores(p) {
   const [photoErr, setPhotoErr] = useState("");
   const [detalheDe, setDetalheDe] = useState(null);
   const [confirmDesativar, setConfirmDesativar] = useState(null);
+  const { dragStyle, dragHandleProps, resetDrag } = useDraggable();
 
   async function carregar(){
     setLoading(true);
@@ -40,12 +42,12 @@ export default function Supervisores(p) {
   useEffect(()=>{ carregar(); },[]);
 
   function abrirNovo(){
-    setForm(FORM_VAZIO); setFormErr(""); setPhotoPreview(null); setPhotoErr(""); setShowForm(true);
+    setForm(FORM_VAZIO); setFormErr(""); setPhotoPreview(null); setPhotoErr(""); setShowForm(true); resetDrag();
   }
 
   function abrirEditar(s){
     setForm({id:s.id,nome:s.nome,cpf:s.cpf,email:s.email,telefone:s.telefone,dataNascimento:s.dataNascimento,cargo:s.cargo,regiao:s.regiao,dataInicio:s.dataInicio,dataFim:s.dataFim,status:s.status,observacoes:s.observacoes});
-    setFormErr(""); setPhotoPreview(s.foto||null); setPhotoErr(""); setShowForm(true);
+    setFormErr(""); setPhotoPreview(s.foto||null); setPhotoErr(""); setShowForm(true); resetDrag();
   }
 
   function fecharForm(){ setShowForm(false); setFormErr(""); setPhotoPreview(null); setPhotoErr(""); }
@@ -189,11 +191,13 @@ export default function Supervisores(p) {
 
       {/* MODAL: cadastro / edição */}
       {showForm&&(
-        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={fecharForm}>
-          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:560,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
-            <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><IdCard size={22} color={D.purple}/></div>
-            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:4}}>{form.id?"Editar Supervisor":"Novo Supervisor"}</div>
-            <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{form.id?"Atualize os dados do supervisor.":"Cadastre um supervisor da estrutura do CRM."}</div>
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:560,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",...dragStyle}} onClick={e=>e.stopPropagation()}>
+            <div {...dragHandleProps}>
+              <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><IdCard size={22} color={D.purple}/></div>
+              <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:4}}>{form.id?"Editar Supervisor":"Novo Supervisor"}</div>
+              <div style={{fontSize:13,color:D.muted,textAlign:"center",marginBottom:20}}>{form.id?"Atualize os dados do supervisor.":"Cadastre um supervisor da estrutura do CRM."}</div>
+            </div>
 
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,marginBottom:16}}>
               <Av name={form.nome||"?"} photo={photoPreview} color={D.blue} size={72}/>
