@@ -483,8 +483,8 @@ export default function App() {
                     {pr.situacao==="Prorrogação Aprovada"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>Aprovado em {fData(pr.dataAprovacao)}</div>}
                   </td>
                   <td style={{padding:"10px 8px",display:"flex",gap:4}}>
-                    {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
-                    {isAdmin&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}
+                    {(isAdmin||isFin)&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
+                    {(isAdmin||isFin)&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}
                   </td>
                 </tr>
                 {editPr===pr.id&&(
