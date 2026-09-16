@@ -146,6 +146,20 @@ button:focus-visible {
   color: #fff;
 }
 
+/* Minimizar/expandir sidebar (desktop/notebook) — botão ☰ no header
+   (App.tsx) alterna a classe "collapsed". Largura em CSS (não inline) de
+   propósito: dentro do @media de mobile mais abaixo, ".bv-sidebar.collapsed"
+   é sobrescrita de volta pra 82vw, então essa minimização nunca aperta a
+   gaveta deslizante do celular caso a tela seja redimensionada com o
+   estado "collapsed" ainda ligado. */
+.bv-sidebar {
+  width: 250px;
+  transition: width .25s ease;
+}
+.bv-sidebar.collapsed {
+  width: 76px;
+}
+
 .bv-progress-fill {
   transition: width .5s ease;
 }
@@ -331,6 +345,11 @@ button:focus-visible {
   }
   .bv-sidebar.open {
     transform: translateX(0);
+  }
+  /* No celular a sidebar é sempre a gaveta deslizante em largura cheia —
+     "collapsed" (recurso de desktop/notebook) nunca deve espremer isso. */
+  .bv-sidebar.collapsed {
+    width: 82vw;
   }
 
   .bv-drawer-backdrop {

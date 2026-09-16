@@ -48,6 +48,14 @@ export default function App() {
   const [meuEmail, setMeuEmail] = useState("");
   const [demoMsg, setDemoMsg] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
+  // Sidebar minimizada (desktop/notebook) — independente do showDrawer
+  // acima, que é a gaveta deslizante do mobile (telas ≤860px). Mesmo botão
+  // ☰ decide qual dos dois mexer, conforme a largura da janela no momento
+  // do clique (ver onClick do botão, mais abaixo). O CSS (.bv-sidebar em
+  // index.css) garante que, se a janela for redimensionada pra ≤860px
+  // enquanto "collapsed" estiver true, a largura da gaveta mobile (82vw)
+  // prevalece — sidebarCollapsed nunca aperta o layout do celular.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
@@ -1624,7 +1632,7 @@ export default function App() {
         {/* HEADER */}
       <div className="bv-header" style={{background:D.white,borderBottom:"1px solid "+D.border,padding:"0 28px",height:78,display:"flex",alignItems:"center",justifyContent:"space-between",gap:18,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <button className="bv-hamburger-btn" onClick={()=>setShowDrawer(true)} style={{...st.btn,padding:"7px 9px",border:"none",background:D.bg}}><Menu size={18} color={D.text}/></button>
+          <button className="bv-hamburger-btn" title={sidebarCollapsed?"Expandir menu":"Minimizar menu"} onClick={()=>{ if(window.innerWidth>860) setSidebarCollapsed(p=>!p); else setShowDrawer(true); }} style={{...st.btn,padding:"7px 9px",border:"none",background:D.bg}}><Menu size={18} color={D.text}/></button>
         </div>
         <div className="bv-header-search" style={{flex:1,maxWidth:420,position:"relative"}}>
           <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
@@ -1658,49 +1666,59 @@ export default function App() {
       <div style={{display:"flex",flex:1,overflow:"hidden",position:"relative"}}>
         {showDrawer&&<div className="bv-drawer-backdrop" onClick={()=>setShowDrawer(false)}/>}
         {/* SIDEBAR */}
-        <div className={"bv-sidebar"+(showDrawer?" open":"")} style={{width:250,background:SIDEBAR.bg,borderRight:"1px solid "+SIDEBAR.border,padding:"1.15rem 0.9rem",flexShrink:0,overflowY:"auto",display:"flex",flexDirection:"column"}}>
+        <div className={"bv-sidebar"+(showDrawer?" open":"")+(sidebarCollapsed?" collapsed":"")} style={{background:SIDEBAR.bg,borderRight:"1px solid "+SIDEBAR.border,padding:sidebarCollapsed?"1.15rem 0.5rem":"1.15rem 0.9rem",flexShrink:0,overflowY:"auto",overflowX:"hidden",display:"flex",flexDirection:"column"}}>
           {/* MARCA — identidade fixa do sidebar, independente do tema
               claro/escuro do conteúdo (ver SIDEBAR em constants.ts).
               Ícone: logo oficial fornecida pela usuária (public/logo-visionn-icon.png,
               recortado do arquivo original enviado — "LOGO VISIONN.pdf",
               ícone geométrico roxo/azul substituindo o raio usado antes). */}
-          <div style={{display:"flex",alignItems:"center",gap:10,padding:"2px 4px 16px",marginBottom:14,borderBottom:"1px solid "+SIDEBAR.border}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:sidebarCollapsed?"center":"flex-start",gap:10,padding:sidebarCollapsed?"2px 0 16px":"2px 4px 16px",marginBottom:14,borderBottom:"1px solid "+SIDEBAR.border}}>
             <div style={{width:38,height:38,borderRadius:10,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <img src="/logo-visionn-icon.png" alt="BP-Visionn" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
             </div>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:16,fontWeight:700,color:SIDEBAR.text,letterSpacing:"-0.3px",whiteSpace:"nowrap"}}>BP-Visionn</div>
-              <div style={{fontSize:11,color:SIDEBAR.textMuted}}>Gestão Inteligente</div>
-            </div>
+            {!sidebarCollapsed&&(
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:16,fontWeight:700,color:SIDEBAR.text,letterSpacing:"-0.3px",whiteSpace:"nowrap"}}>BP-Visionn</div>
+                <div style={{fontSize:11,color:SIDEBAR.textMuted,whiteSpace:"nowrap"}}>Gestão Inteligente</div>
+              </div>
+            )}
           </div>
 
-          <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 4px 16px",marginBottom:14,borderBottom:"1px solid "+SIDEBAR.border}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:sidebarCollapsed?"center":"flex-start",gap:10,padding:sidebarCollapsed?"0 0 16px":"0 4px 16px",marginBottom:14,borderBottom:"1px solid "+SIDEBAR.border}}>
             <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={SIDEBAR.bgSolid} size={36}/>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:600,color:SIDEBAR.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Olá, {nomeVisivel(user)}!</div>
-              <div style={{fontSize:11,color:SIDEBAR.textMuted}}>{roleLabel(user.role)}</div>
-            </div>
+            {!sidebarCollapsed&&(
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:SIDEBAR.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Olá, {nomeVisivel(user)}!</div>
+                <div style={{fontSize:11,color:SIDEBAR.textMuted}}>{roleLabel(user.role)}</div>
+              </div>
+            )}
           </div>
-          {NAV.map(n=>(
-            <button key={n.id} className={"bv-nav-item"+(tab===n.id?" active":"")} onClick={()=>{setTab(n.id);setShowDrawer(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:3,position:"relative",background:tab===n.id?SIDEBAR.active:"transparent",color:tab===n.id?SIDEBAR.text:SIDEBAR.textMuted,fontWeight:tab===n.id?600:500,fontSize:13,boxShadow:tab===n.id?SIDEBAR.activeShadow:"none"}}>
-              <n.Icon size={16}/>{n.label}
-              {n.id==="pendencias"&&pendsVis.length>0&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{pendsVis.length}</span>}
-              {n.id==="mensagens"&&naoLidasChat>0&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{naoLidasChat}</span>}
+          {NAV.map(n=>{
+            const badgeCount = n.id==="pendencias" ? pendsVis.length : n.id==="mensagens" ? naoLidasChat : 0;
+            return (
+            <button key={n.id} title={sidebarCollapsed?n.label:undefined} className={"bv-nav-item"+(tab===n.id?" active":"")} onClick={()=>{setTab(n.id);setShowDrawer(false);}} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:sidebarCollapsed?"center":"flex-start",gap:9,padding:sidebarCollapsed?"11px 0":"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:3,position:"relative",background:tab===n.id?SIDEBAR.active:"transparent",color:tab===n.id?SIDEBAR.text:SIDEBAR.textMuted,fontWeight:tab===n.id?600:500,fontSize:13,boxShadow:tab===n.id?SIDEBAR.activeShadow:"none"}}>
+              <n.Icon size={16}/>
+              {!sidebarCollapsed&&n.label}
+              {!sidebarCollapsed&&badgeCount>0&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{badgeCount}</span>}
+              {sidebarCollapsed&&badgeCount>0&&<span style={{position:"absolute",top:6,right:"50%",marginRight:-16,width:7,height:7,borderRadius:"50%",background:D.red}}/>}
             </button>
-          ))}
+            );
+          })}
 
           <div style={{marginTop:"auto",paddingTop:14,borderTop:"1px solid "+SIDEBAR.border,display:"flex",flexDirection:"column",gap:8}}>
             {/* Composição inferior da sidebar (águia + logo Carvalho +
                 slogan) — public/sidebar-carvalho.png é a arte final
                 fornecida pela usuária (mais uma variante escolhida por ela),
                 usada como está, sem nenhum recorte, filtro ou ajuste de
-                opacidade/brilho aplicado por nós. */}
-            <img src="/sidebar-carvalho.png" alt="Carvalho Distribuidora" style={{width:"calc(100% + 28px)",marginLeft:-14,marginRight:-14,display:"block"}}/>
-            <button onClick={()=>setDark(p=>!p)} style={{...st.btn,width:"100%",justifyContent:"space-between",background:SIDEBAR.hover,border:"1px solid "+SIDEBAR.border,color:SIDEBAR.text}}>
-              <span style={{display:"flex",alignItems:"center",gap:8}}>{dark?<Moon size={15} color={D.blue}/>:<Sun size={15} color={D.orange}/>}Modo escuro</span>
-              <span className={"bv-switch"+(dark?" on":"")}><span className="bv-switch-knob"/></span>
+                opacidade/brilho aplicado por nós. Escondida quando a
+                sidebar está minimizada — forçar essa imagem numa faixa de
+                ~76px deformaria/cortaria o desenho. */}
+            {!sidebarCollapsed&&<img src="/sidebar-carvalho.png" alt="Carvalho Distribuidora" style={{width:"calc(100% + 28px)",marginLeft:-14,marginRight:-14,display:"block"}}/>}
+            <button title={sidebarCollapsed?"Modo escuro":undefined} onClick={()=>setDark(p=>!p)} style={{...st.btn,width:"100%",justifyContent:sidebarCollapsed?"center":"space-between",padding:sidebarCollapsed?"9px 0":undefined,background:SIDEBAR.hover,border:"1px solid "+SIDEBAR.border,color:SIDEBAR.text}}>
+              <span style={{display:"flex",alignItems:"center",gap:8}}>{dark?<Moon size={15} color={D.blue}/>:<Sun size={15} color={D.orange}/>}{!sidebarCollapsed&&"Modo escuro"}</span>
+              {!sidebarCollapsed&&<span className={"bv-switch"+(dark?" on":"")}><span className="bv-switch-knob"/></span>}
             </button>
-            <button onClick={doLogout} style={{...st.btn,width:"100%",justifyContent:"center",color:SIDEBAR.danger,background:SIDEBAR.hover,border:"1px solid "+SIDEBAR.border}}><LogOut size={15}/>Sair</button>
+            <button title={sidebarCollapsed?"Sair":undefined} onClick={doLogout} style={{...st.btn,width:"100%",justifyContent:"center",color:SIDEBAR.danger,background:SIDEBAR.hover,border:"1px solid "+SIDEBAR.border}}><LogOut size={15}/>{!sidebarCollapsed&&"Sair"}</button>
           </div>
         </div>
 
