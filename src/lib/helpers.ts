@@ -1,5 +1,5 @@
 import { hoje, TIPOS_IMG_PERMITIDOS, TAMANHO_MAX_IMG } from "../constants";
-import type { User, Tarefa, Contrato, AuditEntry } from "../types";
+import type { User, Tarefa, Contrato, AuditEntry, Avaria, AvariaSolicitacao, AvariaConcessao, AvariaAplicacao, AvariaHistoricoEntry } from "../types";
 
 export function getIn(n){ return n.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
 // Nome a mostrar na tela/relatórios: a versão curta (nomeExibicao), quando
@@ -385,6 +385,111 @@ export function mapFeriasRow(row){
     dias: row.dias_corridos==null ? "" : row.dias_corridos,
     status: row.status,
     observacoes: row.observacoes || "",
+  };
+}
+
+// Converte uma linha da tabela avarias (cabeçalho) para a UI.
+export function mapAvariaRow(row): Avaria {
+  return {
+    id: row.id,
+    filial: row.filial,
+    numeroNf: row.numero_nf,
+    dataNf: row.data_nf || "",
+    produtoNome: row.produto_nome,
+    produtoCodigo: row.produto_codigo || "",
+    quantidade: row.quantidade==null ? "" : Number(row.quantidade),
+    tipoAvaria: row.tipo_avaria,
+    descricao: row.descricao || "",
+    valorProduto: row.valor_produto==null ? null : Number(row.valor_produto),
+    valorAvaria: row.valor_avaria==null ? null : Number(row.valor_avaria),
+    dataIdentificacao: row.data_identificacao || "",
+    identificadoPor: row.identificado_por,
+    observacoes: row.observacoes || "",
+    status: row.status,
+    createdBy: row.created_by || "",
+    createdByNome: row.created_by_nome || "",
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || "",
+  };
+}
+
+// Converte uma linha de avaria_solicitacoes (ou da view avaria_solicitacoes_atual) para a UI.
+export function mapAvariaSolicitacaoRow(row): AvariaSolicitacao {
+  return {
+    id: row.id,
+    avariaId: row.avaria_id,
+    dataSolicitacao: row.data_solicitacao || "",
+    solicitanteId: row.solicitante_id || "",
+    solicitanteNome: row.solicitante_nome || "",
+    laboratorio: row.laboratorio,
+    canal: row.canal,
+    protocolo: row.protocolo || "",
+    referenciaComunicacao: row.referencia_comunicacao || "",
+    valorSolicitado: row.valor_solicitado==null ? null : Number(row.valor_solicitado),
+    observacoes: row.observacoes || "",
+    status: row.status,
+    motivo: row.motivo || "",
+    createdAt: row.created_at || "",
+  };
+}
+
+// Converte uma linha de avaria_concessoes para a UI.
+export function mapAvariaConcessaoRow(row): AvariaConcessao {
+  return {
+    id: row.id,
+    solicitacaoId: row.solicitacao_id,
+    avariaId: row.avaria_id,
+    dataConcessao: row.data_concessao || "",
+    valorSolicitado: row.valor_solicitado==null ? null : Number(row.valor_solicitado),
+    valorConcedido: row.valor_concedido==null ? 0 : Number(row.valor_concedido),
+    percentual: row.percentual==null ? null : Number(row.percentual),
+    confirmadoPorId: row.confirmado_por_id || "",
+    confirmadoPorNome: row.confirmado_por_nome || "",
+    protocolo: row.protocolo || "",
+    comprovanteReferencia: row.comprovante_referencia || "",
+    observacoes: row.observacoes || "",
+    status: row.status || "ATIVA",
+    motivoCancelamento: row.motivo_cancelamento || "",
+    canceladoEm: row.cancelado_em || "",
+    canceladoPorNome: row.cancelado_por_nome || "",
+    createdAt: row.created_at || "",
+  };
+}
+
+// Converte uma linha de avaria_aplicacoes para a UI.
+export function mapAvariaAplicacaoRow(row): AvariaAplicacao {
+  return {
+    id: row.id,
+    concessaoId: row.concessao_id,
+    avariaId: row.avaria_id,
+    nfOrigem: row.nf_origem,
+    nfAplicacao: row.nf_aplicacao,
+    dataAplicacao: row.data_aplicacao || "",
+    valorAplicado: row.valor_aplicado==null ? 0 : Number(row.valor_aplicado),
+    responsavelId: row.responsavel_id || "",
+    responsavelNome: row.responsavel_nome || "",
+    observacoes: row.observacoes || "",
+    status: row.status || "ATIVA",
+    motivoCancelamento: row.motivo_cancelamento || "",
+    canceladoEm: row.cancelado_em || "",
+    canceladoPorNome: row.cancelado_por_nome || "",
+    createdAt: row.created_at || "",
+  };
+}
+
+// Converte uma linha de avaria_historico (linha do tempo append-only) para a UI.
+export function mapAvariaHistoricoRow(row): AvariaHistoricoEntry {
+  return {
+    id: row.id,
+    avariaId: row.avaria_id,
+    tipo: row.tipo,
+    descricao: row.descricao,
+    valorAnterior: row.valor_anterior || "",
+    valorNovo: row.valor_novo || "",
+    referenciaAvariaId: row.referencia_avaria_id || "",
+    createdBy: row.created_by || "",
+    criadoPorNome: row.criado_por_nome || "",
+    createdAt: row.created_at || "",
   };
 }
 
