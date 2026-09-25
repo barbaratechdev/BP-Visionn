@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { supabase } from "./lib/supabase";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert } from "lucide-react";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, SIDEBAR, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
 import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
@@ -15,6 +15,7 @@ import Acessos from "./components/Acessos";
 import Supervisores from "./components/Supervisores";
 import RH from "./components/RH";
 import Avarias from "./components/Avarias";
+import Abatimentos from "./components/Abatimentos";
 import MiniCalendario from "./components/MiniCalendario";
 import StatusDonutCard from "./components/StatusDonutCard";
 import GoogleIcon from "./components/GoogleIcon";
@@ -1462,6 +1463,7 @@ export default function App() {
     {id:"pendencias",label:"Pendências",Icon:Clock,show:true},
     {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:isAdmin||isFin||isDemo},
     {id:"avarias",label:"Controle de Avarias",Icon:ShieldAlert,show:isAdmin||isFin||isDemo},
+    {id:"abatimentos",label:"Controle de Abatimentos",Icon:Percent,show:isAdmin||isFin||isDemo},
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
     {id:"rh",label:"RH",Icon:Briefcase,show:isAdmin||isRH||isRHTelaExtra},
     {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin||isDemo},
@@ -2112,6 +2114,10 @@ export default function App() {
           {/* CONTROLE DE AVARIAS */}
           {tab==="avarias"&&(isAdmin||isFin||isDemo)&&(
             <Avarias D={D} st={st} addA={addA} addN={addN} user={user} isDemo={isDemo}/>
+          )}
+
+          {tab==="abatimentos"&&(isAdmin||isFin||isDemo)&&(
+            <Abatimentos D={D} st={st} addA={addA} addN={addN} user={user} isDemo={isDemo}/>
           )}
 
           {/* CALENDÁRIO */}

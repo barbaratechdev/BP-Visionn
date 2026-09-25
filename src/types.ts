@@ -38,6 +38,16 @@ export type AvariaHistoricoEntry = {
   referenciaAvariaId:string; createdBy:string; criadoPorNome:string; createdAt:string;
 };
 
+// Controle de Abatimentos — ver 20260925000040_create_abatimentos.sql.
+// Sem exclusão física: correção é por cancelamento (status), mesmo conceito
+// já usado em avarias.
+export type AbatimentoStatus = "ATIVO"|"CANCELADO";
+export type Abatimento = {
+  id:string; laboratorio:string; nf:string; valorAbatimento:number; valorPago:number; data:string; filial:string;
+  status:AbatimentoStatus; createdBy:string; createdByNome:string; updatedBy:string; updatedByNome:string;
+  createdAt:string; updatedAt:string;
+};
+
 export type AppStyles = {
   inp: CSSProperties;
   lbl: CSSProperties;

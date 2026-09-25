@@ -1,5 +1,5 @@
 import { hoje, TIPOS_IMG_PERMITIDOS, TAMANHO_MAX_IMG } from "../constants";
-import type { User, Tarefa, Contrato, AuditEntry, Avaria, AvariaSolicitacao, AvariaConcessao, AvariaAplicacao, AvariaHistoricoEntry } from "../types";
+import type { User, Tarefa, Contrato, AuditEntry, Avaria, AvariaSolicitacao, AvariaConcessao, AvariaAplicacao, AvariaHistoricoEntry, Abatimento } from "../types";
 
 export function getIn(n){ return n.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
 // Nome a mostrar na tela/relatórios: a versão curta (nomeExibicao), quando
@@ -385,6 +385,26 @@ export function mapFeriasRow(row){
     dias: row.dias_corridos==null ? "" : row.dias_corridos,
     status: row.status,
     observacoes: row.observacoes || "",
+  };
+}
+
+// Converte uma linha da tabela abatimentos para a UI.
+export function mapAbatimentoRow(row): Abatimento {
+  return {
+    id: row.id,
+    laboratorio: row.laboratorio,
+    nf: row.nf,
+    valorAbatimento: row.valor_abatimento==null ? 0 : Number(row.valor_abatimento),
+    valorPago: row.valor_pago==null ? 0 : Number(row.valor_pago),
+    data: row.data || "",
+    filial: row.filial,
+    status: row.status,
+    createdBy: row.created_by || "",
+    createdByNome: row.created_by_nome || "",
+    updatedBy: row.updated_by || "",
+    updatedByNome: row.updated_by_nome || "",
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || "",
   };
 }
 
