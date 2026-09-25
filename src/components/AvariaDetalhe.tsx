@@ -118,7 +118,11 @@ export default function AvariaDetalhe(p) {
   const [solErr, setSolErr] = useState("");
   const [solSalvando, setSolSalvando] = useState(false);
 
-  function abrirSolicitar(){ setSolForm(SOL_FORM_VAZIO); setSolErr(""); setShowSolForm(true); }
+  // Pré-preenche com o laboratório informado no cadastro da avaria — o
+  // usuário pode trocar aqui sem alterar o laboratório original da
+  // avaria: são dois campos distintos (avarias.laboratorio vs
+  // avaria_solicitacoes.laboratorio), este formulário só grava o segundo.
+  function abrirSolicitar(){ setSolForm({...SOL_FORM_VAZIO, laboratorio:avaria.laboratorio||""}); setSolErr(""); setShowSolForm(true); }
 
   async function salvarSolicitacao(){
     if(!solForm.laboratorio.trim()){ setSolErr("Informe o laboratório."); return; }
@@ -442,6 +446,7 @@ export default function AvariaDetalhe(p) {
         <div style={{fontSize:11,fontWeight:600,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10}}>Dados da avaria</div>
         <div style={{background:D.bg,borderRadius:10,padding:"4px 14px"}}>
           {[
+            {label:"Laboratório", value:avaria.laboratorio||"—"},
             {label:"Filial", value:avaria.filial},
             {label:"Número da NF", value:avaria.numeroNf},
             {label:"Data da NF", value:avaria.dataNf?fData(avaria.dataNf):"—"},

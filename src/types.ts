@@ -12,7 +12,7 @@ export type AvariaStatus = "ABERTA"|"SOLICITADO"|"EM_ANALISE"|"CONCEDIDO"|"NEGAD
 export type Avaria = {
   id:string; filial:string; numeroNf:string; dataNf:string; produtoNome:string; produtoCodigo:string;
   quantidade:number|string; tipoAvaria:string; descricao:string; valorProduto:number|null; valorAvaria:number|null;
-  dataIdentificacao:string; identificadoPor:string; observacoes:string; status:AvariaStatus;
+  dataIdentificacao:string; identificadoPor:string; observacoes:string; laboratorio:string; status:AvariaStatus;
   createdBy:string; createdByNome:string; createdAt:string; updatedAt:string;
 };
 export type AvariaSolicitacaoStatus = "SOLICITADO"|"EM_ANALISE"|"CONCEDIDO"|"NEGADO"|"CANCELADO";

@@ -9,7 +9,7 @@ import Donut from "./Donut";
 import CampoValor from "./CampoValor";
 import AvariaDetalhe from "./AvariaDetalhe";
 
-const FORM_VAZIO = {id:null,filial:"",numeroNf:"",dataNf:"",produtoNome:"",produtoCodigo:"",quantidade:"",tipoAvaria:"",descricao:"",valorProduto:"",valorAvaria:"",dataIdentificacao:hoje,identificadoPor:"",observacoes:""};
+const FORM_VAZIO = {id:null,laboratorio:"",filial:"",numeroNf:"",dataNf:"",produtoNome:"",produtoCodigo:"",quantidade:"",tipoAvaria:"",descricao:"",valorProduto:"",valorAvaria:"",dataIdentificacao:hoje,identificadoPor:"",observacoes:""};
 
 const STATUS_LIST = ["ABERTA","SOLICITADO","EM_ANALISE","CONCEDIDO","NEGADO","APLICADO","CANCELADO"];
 function statusInfo(s, D){
@@ -135,7 +135,7 @@ export default function Avarias(p) {
   function abrirNovo(){ setForm({...FORM_VAZIO, identificadoPor:usuarioNome||""}); setFormErr(""); setDupMatches([]); setShowForm(true); resetDrag(); }
 
   function abrirEditar(a){
-    setForm({id:a.id,filial:a.filial,numeroNf:a.numeroNf,dataNf:a.dataNf,produtoNome:a.produtoNome,produtoCodigo:a.produtoCodigo,quantidade:String(a.quantidade),tipoAvaria:a.tipoAvaria,descricao:a.descricao,valorProduto:a.valorProduto!=null?fMoedaInput(a.valorProduto):"",valorAvaria:a.valorAvaria!=null?fMoedaInput(a.valorAvaria):"",dataIdentificacao:a.dataIdentificacao,identificadoPor:a.identificadoPor,observacoes:a.observacoes});
+    setForm({id:a.id,laboratorio:a.laboratorio,filial:a.filial,numeroNf:a.numeroNf,dataNf:a.dataNf,produtoNome:a.produtoNome,produtoCodigo:a.produtoCodigo,quantidade:String(a.quantidade),tipoAvaria:a.tipoAvaria,descricao:a.descricao,valorProduto:a.valorProduto!=null?fMoedaInput(a.valorProduto):"",valorAvaria:a.valorAvaria!=null?fMoedaInput(a.valorAvaria):"",dataIdentificacao:a.dataIdentificacao,identificadoPor:a.identificadoPor,observacoes:a.observacoes});
     setFormErr(""); setDupMatches([]); setShowForm(true); resetDrag();
   }
 
@@ -159,6 +159,7 @@ export default function Avarias(p) {
   const produtosNomesConhecidos = Array.from(new Set(lista.map(a=>a.produtoNome).filter(Boolean)));
   const produtosCodigosConhecidos = Array.from(new Set(lista.map(a=>a.produtoCodigo).filter(Boolean)));
   const tiposAvariaConhecidos = Array.from(new Set(lista.map(a=>a.tipoAvaria).filter(Boolean)));
+  const laboratoriosConhecidos = Array.from(new Set(lista.map(a=>a.laboratorio).filter(Boolean)));
 
   async function registrarHistorico(avariaId, tipo, descricao, referenciaAvariaId=null){
     await supabase.from("avaria_historico").insert({
@@ -177,6 +178,7 @@ export default function Avarias(p) {
     if(!form.identificadoPor.trim()){ setFormErr("Informe quem identificou a avaria."); return; }
     setSalvando(true); setFormErr("");
     const payload = {
+      laboratorio: form.laboratorio.trim()||null,
       filial: form.filial,
       numero_nf: form.numeroNf.trim(),
       data_nf: form.dataNf||null,
@@ -230,6 +232,7 @@ export default function Avarias(p) {
     return a.numeroNf.toLowerCase().includes(s)
       || a.produtoNome.toLowerCase().includes(s)
       || (a.produtoCodigo||"").toLowerCase().includes(s)
+      || (a.laboratorio||"").toLowerCase().includes(s)
       || (r.sol&&r.sol.protocolo||"").toLowerCase().includes(s);
   }
 
@@ -239,7 +242,7 @@ export default function Avarias(p) {
       && (!fNf||a.numeroNf.toLowerCase().includes(fNf.toLowerCase()))
       && (!fProduto||a.produtoNome.toLowerCase().includes(fProduto.toLowerCase()))
       && (!fCodigo||(a.produtoCodigo||"").toLowerCase().includes(fCodigo.toLowerCase()))
-      && (!fLaboratorio||(r.sol&&r.sol.laboratorio||"").toLowerCase().includes(fLaboratorio.toLowerCase()))
+      && (!fLaboratorio||(a.laboratorio||"").toLowerCase().includes(fLaboratorio.toLowerCase())||(r.sol&&r.sol.laboratorio||"").toLowerCase().includes(fLaboratorio.toLowerCase()))
       && (!fResponsavel||(a.createdByNome||"").toLowerCase().includes(fResponsavel.toLowerCase())||(a.identificadoPor||"").toLowerCase().includes(fResponsavel.toLowerCase())||(r.sol&&r.sol.solicitanteNome||"").toLowerCase().includes(fResponsavel.toLowerCase()))
       && (fStatus==="todos"||a.status===fStatus)
       && (!fTipo||a.tipoAvaria.toLowerCase().includes(fTipo.toLowerCase()))
@@ -280,14 +283,14 @@ export default function Avarias(p) {
     w.document.body.appendChild(meta);
 
     const colunas = [
+      {h:"Laboratório", get:a=>a.laboratorio||"—"},
       {h:"NF", get:a=>a.numeroNf},
-      {h:"Filial", get:a=>a.filial},
-      {h:"Produto", get:a=>a.produtoNome},
       {h:"Avaria", get:a=>a.tipoAvaria},
+      {h:"Produto", get:a=>a.produtoNome},
       {h:"Valor", get:a=>a.valorAvaria!=null?fBRL(a.valorAvaria):"—"},
       {h:"Desconto", get:(a,r)=>r.con&&r.con.status==="ATIVA"?fBRL(r.con.valorConcedido):"—"},
       {h:"Data", get:a=>a.dataIdentificacao?fData(a.dataIdentificacao):"—"},
-      {h:"Laboratório", get:(a,r)=>r.sol?r.sol.laboratorio:"—"},
+      {h:"Filial", get:a=>a.filial},
       {h:"Status", get:a=>statusInfo(a.status,D).label},
     ];
     const table = w.document.createElement("table");
@@ -443,20 +446,20 @@ export default function Avarias(p) {
         {visiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhuma avaria encontrada.</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["NF","Filial","Produto","Avaria","Valor","Desconto","Data","Laboratório","Status"].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Laboratório","NF","Avaria","Produto","Valor","Desconto","Data","Filial","Status"].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
             <tbody>{visiveis.map(a=>{
               const r = resumoDaAvaria(a.id);
               const si = statusInfo(a.status,D);
               return (
               <tr key={a.id} style={{borderBottom:"1px solid "+D.border,cursor:"pointer"}} onClick={()=>setAvariaAbertaId(a.id)}>
-                <td data-label="NF" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{a.numeroNf}</td>
-                <td data-label="Filial" style={{padding:"10px 8px",color:D.muted}}>{a.filial}</td>
-                <td data-label="Produto" style={{padding:"10px 8px",color:D.text}}>{a.produtoNome}{a.produtoCodigo?<span style={{color:D.muted}}> ({a.produtoCodigo})</span>:null}</td>
+                <td data-label="Laboratório" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{a.laboratorio||"—"}</td>
+                <td data-label="NF" style={{padding:"10px 8px",color:D.text}}>{a.numeroNf}</td>
                 <td data-label="Avaria" style={{padding:"10px 8px",color:D.muted}}>{a.tipoAvaria}</td>
+                <td data-label="Produto" style={{padding:"10px 8px",color:D.text}}>{a.produtoNome}{a.produtoCodigo?<span style={{color:D.muted}}> ({a.produtoCodigo})</span>:null}</td>
                 <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{a.valorAvaria!=null?fBRL(a.valorAvaria):"—"}</td>
                 <td data-label="Desconto" style={{padding:"10px 8px",color:D.text,fontWeight:600}}>{r.con&&r.con.status==="ATIVA"?fBRL(r.con.valorConcedido):"—"}</td>
                 <td data-label="Data" style={{padding:"10px 8px",color:D.muted}}>{a.dataIdentificacao?fData(a.dataIdentificacao):"—"}</td>
-                <td data-label="Laboratório" style={{padding:"10px 8px",color:D.muted}}>{r.sol?r.sol.laboratorio:"—"}</td>
+                <td data-label="Filial" style={{padding:"10px 8px",color:D.muted}}>{a.filial}</td>
                 <td data-label="Status" style={{padding:"10px 8px"}}>
                   <span style={{fontSize:11,fontWeight:600,background:si.bg,color:si.c,borderRadius:20,padding:"3px 10px"}}>{si.label}</span>
                   {duplicidadesIds.includes(a.id)&&<AlertTriangle size={12} color={D.orange} style={{marginLeft:6,verticalAlign:"middle"}}/>}
@@ -501,6 +504,7 @@ export default function Avarias(p) {
             )}
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
+              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Laboratório</label><input style={st.inp} list="avarias-laboratorios" value={form.laboratorio} onChange={e=>setForm(f=>({...f,laboratorio:e.target.value}))}/></div>
               <div><label style={st.lbl}>Filial</label>
                 <select style={st.inp} value={form.filial} onChange={e=>{setForm(f=>({...f,filial:e.target.value}));setFormErr("");}}>
                   <option value="">Selecione...</option>
@@ -521,6 +525,7 @@ export default function Avarias(p) {
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Observações</label><textarea rows={2} style={{...st.inp,resize:"vertical"}} value={form.observacoes} onChange={e=>setForm(f=>({...f,observacoes:e.target.value}))}/></div>
             </div>
 
+            <datalist id="avarias-laboratorios">{laboratoriosConhecidos.map(v=><option key={v} value={v}/>)}</datalist>
             <datalist id="avarias-produtos-nomes">{produtosNomesConhecidos.map(v=><option key={v} value={v}/>)}</datalist>
             <datalist id="avarias-produtos-codigos">{produtosCodigosConhecidos.map(v=><option key={v} value={v}/>)}</datalist>
             <datalist id="avarias-tipos">{tiposAvariaConhecidos.map(v=><option key={v} value={v}/>)}</datalist>

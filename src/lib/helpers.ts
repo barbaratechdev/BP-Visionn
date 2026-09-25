@@ -405,6 +405,7 @@ export function mapAvariaRow(row): Avaria {
     dataIdentificacao: row.data_identificacao || "",
     identificadoPor: row.identificado_por,
     observacoes: row.observacoes || "",
+    laboratorio: row.laboratorio || "",
     status: row.status,
     createdBy: row.created_by || "",
     createdByNome: row.created_by_nome || "",
