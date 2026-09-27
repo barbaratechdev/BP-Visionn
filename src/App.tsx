@@ -132,6 +132,7 @@ export default function App() {
   const [editN, setEditN] = useState("");
   const [editS, setEditS] = useState("");
   const [editSetor, setEditSetor] = useState("");
+  const [editRole, setEditRole] = useState("func");
   const [nomeExibicaoInput, setNomeExibicaoInput] = useState("");
   const [nomeExibicaoErr, setNomeExibicaoErr] = useState("");
   const [showNewU, setShowNewU] = useState(false);
@@ -1345,12 +1346,12 @@ export default function App() {
   async function saveU(id){
     if(bloqueadoDemo()) return;
     if(!editN.trim()||!editSetor.trim()) return;
-    const nome = editN.trim(), setor = editSetor.trim();
-    const { error } = await supabase.from("profiles").update({ name:nome, setor, initials:getIn(nome) }).eq("id", id);
+    const nome = editN.trim(), setor = editSetor.trim(), role = editRole;
+    const { error } = await supabase.from("profiles").update({ name:nome, setor, role, initials:getIn(nome) }).eq("id", id);
     if(error) return;
-    const up=users.map(u=>u.id===id?{...u,name:nome,initials:getIn(nome),setor}:u);
+    const up=users.map(u=>u.id===id?{...u,name:nome,initials:getIn(nome),setor,role}:u);
     setUsers(up); if(user&&user.id===id) setUser(up.find(u=>u.id===id));
-    setEditU(null); setEditN(""); setEditS(""); setEditSetor("");
+    setEditU(null); setEditN(""); setEditS(""); setEditSetor(""); setEditRole("func");
   }
 
   // Nome de exibição: só a Supervisora tem esse controle na tela (ver "Meu
@@ -2241,10 +2242,14 @@ export default function App() {
                         <div style={{display:"flex",flexDirection:"column",gap:8}}>
                           <input autoFocus placeholder="Nome" style={{...st.inp,padding:"6px 10px",maxWidth:200}} value={editN} onChange={e=>setEditN(e.target.value)}/>
                           <input placeholder="Setor" style={{...st.inp,padding:"6px 10px",maxWidth:200}} value={editSetor} onChange={e=>setEditSetor(e.target.value)}/>
+                          <select style={{...st.inp,padding:"6px 10px",maxWidth:200}} value={editRole} onChange={e=>setEditRole(e.target.value)}>
+                            <option value="func">Cargo: Funcionário</option>
+                            <option value="admin">Cargo: Supervisão</option>
+                          </select>
                           <input placeholder="Nova senha (em branco = manter)" type="password" style={{...st.inp,padding:"6px 10px",maxWidth:260}} value={editS} onChange={e=>setEditS(e.target.value)}/>
                           <div style={{display:"flex",gap:8}}>
                             <button style={{...st.btnBlue,padding:"6px 12px",fontSize:12}} onClick={()=>saveU(u.id)}><Check size={13}/>Salvar</button>
-                            <button style={{...st.btn,padding:"6px 12px",fontSize:12}} onClick={()=>{setEditU(null);setEditN("");setEditS("");setEditSetor("");}}><X size={13}/>Cancelar</button>
+                            <button style={{...st.btn,padding:"6px 12px",fontSize:12}} onClick={()=>{setEditU(null);setEditN("");setEditS("");setEditSetor("");setEditRole("func");}}><X size={13}/>Cancelar</button>
                           </div>
                         </div>
                       ):(
@@ -2260,7 +2265,7 @@ export default function App() {
                     {editU!==u.id&&(
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <span style={{fontSize:12,background:u.role==="admin"?D.blueSoft:D.bg,color:u.role==="admin"?D.blueText:D.muted,borderRadius:20,padding:"3px 10px",fontWeight:500}}>{u.setor}</span>
-                        <button style={{...st.btn,padding:"6px 8px"}} onClick={()=>{setEditU(u.id);setEditN(u.name);setEditS("");setEditSetor(u.setor);}}><Pencil size={13} color={D.muted}/></button>
+                        <button style={{...st.btn,padding:"6px 8px"}} onClick={()=>{setEditU(u.id);setEditN(u.name);setEditS("");setEditSetor(u.setor);setEditRole(u.role);}}><Pencil size={13} color={D.muted}/></button>
                         {u.id!==user.id&&<button style={{...st.btn,padding:"6px 8px",color:D.redText,borderColor:D.red+"44"}} title="Excluir usuário" onClick={()=>abrirConfirmDelUser(u.id,u.name)}><Trash2 size={13}/></button>}
                       </div>
                     )}
@@ -2398,8 +2403,8 @@ export default function App() {
               <div><label style={st.lbl}>Setor</label><input style={st.inp} placeholder="Ex.: Financeiro" value={newU.setor} onChange={e=>{setNewU(p=>({...p,setor:e.target.value}));setNewUErr("");}}/></div>
               <div><label style={st.lbl}>Cargo</label>
                 <select style={st.inp} value={newU.role} onChange={e=>setNewU(p=>({...p,role:e.target.value}))}>
-                  <option value="func">Funcionária</option>
-                  <option value="admin">Supervisora</option>
+                  <option value="func">Funcionário</option>
+                  <option value="admin">Supervisão</option>
                 </select>
               </div>
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>E-mail</label><input type="email" style={st.inp} placeholder="nome@bp-visionn.com" value={newU.email} onChange={e=>setNewU(p=>({...p,email:e.target.value}))}/></div>
