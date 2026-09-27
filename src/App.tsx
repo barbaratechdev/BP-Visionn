@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, SIDEBAR, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
+import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
 import { useDraggable } from "./lib/useDraggable";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
@@ -79,10 +79,15 @@ export default function App() {
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [representantes, setRepresentantes] = useState([]);
+  // Cadastro real de supervisores (public.supervisores, via supervisores_lista())
+  // — fonte oficial pro campo "Supervisor" de Representantes. Não confundir
+  // com "users" (contas de login): representantes.supervisor_cadastro_id
+  // referencia supervisores(id), nunca profiles(id).
+  const [supervisoresCadastro, setSupervisoresCadastro] = useState([]);
   const [showRepForm, setShowRepForm] = useState(false);
   const { dragStyle: repDragStyle, dragHandleProps: repDragHandleProps, resetDrag: resetRepDrag } = useDraggable();
   const [confirmDelRep, setConfirmDelRep] = useState<{id:string,nome:string} | null>(null);
-  const [repForm, setRepForm] = useState({id:null,nome:"",cpf:"",regiao:"Pará",supervisorId:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:"",numeroCore:"",tipoVinculo:"",vinculoDataInicio:"",vinculoDataTerminoPrevisto:"",statusContrato:"",contratoDataEnvio:"",contratoDataConclusao:""});
+  const [repForm, setRepForm] = useState({id:null,nome:"",cpf:"",regiao:"Pará",supervisorCadastroId:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:"",numeroCore:"",tipoVinculo:"",vinculoDataInicio:"",vinculoDataTerminoPrevisto:"",statusContrato:"",contratoDataEnvio:"",contratoDataConclusao:""});
   const [repFormErr, setRepFormErr] = useState("");
   const [repSearch, setRepSearch] = useState("");
   const [repFiltroRegiao, setRepFiltroRegiao] = useState("todos");
@@ -196,7 +201,7 @@ export default function App() {
   const representantesVisiveis = representantes.filter(r=>
     (repFiltroRegiao==="todos"||r.regiao===repFiltroRegiao) &&
     (repFiltroStatus==="todos"||r.status===repFiltroStatus) &&
-    (repFiltroSupervisor==="todos"||r.supervisorId===repFiltroSupervisor) &&
+    (repFiltroSupervisor==="todos"||r.supervisorCadastroId===repFiltroSupervisor) &&
     (!repSearch || r.nome.toLowerCase().includes(repSearch.toLowerCase()) || (r.cpf&&r.cpf.includes(repSearch)))
   );
 
@@ -283,6 +288,15 @@ export default function App() {
       setRepresentantes(data.map(mapRepresentanteRow));
     }
 
+    // Mesma RPC que o módulo Supervisores usa (supervisores_lista) — não é
+    // uma segunda fonte, é a leitura da mesma public.supervisores a partir
+    // de Representantes, que precisa da lista pro dropdown/filtro/coluna.
+    async function carregarSupervisoresCadastro(){
+      const { data, error } = await supabase.rpc("supervisores_lista");
+      if(!ativo||error||!data) return;
+      setSupervisoresCadastro(data.map(mapSupervisorRow));
+    }
+
     // Auditoria: admin/demo veem tudo, Financeiro (e qualquer func) vê só o
     // que está ligado a tarefas das quais é responsável — o RLS já faz esse
     // filtro (auditoria_select_admin + auditoria_select_own_tarefa), então
@@ -342,6 +356,7 @@ export default function App() {
         carregarPendencias();
         carregarContratos();
         carregarRepresentantes();
+        carregarSupervisoresCadastro();
         carregarAuditoria();
         carregarDemoResponsavelPermitido(logado);
         carregarDemoFuncionariosTeste(logado);
@@ -372,7 +387,7 @@ export default function App() {
           carregarDemoResponsavelPermitido(perfil);
           carregarDemoFuncionariosTeste(perfil);
         });
-        if(ehLoginNovo){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarRepresentantes(); carregarAuditoria(); }
+        if(ehLoginNovo){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarRepresentantes(); carregarSupervisoresCadastro(); carregarAuditoria(); }
       }
     });
 
@@ -931,12 +946,12 @@ export default function App() {
   }
 
   function abrirNovoRep(){
-    setRepForm({id:null,nome:"",cpf:"",regiao:"Pará",supervisorId:user?user.id:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:"",numeroCore:"",tipoVinculo:"",vinculoDataInicio:"",vinculoDataTerminoPrevisto:"",statusContrato:"",contratoDataEnvio:"",contratoDataConclusao:""});
+    setRepForm({id:null,nome:"",cpf:"",regiao:"Pará",supervisorCadastroId:"",status:"Ativo",dataEntrada:hoje,dataSaida:"",motivoSaida:"",numeroCore:"",tipoVinculo:"",vinculoDataInicio:"",vinculoDataTerminoPrevisto:"",statusContrato:"",contratoDataEnvio:"",contratoDataConclusao:""});
     setRepFormErr(""); setShowRepForm(true); resetRepDrag();
   }
 
   function abrirEditarRep(r){
-    setRepForm({id:r.id,nome:r.nome,cpf:r.cpf,regiao:r.regiao,supervisorId:r.supervisorId,status:r.status,dataEntrada:r.dataEntrada,dataSaida:r.dataSaida,motivoSaida:r.motivoSaida,numeroCore:r.numeroCore,tipoVinculo:r.tipoVinculo,vinculoDataInicio:r.vinculoDataInicio,vinculoDataTerminoPrevisto:r.vinculoDataTerminoPrevisto,statusContrato:r.statusContrato,contratoDataEnvio:r.contratoDataEnvio,contratoDataConclusao:r.contratoDataConclusao});
+    setRepForm({id:r.id,nome:r.nome,cpf:r.cpf,regiao:r.regiao,supervisorCadastroId:r.supervisorCadastroId,status:r.status,dataEntrada:r.dataEntrada,dataSaida:r.dataSaida,motivoSaida:r.motivoSaida,numeroCore:r.numeroCore,tipoVinculo:r.tipoVinculo,vinculoDataInicio:r.vinculoDataInicio,vinculoDataTerminoPrevisto:r.vinculoDataTerminoPrevisto,statusContrato:r.statusContrato,contratoDataEnvio:r.contratoDataEnvio,contratoDataConclusao:r.contratoDataConclusao});
     setRepFormErr(""); setShowRepForm(true); resetRepDrag();
   }
 
@@ -969,7 +984,11 @@ export default function App() {
       nome,
       cpf: repForm.cpf.trim()||null,
       regiao: repForm.regiao,
-      supervisor_id: repForm.supervisorId||null,
+      // supervisor_id (antigo, aponta pra profiles) de propósito NÃO entra
+      // aqui — deixa de ser gravado a partir de agora, sem tocar no valor
+      // que já existir num representante existente (update só altera as
+      // colunas presentes no payload). O campo correto é o novo, abaixo.
+      supervisor_cadastro_id: repForm.supervisorCadastroId||null,
       status: repForm.status,
       data_entrada: repForm.dataEntrada||hoje,
       data_saida: repForm.status==="Inativo" ? (repForm.dataSaida||null) : null,
@@ -2053,7 +2072,7 @@ export default function App() {
                   <label style={st.lbl}>Supervisor</label>
                   <select style={st.inp} value={repFiltroSupervisor} onChange={e=>setRepFiltroSupervisor(e.target.value)}>
                     <option value="todos">Todos</option>
-                    {users.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+                    {supervisoresCadastro.map(s=><option key={s.id} value={s.id}>{s.nome}{s.status!=="Ativo"?" — Inativo":""}</option>)}
                   </select>
                 </div>
               </div>
@@ -2064,7 +2083,7 @@ export default function App() {
                   <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                     <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Nome","CPF ou CNPJ","Região","Supervisor","Status","Vínculo","Entrada","Tempo de casa","Saída",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
                     <tbody>{representantesVisiveis.map(r=>{
-                      const sup = users.find(u=>u.id===r.supervisorId);
+                      const sup = supervisoresCadastro.find(s=>s.id===r.supervisorCadastroId);
                       const diasVinculo = diasParaVencerVinculo(r);
                       const venceEmBreve = diasVinculo!==null && diasVinculo<=LIMITE_ALERTA_VINCULO_DIAS;
                       return (
@@ -2072,7 +2091,7 @@ export default function App() {
                           <td data-label="Nome" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{r.nome}</td>
                           <td data-label="CPF ou CNPJ" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{r.cpf||"—"}</td>
                           <td data-label="Região" style={{padding:"10px 8px",color:D.muted}}>{r.regiao}</td>
-                          <td data-label="Supervisor" style={{padding:"10px 8px",color:D.muted}}>{sup?sup.name:"—"}</td>
+                          <td data-label="Supervisor" style={{padding:"10px 8px",color:D.muted}}>{sup?sup.nome+(sup.status!=="Ativo"?" (Inativo)":""):"Sem supervisor"}</td>
                           <td data-label="Status" style={{padding:"10px 8px"}}><span style={{fontSize:11,fontWeight:600,background:r.status==="Ativo"?D.greenSoft:D.redSoft,color:r.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"3px 10px"}}>{r.status}</span></td>
                           <td data-label="Vínculo" style={{padding:"10px 8px"}}>
                             {r.tipoVinculo?<span style={{fontSize:11,fontWeight:600,background:D.blueSoft,color:D.blueText,borderRadius:20,padding:"3px 10px"}}>{vinculoLabel[r.tipoVinculo]}</span>:<span style={{color:D.muted}}>—</span>}
@@ -2417,9 +2436,13 @@ export default function App() {
                 </select>
               </div>
               <div><label style={rLbl}>Supervisor</label>
-                <select style={rInp} value={repForm.supervisorId} onChange={e=>setRepForm(p=>({...p,supervisorId:e.target.value}))}>
+                {/* Só supervisores Ativos entram como opção nova — exceto o
+                    que já está vinculado a este representante, que continua
+                    aparecendo (marcado Inativo) pra não sumir da tela nem
+                    forçar uma troca só porque o status mudou depois. */}
+                <select style={rInp} value={repForm.supervisorCadastroId} onChange={e=>setRepForm(p=>({...p,supervisorCadastroId:e.target.value}))}>
                   <option value="">Sem supervisor</option>
-                  {users.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+                  {supervisoresCadastro.filter(s=>s.status==="Ativo"||s.id===repForm.supervisorCadastroId).map(s=><option key={s.id} value={s.id}>{s.nome}{s.status!=="Ativo"?" — Inativo":""}</option>)}
                 </select>
               </div>
               <div><label style={rLbl}>Status</label>

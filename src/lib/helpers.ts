@@ -237,6 +237,7 @@ export function mapRepresentanteRow(row){
     cpf: row.cpf || "",
     regiao: row.regiao,
     supervisorId: row.supervisor_id || "",
+    supervisorCadastroId: row.supervisor_cadastro_id || "",
     status: row.status,
     dataEntrada: row.data_entrada,
     dataSaida: row.data_saida || "",
