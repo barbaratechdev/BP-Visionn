@@ -628,7 +628,7 @@ export default function App() {
                   <div>
                     <div style={{fontWeight:600,fontSize:15,color:D.text}}>{t.fornecedor}</div>
                     <div style={{fontSize:13,color:D.muted,marginTop:3,display:"flex",gap:12,flexWrap:"wrap"}}>
-                      <span style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={12}/>{t.vencimento}</span>
+                      <span style={{display:"flex",alignItems:"center",gap:4}}><Calendar size={12}/>{fData(t.vencimento)}</span>
                       {Number(t.valor)>0&&<span style={{fontWeight:600,color:D.text}}>{fBRL(t.valor)}</span>}
                       {isAdmin&&fn&&<span style={{display:"flex",alignItems:"center",gap:4}}><User size={12}/>{fn.name}</span>}
                     </div>
@@ -1821,7 +1821,7 @@ export default function App() {
                     return (
                       <tr key={t.id} style={{borderBottom:"1px solid "+D.border}}>
                         <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{t.fornecedor}</td>
-                        <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{t.vencimento}</td>
+                        <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{fData(t.vencimento)}</td>
                         <td data-label="Responsável" style={{padding:"10px 8px"}}>{fn&&<div style={{display:"flex",alignItems:"center",gap:6}}><Av name={fn.name} initials={fn.initials} color={fn.color} size={22}/><span style={{color:D.muted}}>{fn.name}</span></div>}</td>
                         <td data-label="Status" style={{padding:"10px 8px"}}><Badge status={t.status}/></td>
                         <td style={{padding:"10px 8px"}}>{!isDemo&&t.status!=="pago"&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>setConfirm(t.id)}><CheckCircle size={12}/>Concluir</button>}</td>
@@ -1924,7 +1924,7 @@ export default function App() {
               {pendsVis.map(t=>(
                 <div className="bv-card" key={t.id} style={{...st.card,border:undefined,borderTop:"1px solid "+D.border,borderRight:"1px solid "+D.border,borderBottom:"1px solid "+D.border,borderLeft:"3px solid "+(t.status==="vencido"?D.red:D.orange),borderRadius:"0 14px 14px 0"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
-                    <div><div style={{fontWeight:600,color:D.text}}>{t.fornecedor}</div><div style={{fontSize:13,color:D.muted,marginTop:3}}>{t.vencimento}{isAdmin&&" · "+(users.find(u=>u.id===t.responsavel)||{name:""}).name}</div></div>
+                    <div><div style={{fontWeight:600,color:D.text}}>{t.fornecedor}</div><div style={{fontSize:13,color:D.muted,marginTop:3}}>{fData(t.vencimento)}{isAdmin&&" · "+(users.find(u=>u.id===t.responsavel)||{name:""}).name}</div></div>
                     <div style={{display:"flex",gap:8,alignItems:"center"}}>
                       <Badge status={t.status}/>
                       {isAdmin&&<select style={{...st.inp,width:"auto",padding:"5px 8px",fontSize:12}} value={t.responsavel} onChange={e=>mudaResp(t.id,e.target.value)}>{users.filter(u=>u.role==="func").map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select>}
