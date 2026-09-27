@@ -3,7 +3,10 @@ import { Search, X, ChevronRight, LogIn } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import Av from "./Av";
 
-function roleLabel(r){ return r==="admin"?"Supervisora":r==="demo"?"Demonstração":"Funcionária"; }
+// Mesma regra de App.tsx: perfil/setor nunca é gendered ("Supervisor"/
+// "Supervisora") — pra admin, mostra o próprio setor da pessoa. Gênero só
+// decide "Funcionário" vs "Funcionária".
+function roleLabel(r,g,setor){ return r==="admin"?setor:r==="demo"?"Demonstração":(g==="M"?"Funcionário":"Funcionária"); }
 function rolePill(r,D){
   return r==="admin" ? {bg:D.blueSoft,c:D.blueText} : r==="demo" ? {bg:D.purpleSoft,c:D.purpleText} : {bg:D.bg,c:D.muted};
 }
@@ -148,7 +151,7 @@ export default function Acessos(p) {
                     </div>
                   </td>
                   <td data-label="E-mail" style={{padding:"9px 8px",color:D.muted}}>{u.email||"—"}</td>
-                  <td data-label="Perfil" style={{padding:"9px 8px"}}><span style={{fontSize:11,fontWeight:600,background:rp.bg,color:rp.c,borderRadius:20,padding:"2px 9px"}}>{roleLabel(u.role)}</span></td>
+                  <td data-label="Perfil" style={{padding:"9px 8px"}}><span style={{fontSize:11,fontWeight:600,background:rp.bg,color:rp.c,borderRadius:20,padding:"2px 9px"}}>{roleLabel(u.role,u.genero,u.setor)}</span></td>
                   <td data-label="Total de acessos" style={{padding:"9px 8px",color:D.text,fontWeight:600}}>{Number(u.total_logins)}</td>
                   <td data-label="Último acesso" style={{padding:"9px 8px",color:D.muted}}>{u.ultimo_login?fDataHora(u.ultimo_login):"Nunca acessou"}</td>
                   <td style={{padding:"9px 8px",textAlign:"right"}}>
@@ -170,7 +173,7 @@ export default function Acessos(p) {
                 <Av name={detalheDe.nome} color={D.blue} size={38}/>
                 <div>
                   <div style={{fontWeight:700,fontSize:15,color:D.text}}>{detalheDe.nome}</div>
-                  <div style={{fontSize:12,color:D.muted,marginTop:1}}>{roleLabel(detalheDe.role)}{detalheDe.setor?" · "+detalheDe.setor:""}</div>
+                  <div style={{fontSize:12,color:D.muted,marginTop:1}}>{roleLabel(detalheDe.role,detalheDe.genero,detalheDe.setor)}{detalheDe.setor?" · "+detalheDe.setor:""}</div>
                 </div>
               </div>
               <button onClick={()=>setDetalheDe(null)} style={{...st.btn,padding:"6px 8px",border:"none",background:"transparent"}}><X size={15}/></button>

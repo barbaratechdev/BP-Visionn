@@ -414,7 +414,11 @@ export default function App() {
   // aparecem pro usuário como "Aguardando" (ver situacaoLabel), então
   // precisam da mesma cor pra não parecer duas coisas diferentes.
   function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.orangeSoft,c:D.orangeText},"Prorrogação Aprovada":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
-  function roleLabel(r){ return r==="admin"?"Supervisora":r==="demo"?"Demonstração":"Funcionária"; }
+  // Perfil/setor é exibido de forma neutra (nunca "Supervisor"/"Supervisora")
+  // — pra role admin, o "perfil" é o próprio setor da pessoa (hoje sempre
+  // "Supervisão", já que só existe uma conta admin). Gênero só entra pra
+  // decidir "Funcionário" vs "Funcionária", nunca pro nome do setor.
+  function roleLabel(r,g,setor){ return r==="admin"?setor:r==="demo"?"Demonstração":(g==="M"?"Funcionário":"Funcionária"); }
 
   // Card "Prorrogação de Boletos": formulário de inclusão + tabela. Extraído
   // pra função porque aparece em três lugares (Dashboard, aba Tarefas da
@@ -1681,7 +1685,7 @@ export default function App() {
             )}
           </div>
           <Av name={user.name} initials={user.initials} color={user.color} photo={user.photo} status={user.status||"online"} D={D} ringColor={D.white} size={32}/>
-          <div className="bv-header-username"><div style={{fontSize:13,fontWeight:600,color:D.text}}>{nomeVisivel(user)}</div><div style={{fontSize:11,color:D.muted}}>{roleLabel(user.role)}</div></div>
+          <div className="bv-header-username"><div style={{fontSize:13,fontWeight:600,color:D.text}}>{nomeVisivel(user)}</div><div style={{fontSize:11,color:D.muted}}>{roleLabel(user.role,user.genero,user.setor)}</div></div>
           <button style={{...st.btn,padding:"6px 10px",border:"none",background:D.bg}} onClick={doLogout}><LogOut size={15} color={D.muted}/></button>
         </div>
       </div>
@@ -1712,7 +1716,7 @@ export default function App() {
             {!sidebarCollapsed&&(
               <div style={{minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:600,color:SIDEBAR.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Olá, {nomeVisivel(user)}!</div>
-                <div style={{fontSize:11,color:SIDEBAR.textMuted}}>{roleLabel(user.role)}</div>
+                <div style={{fontSize:11,color:SIDEBAR.textMuted}}>{roleLabel(user.role,user.genero,user.setor)}</div>
               </div>
             )}
           </div>
@@ -1785,7 +1789,7 @@ export default function App() {
                       <Av name={fn.name} initials={fn.initials} color={fn.color} photo={fn.photo} size={40}/>
                       <div style={{minWidth:110}}>
                         <div style={{fontSize:13,fontWeight:600,color:D.text}}>{fn.name}</div>
-                        <div style={{fontSize:11,color:D.muted}}>{roleLabel(fn.role)}</div>
+                        <div style={{fontSize:11,color:D.muted}}>{roleLabel(fn.role,fn.genero,fn.setor)}</div>
                       </div>
                       <div style={{flex:1,minWidth:130,display:"flex",alignItems:"center",gap:10}}>
                         <div style={{flex:1,height:8,background:D.gray,borderRadius:20,overflow:"hidden"}}><div className="bv-progress-fill" style={{height:"100%",background:"linear-gradient(90deg, "+pCor+"cc, "+pCor+")",borderRadius:20,width:pc+"%"}}></div></div>
@@ -2217,7 +2221,7 @@ export default function App() {
                   ):(
                     <div style={{fontWeight:700,fontSize:18,color:D.text}}>{user.name}</div>
                   )}
-                  <div style={{fontSize:13,color:D.muted,marginTop:12}}>{user.setor} · {roleLabel(user.role)}</div>
+                  <div style={{fontSize:13,color:D.muted,marginTop:12}}>{user.setor} · {roleLabel(user.role,user.genero,user.setor)}</div>
                   <div style={{fontSize:13,color:D.muted,marginTop:12}}>{meuEmail||"E-mail não informado"}</div>
                   <div style={{fontSize:12,color:D.muted,marginTop:12}}>Último acesso: {user.lastAccess||"—"}</div>
                 </div>
@@ -2246,7 +2250,7 @@ export default function App() {
                       ):(
                         <>
                           <div style={{fontWeight:500,fontSize:14,color:D.text}}>{u.name}</div>
-                          <div style={{fontSize:12,color:D.muted,marginTop:2}}>{u.setor} · {roleLabel(u.role)}</div>
+                          <div style={{fontSize:12,color:D.muted,marginTop:2}}>{u.setor} · {roleLabel(u.role,u.genero,u.setor)}</div>
                           <div style={{fontSize:12,color:D.muted,marginTop:2}}>{revealedEmails[u.id]||(emailErr[u.id]?"":"Carregando e-mail...")}</div>
                           {emailErr[u.id]&&<div style={{fontSize:11,color:D.redText,marginTop:2}}>{emailErr[u.id]}</div>}
                           <div style={{fontSize:11,color:D.muted,marginTop:2}}>Último acesso: {u.lastAccess||"—"}</div>
