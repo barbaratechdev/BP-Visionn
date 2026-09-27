@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Pencil, Save, AlertCircle, History, Send, CheckCircle2, XCircle, Ban, PackageCheck } from "lucide-react";
+import { ArrowLeft, Pencil, Save, AlertCircle, History, Send, CheckCircle2, XCircle, Ban, PackageCheck, RefreshCw } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { fBRL, fData, fDataHoraBR, parseMoedaInput, fMoedaInput, mapAvariaSolicitacaoRow, mapAvariaConcessaoRow, mapAvariaAplicacaoRow, mapAvariaHistoricoRow, nomeVisivel } from "../lib/helpers";
 import { hoje } from "../constants";
@@ -22,11 +22,22 @@ function statusInfo(s, D){
     SOLICITADO: {label:"Solicitado", bg:D.blueSoft, c:D.blueText},
     EM_ANALISE: {label:"Em análise", bg:D.orangeSoft, c:D.orangeText},
     CONCEDIDO: {label:"Concedido", bg:D.greenSoft, c:D.greenText},
-    NEGADO: {label:"Negado", bg:D.redSoft, c:D.redText},
-    APLICADO: {label:"Aplicado", bg:D.purpleSoft, c:D.purpleText},
-    CANCELADO: {label:"Cancelado", bg:D.bg, c:D.muted},
+    NEGADO: {label:"Negada", bg:D.redSoft, c:D.redText},
+    APLICADO: {label:"Aplicada", bg:D.purpleSoft, c:D.purpleText},
+    // ENCERRADA: encerramento administrativo (sem desconto real) — distinto
+    // de APLICADO, que continua exclusivo de aplicação financeira de verdade.
+    ENCERRADA: {label:"Concluída", bg:D.greenSoft, c:D.greenText},
+    CANCELADO: {label:"Cancelada", bg:D.bg, c:D.muted},
   })[s] || {label:s, bg:D.bg, c:D.muted};
 }
+
+// Status que a ação manual "Alterar status" pode ler/escrever — só os 3
+// estados administrativos (Aberta/Concluída/Cancelada). Os demais
+// (SOLICITADO/EM_ANALISE/CONCEDIDO/NEGADO/APLICADO) são controlados só
+// pelas ações guiadas existentes; o botão nem aparece nesses casos, e o
+// trigger do banco (avarias_validar_transicao_status) bloqueia qualquer
+// tentativa fora dessas combinações mesmo via API direta.
+const STATUS_ALTERAVEL = ["ABERTA","ENCERRADA","CANCELADO"];
 
 const rowStyle = {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",gap:10};
 
@@ -310,6 +321,37 @@ export default function AvariaDetalhe(p) {
     setShowCancAvariaForm(false);
   }
 
+  // --- Alterar status (manual) — só entre ABERTA/ENCERRADA/CANCELADO (ver
+  // STATUS_ALTERAVEL); os demais estados são controlados pelas ações
+  // guiadas acima. Nunca grava em concessão/aplicação/solicitação — só
+  // avarias.status + histórico, igual cancelarAvaria(). O banco
+  // (avarias_validar_transicao_status) é quem decide de verdade se a
+  // transição é permitida; se um dia isto tentar algo fora da regra
+  // (não deveria, dado STATUS_ALTERAVEL), a mensagem de erro do Postgres
+  // aparece via alterarStatusErr em vez de falhar silenciosamente. ---
+  const [showAlterarStatusForm, setShowAlterarStatusForm] = useState(false);
+  const [novoStatusForm, setNovoStatusForm] = useState("ABERTA");
+  const [alterarStatusErr, setAlterarStatusErr] = useState("");
+  const [alterarStatusSalvando, setAlterarStatusSalvando] = useState(false);
+
+  function abrirAlterarStatus(){ setNovoStatusForm(status); setAlterarStatusErr(""); setShowAlterarStatusForm(true); }
+
+  async function salvarAlteracaoStatus(){
+    if(novoStatusForm===status){ setShowAlterarStatusForm(false); return; }
+    setAlterarStatusSalvando(true); setAlterarStatusErr("");
+    const statusAnterior = status;
+    const { data, error } = await supabase.from("avarias").update({status:novoStatusForm}).eq("id",avaria.id).select().single();
+    setAlterarStatusSalvando(false);
+    if(error||!data){
+      setAlterarStatusErr(error&&error.message?error.message:"Não foi possível alterar o status. Tente novamente.");
+      return;
+    }
+    setStatus(novoStatusForm);
+    await registrarHistorico("AVARIA_STATUS_ALTERADO","Status alterado manualmente: "+statusInfo(statusAnterior,D).label+" → "+statusInfo(novoStatusForm,D).label+".",statusAnterior,novoStatusForm);
+    addA("Status alterado manualmente", referencia, statusInfo(statusAnterior,D).label+" → "+statusInfo(novoStatusForm,D).label);
+    setShowAlterarStatusForm(false);
+  }
+
   // --- Cancelar concessão — bloqueado pelo banco (trigger
   // avaria_concessoes_check_cancelamento) se existir aplicação ATIVA
   // vinculada; aqui a checagem é só pra já não oferecer o botão nesse
@@ -416,6 +458,7 @@ export default function AvariaDetalhe(p) {
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           <span style={{fontSize:11,fontWeight:600,background:statusInfo(status,D).bg,color:statusInfo(status,D).c,borderRadius:20,padding:"4px 12px"}}>{statusInfo(status,D).label}</span>
           {podeEditar&&onEditar&&<button style={st.btn} onClick={onEditar}><Pencil size={13}/>Editar dados</button>}
+          {podeEditar&&!loading&&STATUS_ALTERAVEL.includes(status)&&<button style={st.btn} onClick={abrirAlterarStatus}><RefreshCw size={13}/>Alterar status</button>}
           {cta&&<button style={st.btnBlue} onClick={cta.onClick}><cta.Icon size={14}/>{cta.label}</button>}
         </div>
       </div>
@@ -708,6 +751,25 @@ export default function AvariaDetalhe(p) {
             <div style={{display:"flex",gap:10,marginTop:18}}>
               <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setShowCancAvariaForm(false)} disabled={cancAvariaSalvando}>Voltar</button>
               <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.red,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600}} onClick={cancelarAvaria} disabled={cancAvariaSalvando}>{cancAvariaSalvando?"Salvando...":"Confirmar cancelamento"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: alterar status manualmente */}
+      {showAlterarStatusForm&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={()=>!alterarStatusSalvando&&setShowAlterarStatusForm(false)}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:400,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><RefreshCw size={20} color={D.blue}/></div>
+            <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:16}}>Alterar status</div>
+            <label style={rLbl}>Status</label>
+            <select style={rInp} value={novoStatusForm} onChange={e=>{setNovoStatusForm(e.target.value);setAlterarStatusErr("");}}>
+              {STATUS_ALTERAVEL.map(s=><option key={s} value={s}>{statusInfo(s,D).label}</option>)}
+            </select>
+            {alterarStatusErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginTop:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{alterarStatusErr}</div>}
+            <div style={{display:"flex",gap:10,marginTop:18}}>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setShowAlterarStatusForm(false)} disabled={alterarStatusSalvando}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={salvarAlteracaoStatus} disabled={alterarStatusSalvando}>{alterarStatusSalvando?"Salvando...":<><Save size={14}/>Salvar</>}</button>
             </div>
           </div>
         </div>

@@ -11,16 +11,20 @@ import AvariaDetalhe from "./AvariaDetalhe";
 
 const FORM_VAZIO = {id:null,laboratorio:"",filial:"",numeroNf:"",dataNf:"",produtoNome:"",produtoCodigo:"",quantidade:"",tipoAvaria:"",descricao:"",valorProduto:"",valorAvaria:"",dataIdentificacao:hoje,identificadoPor:"",observacoes:""};
 
-const STATUS_LIST = ["ABERTA","SOLICITADO","EM_ANALISE","CONCEDIDO","NEGADO","APLICADO","CANCELADO"];
+const STATUS_LIST = ["ABERTA","SOLICITADO","EM_ANALISE","CONCEDIDO","NEGADO","APLICADO","ENCERRADA","CANCELADO"];
 function statusInfo(s, D){
   return ({
     ABERTA: {label:"Aberta", bg:D.bg, c:D.muted, dot:D.muted},
     SOLICITADO: {label:"Solicitado", bg:D.blueSoft, c:D.blueText, dot:D.blue},
     EM_ANALISE: {label:"Em análise", bg:D.orangeSoft, c:D.orangeText, dot:D.orange},
     CONCEDIDO: {label:"Concedido", bg:D.greenSoft, c:D.greenText, dot:D.green},
-    NEGADO: {label:"Negado", bg:D.redSoft, c:D.redText, dot:D.red},
-    APLICADO: {label:"Aplicado", bg:D.purpleSoft, c:D.purpleText, dot:D.purple},
-    CANCELADO: {label:"Cancelado", bg:D.bg, c:D.muted, dot:D.muted},
+    NEGADO: {label:"Negada", bg:D.redSoft, c:D.redText, dot:D.red},
+    APLICADO: {label:"Aplicada", bg:D.purpleSoft, c:D.purpleText, dot:D.purple},
+    // ENCERRADA: status operacional (encerramento administrativo, sem
+    // desconto real envolvido) — distinto de APLICADO, que continua só
+    // pra quando existe aplicação financeira de verdade.
+    ENCERRADA: {label:"Concluída", bg:D.greenSoft, c:D.greenText, dot:D.green},
+    CANCELADO: {label:"Cancelada", bg:D.bg, c:D.muted, dot:D.muted},
   })[s] || {label:s, bg:D.bg, c:D.muted, dot:D.muted};
 }
 
@@ -319,13 +323,16 @@ export default function Avarias(p) {
   // --- Dashboard ---
   const dashLista = lista.filter(a=>dashFilial==="todas"||a.filial===dashFilial);
   const dashIds = new Set(dashLista.map(a=>a.id));
-  // Só avarias não canceladas contam pra "Valor solicitado" — os outros
-  // dois indicadores (concedido/aplicado) já filtravam por status ATIVA
-  // nas próprias tabelas filhas; aqui o filtro é pela avaria-mãe, porque
-  // avaria_solicitacoes não tem "cancelado" como reflexo direto do
+  // Só avarias não canceladas/encerradas contam pra "Valor solicitado" — os
+  // outros dois indicadores (concedido/aplicado) já filtravam por status
+  // ATIVA nas próprias tabelas filhas; aqui o filtro é pela avaria-mãe,
+  // porque avaria_solicitacoes não tem "cancelado" como reflexo direto do
   // cancelamento da avaria (uma solicitação pode continuar SOLICITADO
-  // mesmo depois da avaria virar CANCELADO por outro caminho).
-  const dashIdsAtivas = new Set(dashLista.filter(a=>a.status!=="CANCELADO").map(a=>a.id));
+  // mesmo depois da avaria virar CANCELADO por outro caminho). ENCERRADA
+  // entra na mesma exclusão: é um encerramento administrativo, sem
+  // desconto real — não deve contribuir pro "Valor solicitado" mesmo que
+  // exista uma solicitação antiga (já cancelada) associada.
+  const dashIdsAtivas = new Set(dashLista.filter(a=>a.status!=="CANCELADO"&&a.status!=="ENCERRADA").map(a=>a.id));
   // Concessões/aplicações canceladas não contam nos indicadores nem nos
   // totais — o registro continua existindo (rastreabilidade), mas não
   // representa mais um desconto vigente.

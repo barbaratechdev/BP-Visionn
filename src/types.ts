@@ -8,7 +8,7 @@ export type AuditEntry = { id:number; tipo:string; tarefa:string; usuario:string
 // Controle de Avarias — ver 20260924000000_create_avarias.sql e seguintes.
 // status resume o ciclo de vida da avaria (avaria -> solicitação ->
 // concessão -> aplicação), sincronizado pelo cliente a cada transição.
-export type AvariaStatus = "ABERTA"|"SOLICITADO"|"EM_ANALISE"|"CONCEDIDO"|"NEGADO"|"APLICADO"|"CANCELADO";
+export type AvariaStatus = "ABERTA"|"SOLICITADO"|"EM_ANALISE"|"CONCEDIDO"|"NEGADO"|"APLICADO"|"CANCELADO"|"ENCERRADA";
 export type Avaria = {
   id:string; filial:string; numeroNf:string; dataNf:string; produtoNome:string; produtoCodigo:string;
   quantidade:number|string; tipoAvaria:string; descricao:string; valorProduto:number|null; valorAvaria:number|null;
