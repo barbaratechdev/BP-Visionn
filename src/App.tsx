@@ -498,11 +498,12 @@ export default function App() {
                   <td data-label="Data de Inclusão" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{pr.criadoEmHora?fDataHoraBR(pr.criadoEmHora):"—"}</td>
                   <td data-label="Situação" style={{padding:"10px 8px"}}>
                     <select value={pr.situacao} disabled={isDemo} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
-                      <option value="Aguardando retorno">Aguardando</option>
-                      {pr.situacao==="Em negociação"&&<option value="Em negociação" style={{display:"none"}}>Aguardando</option>}
-                      <option value="Prorrogação Aprovada">Aprovado</option><option value="Recusado">Recusado</option>
+                      <option value="Aguardando retorno">Pendente</option>
+                      {pr.situacao==="Em negociação"&&<option value="Em negociação" style={{display:"none"}}>Pendente</option>}
+                      <option value="Prorrogação Aprovada">✓ Aprovado</option><option value="Recusado">✕ Recusado</option>
                     </select>
-                    {pr.situacao==="Prorrogação Aprovada"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>Aprovado em {fData(pr.dataAprovacao)}</div>}
+                    {pr.situacao==="Prorrogação Aprovada"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>· {fData(pr.dataAprovacao)}</div>}
+                    {pr.situacao==="Recusado"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>· {fData(pr.dataAprovacao)}</div>}
                   </td>
                   <td style={{padding:"10px 8px",display:"flex",gap:4}}>
                     {(isAdmin||isFin)&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
