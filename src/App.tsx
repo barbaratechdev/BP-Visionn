@@ -162,7 +162,7 @@ export default function App() {
   const ultimoUserIdRef = useRef<string | null>(null);
 
   const isAdmin = user && user.role==="admin";
-  const isFin   = user && user.setor==="Financeiro";
+  const isFin   = user && (user.setor==="Financeiro" || user.id==="95dd833e-db0e-4e65-b7fe-1188ed8ee5a3"); // Ariana (Financeiro - MA): exceção por id, espelha is_financeiro()
   const isRH    = user && user.setor==="RH";
   const isDemo  = user && user.role==="demo";
   // Aba RH: liberada pontualmente pra Maria K (setor cadastrado é
