@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { supabase } from "./lib/supabase";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent } from "lucide-react";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent, ClipboardCheck } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, SIDEBAR, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
 import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
@@ -16,6 +16,8 @@ import Supervisores from "./components/Supervisores";
 import RH from "./components/RH";
 import Avarias from "./components/Avarias";
 import Abatimentos from "./components/Abatimentos";
+import AprovacoesCancelamento from "./components/AprovacoesCancelamento";
+import { APROVADOR_CANCELAMENTO_ID, useCancelamentoAvisos } from "./lib/cancelamentos";
 import MiniCalendario from "./components/MiniCalendario";
 import StatusDonutCard from "./components/StatusDonutCard";
 import GoogleIcon from "./components/GoogleIcon";
@@ -165,6 +167,11 @@ export default function App() {
   const isFin   = user && (user.setor==="Financeiro" || user.id==="95dd833e-db0e-4e65-b7fe-1188ed8ee5a3"); // Ariana (Financeiro - MA): exceção por id, espelha is_financeiro()
   const isRH    = user && user.setor==="RH";
   const isDemo  = user && user.role==="demo";
+  // Aprovações de Cancelamento (Abatimentos): só a Barbára, por id — a trava
+  // real está no banco (20261002000010 + 20261002000020). Também alimenta o contador de
+  // pendentes e as notificações de solicitação/decisão.
+  const isAprovadorCancelamento = !!(user && user.id===APROVADOR_CANCELAMENTO_ID);
+  const { pendentes: cancelPendentes, refresh: refreshCancelPendentes } = useCancelamentoAvisos(user, addN);
   // Aba RH: liberada pontualmente pra Maria K (setor cadastrado é
   // "RH - Cadastro", que não bate com o valor exato "RH" checado acima) —
   // por id, não por nome, pra não depender de texto e não arriscar
@@ -1489,6 +1496,7 @@ export default function App() {
     {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:isAdmin||isFin||isDemo},
     {id:"avarias",label:"Controle de Avarias",Icon:ShieldAlert,show:isAdmin||isFin||isDemo},
     {id:"abatimentos",label:"Controle de Abatimentos",Icon:Percent,show:isAdmin||isFin||isDemo},
+    {id:"aprovacoes",label:"Aprovações de Cancelamento",Icon:ClipboardCheck,show:isAprovadorCancelamento},
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
     {id:"rh",label:"RH",Icon:Briefcase,show:isAdmin||isRH||isRHTelaExtra},
     {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin||isDemo},
@@ -1723,12 +1731,17 @@ export default function App() {
             )}
           </div>
           {NAV.map(n=>{
-            const badgeCount = n.id==="pendencias" ? pendsVis.length : n.id==="mensagens" ? naoLidasChat : 0;
+            const badgeCount = n.id==="pendencias" ? pendsVis.length : n.id==="mensagens" ? naoLidasChat : n.id==="aprovacoes" ? cancelPendentes : 0;
+            // "Aprovações de Cancelamento" é mais largo que o espaço do item (~171px de texto): fica numa
+            // linha só com fonte/espaçamento levemente menores, e o contador vai sobre o ícone
+            // (ao lado não sobraria espaço pro texto). Os demais itens seguem como sempre.
+            const rotuloLongo = n.id==="aprovacoes";
             return (
-            <button key={n.id} title={sidebarCollapsed?n.label:undefined} className={"bv-nav-item"+(tab===n.id?" active":"")} onClick={()=>{setTab(n.id);setShowDrawer(false);}} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:sidebarCollapsed?"center":"flex-start",gap:9,padding:sidebarCollapsed?"11px 0":"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:3,position:"relative",background:tab===n.id?SIDEBAR.active:"transparent",color:tab===n.id?SIDEBAR.text:SIDEBAR.textMuted,fontWeight:tab===n.id?600:500,fontSize:13,boxShadow:tab===n.id?SIDEBAR.activeShadow:"none"}}>
-              <n.Icon size={16}/>
-              {!sidebarCollapsed&&n.label}
-              {!sidebarCollapsed&&badgeCount>0&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{badgeCount}</span>}
+            <button key={n.id} title={sidebarCollapsed||rotuloLongo?n.label:undefined} className={"bv-nav-item"+(tab===n.id?" active":"")} onClick={()=>{setTab(n.id);setShowDrawer(false);}} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:sidebarCollapsed?"center":"flex-start",gap:9,padding:sidebarCollapsed?"11px 0":"11px 12px",borderRadius:12,border:"none",cursor:"pointer",marginBottom:3,position:"relative",background:tab===n.id?SIDEBAR.active:"transparent",color:tab===n.id?SIDEBAR.text:SIDEBAR.textMuted,fontWeight:tab===n.id?600:500,fontSize:14,boxShadow:tab===n.id?SIDEBAR.activeShadow:"none"}}>
+              <n.Icon size={16} style={{flexShrink:0}}/>
+              {!sidebarCollapsed&&<span style={{flex:"1 1 auto",minWidth:0,textAlign:"left",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:"21px",...(rotuloLongo?{fontSize:13,letterSpacing:"-0.2px"}:null)}}>{n.label}</span>}
+              {!sidebarCollapsed&&badgeCount>0&&!rotuloLongo&&<span style={{marginLeft:"auto",background:D.red,color:"#fff",borderRadius:20,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{badgeCount}</span>}
+              {!sidebarCollapsed&&badgeCount>0&&rotuloLongo&&<span style={{position:"absolute",top:5,left:23,minWidth:15,height:15,boxSizing:"border-box",padding:"0 4px",borderRadius:20,background:D.red,color:"#fff",fontSize:9.5,fontWeight:700,lineHeight:"15px",textAlign:"center"}}>{badgeCount}</span>}
               {sidebarCollapsed&&badgeCount>0&&<span style={{position:"absolute",top:6,right:"50%",marginRight:-16,width:7,height:7,borderRadius:"50%",background:D.red}}/>}
             </button>
             );
@@ -2142,7 +2155,10 @@ export default function App() {
           )}
 
           {tab==="abatimentos"&&(isAdmin||isFin||isDemo)&&(
-            <Abatimentos D={D} st={st} addA={addA} addN={addN} user={user} isDemo={isDemo}/>
+            <Abatimentos D={D} st={st} addA={addA} addN={addN} user={user} isDemo={isDemo} onCancelamentoMudou={refreshCancelPendentes}/>
+          )}
+          {tab==="aprovacoes"&&isAprovadorCancelamento&&(
+            <AprovacoesCancelamento D={D} st={st} addN={addN} user={user} onMudou={refreshCancelPendentes}/>
           )}
 
           {/* CALENDÁRIO */}

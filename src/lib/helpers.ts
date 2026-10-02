@@ -399,6 +399,12 @@ export function mapAbatimentoRow(row): Abatimento {
     valorPago: row.valor_pago==null ? 0 : Number(row.valor_pago),
     data: row.data || "",
     filial: row.filial,
+    nfd: row.nfd || "",
+    tipoAbatimento: row.tipo_abatimento || "",
+    percentual: row.percentual==null ? null : Number(row.percentual),
+    // Sem a coluna (banco anterior à migration) ou registro antigo = REALIZADO,
+    // igual ao default da migration.
+    situacao: row.situacao==="PENDENTE" ? "PENDENTE" : "REALIZADO",
     status: row.status,
     createdBy: row.created_by || "",
     createdByNome: row.created_by_nome || "",

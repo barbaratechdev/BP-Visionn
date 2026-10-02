@@ -42,8 +42,10 @@ export type AvariaHistoricoEntry = {
 // Sem exclusão física: correção é por cancelamento (status), mesmo conceito
 // já usado em avarias.
 export type AbatimentoStatus = "ATIVO"|"CANCELADO";
+export type AbatimentoSituacao = "PENDENTE"|"REALIZADO";
 export type Abatimento = {
   id:string; laboratorio:string; nf:string; valorAbatimento:number; valorPago:number; data:string; filial:string;
+  nfd:string; tipoAbatimento:string; percentual:number|null; situacao:AbatimentoSituacao;
   status:AbatimentoStatus; createdBy:string; createdByNome:string; updatedBy:string; updatedByNome:string;
   createdAt:string; updatedAt:string;
 };
