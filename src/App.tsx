@@ -2394,7 +2394,7 @@ export default function App() {
 
       {/* MODAL NOVO USUÁRIO */}
       {showNewU&&(
-        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={fecharNewU}>
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}}>
           <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:420,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
             <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px"}}><Users size={22} color={D.blue}/></div>
             <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:8}}>Novo usuário</div>
