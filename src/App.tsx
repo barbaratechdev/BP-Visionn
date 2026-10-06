@@ -127,7 +127,7 @@ export default function App() {
   const [dataAprovacaoInput, setDataAprovacaoInput] = useState(hoje);
   const [dataAprovacaoErr, setDataAprovacaoErr] = useState("");
   const [showFiltroImpressao, setShowFiltroImpressao] = useState(false);
-  const [filtroImp, setFiltroImp] = useState({tipo:"todos",de:"",ate:"",cliente:"",responsavel:""});
+  const [filtroImp, setFiltroImp] = useState({tipo:"todos",de:"",ate:"",cliente:"",responsavel:"",estados:[] as string[]});
   const [prorr, setProrr] = useState({novoVencimento:"",motivo:""});
   const [prorrErr, setProrrErr] = useState("");
   const [editU, setEditU] = useState<string | null>(null);
@@ -456,7 +456,7 @@ export default function App() {
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
           <div style={{display:"flex",gap:8}}>
-            <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={()=>{setFiltroImp({tipo:"todos",de:"",ate:"",cliente:"",responsavel:""});setShowFiltroImpressao(true);}}><Printer size={13}/>Imprimir</button>
+            <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={()=>{setFiltroImp({tipo:"todos",de:"",ate:"",cliente:"",responsavel:"",estados:[]});setShowFiltroImpressao(true);}}><Printer size={13}/>Imprimir</button>
             {!isDemo&&<button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>}
           </div>
         </div>
@@ -1156,7 +1156,10 @@ export default function App() {
   // crescente, concluídas por data de aprovação decrescente — como as
   // datas são "YYYY-MM-DD", a comparação de string já respeita a ordem
   // cronológica sem precisar converter pra Date.
-  // filtros: {tipo:"todos"|"aguardando"|"aprovado"|"recusado", de, ate, cliente, responsavel}.
+  // filtros: {tipo:"todos"|"aguardando"|"aprovado"|"recusado", de, ate, cliente, responsavel,
+  // estados:string[]}. "estados" é uma seleção múltipla (lógica OR/IN) sobre a coluna
+  // pendencias.estado (pr.estado), que guarda o nome por extenso (CHECK: Pará/Piauí/Maranhão),
+  // não a sigla. Lista vazia = "Todos" (sem filtro: os 3 estados).
   // Os 3 tipos são mutuamente exclusivos e batem 1:1 com o que aparece na
   // tela (ver situacaoLabel/ehAguardando em lib/helpers): um registro
   // "Em negociação" conta como "aguardando" — nunca aparece junto de
@@ -1167,8 +1170,9 @@ export default function App() {
   // distinto "pela prorrogação" gravado por registro, só no log de
   // auditoria (texto livre, sem vínculo direto à linha), então não é
   // usado aqui pra não fabricar um dado que não existe de fato na pendência.
+  const ESTADOS_IMP = ["Pará","Maranhão","Piauí"];
   function imprimirProrrogacoes(filtros){
-    const f = filtros || {tipo:"todos",de:"",ate:"",cliente:"",responsavel:""};
+    const f = filtros || {tipo:"todos",de:"",ate:"",cliente:"",responsavel:"",estados:[] as string[]};
     const dentroPeriodo = function(pr){
       if(!f.de&&!f.ate) return true;
       if(!pr.vencimento) return false;
@@ -1179,6 +1183,7 @@ export default function App() {
     const base = prorrogacoes.filter(function(pr){
       return (!f.cliente||pr.fornecedor.toLowerCase().includes(f.cliente.toLowerCase()))
         && (!f.responsavel||pr.criadoPor===f.responsavel)
+        && (!f.estados||f.estados.length===0||f.estados.includes(pr.estado))
         && dentroPeriodo(pr);
     });
     // 3 grupos mutuamente exclusivos — cada NF cai em exatamente um.
@@ -1220,6 +1225,8 @@ export default function App() {
     ];
     if(f.de||f.ate) linhasMeta.push("Período: "+(f.de?fData(f.de):"início")+" a "+(f.ate?fData(f.ate):"hoje"));
     if(f.cliente) linhasMeta.push("Fornecedor: "+f.cliente);
+    const estadosSel = ESTADOS_IMP.filter(e=>(f.estados||[]).includes(e));
+    if(estadosSel.length>0&&estadosSel.length<ESTADOS_IMP.length) linhasMeta.push((estadosSel.length===1?"Estado: ":"Estados: ")+estadosSel.join(" e "));
     if(f.responsavel){ const ur=users.find(u=>u.id===f.responsavel); linhasMeta.push("Responsável pela solicitação: "+(ur?ur.name:"—")); }
     linhasMeta.push(totalExibido+" registro"+(totalExibido===1?"":"s")+" exibido"+(totalExibido===1?"":"s"));
     linhasMeta.forEach(function(txt){
@@ -2323,6 +2330,14 @@ export default function App() {
       {/* MODAL FILTROS DE IMPRESSÃO (Prorrogação de Boletos) */}
       {showFiltroImpressao&&(()=>{
         const responsaveisComRegistro=users.filter(u=>prorrogacoes.some(pr=>pr.criadoPor===u.id));
+        // Estado: seleção múltipla. Nenhum marcado = "Todos" (os 3). Marcar os 3 volta pra "Todos",
+        // então "Todos" e a escolha individual nunca ficam em conflito.
+        const todosEstados=filtroImp.estados.length===0;
+        const alternarEstado=(uf:string)=>setFiltroImp(p=>{
+          const prox=p.estados.includes(uf)?p.estados.filter(x=>x!==uf):[...p.estados,uf];
+          return {...p,estados:prox.length>=ESTADOS_IMP.length?[]:prox};
+        });
+        const chipEstado=(ativo:boolean)=>({display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flex:"1 1 0",minWidth:0,boxSizing:"border-box" as const,minHeight:43,padding:"0 8px",borderRadius:10,border:"1px solid "+(ativo?D.blue:D.border),background:ativo?D.blueSoft:D.white,color:ativo?D.blueText:D.text,fontSize:13,fontWeight:ativo?600:500,cursor:"pointer",whiteSpace:"nowrap" as const});
         return (
         <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={()=>setShowFiltroImpressao(false)}>
           <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:460,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
@@ -2347,6 +2362,15 @@ export default function App() {
                   <option value="">Todos</option>
                   {responsaveisComRegistro.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
+              </div>
+              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Estado</label>
+                <div role="group" aria-label="Estado" style={{display:"flex",gap:8}}>
+                  <button type="button" aria-pressed={todosEstados} style={chipEstado(todosEstados)} onClick={()=>setFiltroImp(p=>({...p,estados:[]}))}>{todosEstados&&<Check size={13}/>}Todos</button>
+                  {ESTADOS_IMP.map(uf=>{ const ativo=filtroImp.estados.includes(uf); return (
+                    <button type="button" key={uf} aria-pressed={ativo} style={chipEstado(ativo)} onClick={()=>alternarEstado(uf)}>{ativo&&<Check size={13}/>}{uf}</button>
+                  ); })}
+                </div>
+                <div style={{fontSize:11,color:D.muted,marginTop:6}}>Incluindo: {(todosEstados?ESTADOS_IMP:ESTADOS_IMP.filter(e=>filtroImp.estados.includes(e))).join(", ").replace(/, ([^,]*)$/," e $1")}</div>
               </div>
             </div>
 
