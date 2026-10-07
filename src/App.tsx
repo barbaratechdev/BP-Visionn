@@ -165,6 +165,13 @@ export default function App() {
   const isFin   = user && (user.setor==="Financeiro" || user.id==="95dd833e-db0e-4e65-b7fe-1188ed8ee5a3"); // Ariana (Financeiro - MA): exceção por id, espelha is_financeiro()
   const isRH    = user && user.setor==="RH";
   const isDemo  = user && user.role==="demo";
+  // Comercial: setor "Comercial" + role func — espelha is_comercial() no banco (sem nome
+  // nem id fixo; o setor só muda pela admin). Só LEITURA em Prorrogação/Avarias/Abatimentos:
+  // o banco já nega qualquer escrita; aqui só se evita mostrar botões que falhariam.
+  // Obs.: Avarias/Abatimentos recebem este flag na prop "isDemo" (nome histórico — nesses
+  // componentes ela só controla "podeEditar").
+  const isComercial = !!(user && user.role==="func" && user.setor==="Comercial");
+  const somenteLeitura = !!isDemo || isComercial;
   // Aprovações de Cancelamento (Abatimentos): só a Barbára, por id — a trava
   // real está no banco (20261002000010 + 20261002000020). Também alimenta o contador de
   // pendentes e as notificações de solicitação/decisão.
@@ -197,6 +204,11 @@ export default function App() {
   // RLS (tarefa_visivel_para_demo) já garante isso na consulta em si, este
   // filtro aqui é defesa em profundidade do lado do cliente, não a proteção
   // principal.
+  // Dashboard do Comercial: só as tarefas atribuídas a ele (nada de equipe, boletos nem log geral).
+  const tarefasPainel = isComercial ? tarefas.filter(t=>t.responsavel===(user&&user.id)) : tarefas;
+  // O atalho "Ver pendências" do gráfico de status leva à aba Pendências, que o Comercial não tem:
+  // para ele o destino vira Tarefas (evita cair numa tela vazia).
+  const setTabVisivel = (t)=>setTab(isComercial&&t==="pendencias"?"tarefas":t);
   const tVis = (isAdmin ? tarefas : isDemo ? tarefas.filter(t=>t.responsavel===demoResponsavelId) : tarefas.filter(t=>t.responsavel===(user&&user.id)))
     .filter(t=>(fStatus==="todos"||t.status===fStatus)&&(!fResponsavel||t.responsavel===fResponsavel)&&(!search||t.fornecedor.toLowerCase().includes(search.toLowerCase())));
   const pends    = tarefas.filter(t=>t.status==="pendente"||t.status==="vencido");
@@ -448,7 +460,7 @@ export default function App() {
           <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
           <div style={{display:"flex",gap:8}}>
             <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={()=>{setFiltroImp({tipo:"todos",de:"",ate:"",cliente:"",responsavel:"",estados:[]});setShowFiltroImpressao(true);}}><Printer size={13}/>Imprimir</button>
-            {!isDemo&&<button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>}
+            {!somenteLeitura&&<button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>}
           </div>
         </div>
         {showProrrForm&&(
@@ -495,7 +507,7 @@ export default function App() {
                   <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
                   <td data-label="Data de Inclusão" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{pr.criadoEmHora?fDataHoraBR(pr.criadoEmHora):"—"}</td>
                   <td data-label="Situação" style={{padding:"10px 8px"}}>
-                    <select value={pr.situacao} disabled={isDemo} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:isDemo?"default":"pointer",outline:"none"}}>
+                    <select value={pr.situacao} disabled={somenteLeitura} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:somenteLeitura?"default":"pointer",outline:"none"}}>
                       <option value="Aguardando retorno">Pendente</option>
                       {pr.situacao==="Em negociação"&&<option value="Em negociação" style={{display:"none"}}>Pendente</option>}
                       <option value="Prorrogação Aprovada">✓ Aprovado</option><option value="Recusado">✕ Recusado</option>
@@ -664,6 +676,7 @@ export default function App() {
                   </button>
                 )}
                 {!isAdmin&&t.status==="pago"&&<div style={{padding:"7px 14px",background:D.greenSoft,borderRadius:10,fontSize:12,color:D.greenText,display:"inline-flex",alignItems:"center",gap:6,fontWeight:500}}><CheckCircle size={13}/>Concluída</div>}
+                {isComercial&&t.status==="pago"&&t.responsavel===user.id&&<button style={{...st.btn,color:D.redText,borderColor:D.red+"55"}} onClick={()=>reabrir(t.id)}><AlertCircle size={13}/>Reabrir</button>}
               </div>
               {showProrr===t.id&&(
                 <div style={{marginTop:12,padding:14,background:D.bg,borderRadius:10,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
@@ -724,6 +737,15 @@ export default function App() {
   // só evita a chamada e mostra uma mensagem amigável.
   function bloqueadoDemo(){
     if(!isDemo) return false;
+    setDemoMsg(true);
+    setTimeout(()=>setDemoMsg(false),3000);
+    return true;
+  }
+  // Guarda só das escritas de Prorrogação de Boletos (o Comercial é somente leitura ali).
+  // Separada de bloqueadoDemo() de propósito: aquela também protege "Concluir/Reabrir
+  // tarefa", que o Comercial continua podendo fazer nas próprias tarefas.
+  function bloqueadoSomenteLeitura(){
+    if(!somenteLeitura) return false;
     setDemoMsg(true);
     setTimeout(()=>setDemoMsg(false),3000);
     return true;
@@ -1058,7 +1080,7 @@ export default function App() {
   }
 
   async function addNF(){
-    if(bloqueadoDemo()) return;
+    if(bloqueadoDemo()||bloqueadoSomenteLeitura()) return;
     if(!newPr.fornecedor||!newPr.nf) return;
     const { data, error } = await supabase.from("pendencias").insert({
       fornecedor: newPr.fornecedor,
@@ -1076,7 +1098,7 @@ export default function App() {
   }
 
   async function mudarSituacaoNF(id,situacao){
-    if(bloqueadoDemo()) return;
+    if(bloqueadoDemo()||bloqueadoSomenteLeitura()) return;
     const { error } = await supabase.from("pendencias").update({ situacao }).eq("id", id);
     if(error) return;
     const anterior=prorrogacoes.find(x=>x.id===id);
@@ -1095,7 +1117,7 @@ export default function App() {
   }
 
   async function confirmarAprovarProrrogacao(){
-    if(bloqueadoDemo()) return;
+    if(bloqueadoDemo()||bloqueadoSomenteLeitura()) return;
     if(!dataAprovacaoInput){ setDataAprovacaoErr("Informe a data da aprovação."); return; }
     const pr=prorrogacoes.find(x=>x.id===showAprovarPr);
     const { error } = await supabase.from("pendencias").update({
@@ -1114,7 +1136,7 @@ export default function App() {
   }
 
   async function salvarEditPr(){
-    if(bloqueadoDemo()) return;
+    if(bloqueadoDemo()||bloqueadoSomenteLeitura()) return;
     if(!editPrData.fornecedor||!editPrData.nf) return;
     const { error } = await supabase.from("pendencias").update({
       fornecedor: editPrData.fornecedor,
@@ -1130,7 +1152,7 @@ export default function App() {
   }
 
   async function excluirNF(id){
-    if(bloqueadoDemo()) return;
+    if(bloqueadoDemo()||bloqueadoSomenteLeitura()) return;
     const { error } = await supabase.from("pendencias").delete().eq("id", id);
     if(error) return;
     setProrrogacoes(prev=>prev.filter(x=>x.id!==id));
@@ -1482,12 +1504,12 @@ export default function App() {
   }
 
   const NAV=[
-    {id:"painel",label:"Dashboard",Icon:LayoutDashboard,show:isAdmin||isDemo},
+    {id:"painel",label:"Dashboard",Icon:LayoutDashboard,show:isAdmin||isDemo||isComercial},
     {id:"tarefas",label:"Tarefas",Icon:Receipt,show:true},
-    {id:"pendencias",label:"Pendências",Icon:Clock,show:true},
-    {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:isAdmin||isFin||isDemo},
-    {id:"avarias",label:"Controle de Avarias",Icon:ShieldAlert,show:isAdmin||isFin||isDemo},
-    {id:"abatimentos",label:"Controle de Abatimentos",Icon:Percent,show:isAdmin||isFin||isDemo},
+    {id:"pendencias",label:"Pendências",Icon:Clock,show:!isComercial},
+    {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:isAdmin||isFin||isDemo||isComercial},
+    {id:"avarias",label:"Controle de Avarias",Icon:ShieldAlert,show:isAdmin||isFin||isDemo||isComercial},
+    {id:"abatimentos",label:"Controle de Abatimentos",Icon:Percent,show:isAdmin||isFin||isDemo||isComercial},
     {id:"aprovacoes",label:"Aprovações de Cancelamento",Icon:ClipboardCheck,show:isAprovadorCancelamento},
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
     {id:"rh",label:"RH",Icon:Briefcase,show:isAdmin||isRH||isRHTelaExtra},
@@ -1719,7 +1741,7 @@ export default function App() {
         <div style={{flex:1,padding:"1.9rem 2.2rem",overflowY:"auto",background:D.bg}}>
 
           {/* DASHBOARD */}
-          {tab==="painel"&&(isAdmin||isDemo)&&(
+          {tab==="painel"&&(isAdmin||isDemo||isComercial)&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:22,fontWeight:800,color:D.text,letterSpacing:"-0.3px"}}>Dashboard</div><div style={{fontSize:13,color:D.muted,marginTop:2}}>Bem-vinda, {nomeVisivel(user).split(" ")[0]} ao BP-Visionn</div></div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:20}}>
@@ -1727,13 +1749,14 @@ export default function App() {
                     base + alpha: o número precisa ler forte — o alpha
                     deixava o dígito lavado. Ícone/fundo do quadradinho
                     (bg/color) continuam na cor base, sem mudança. */}
-                <MCard D={D} label="Pendências" value={tarefas.filter(t=>t.status==="pendente"||t.status==="vencido").length} Icon={Clock} bg={D.orangeSoft} color={D.orange} highlight={D.orangeText}/>
-                <MCard D={D} label="Urgentes"   value={tarefas.filter(t=>t.status==="vencido").length} Icon={Zap} bg={D.redSoft} color={D.red} highlight={D.redText}/>
-                <MCard D={D} label="Concluídas" value={tarefas.filter(t=>t.status==="pago").length} Icon={CheckCircle} bg={D.greenSoft} color={D.green} highlight={D.greenText}/>
-                <MCard D={D} label="Total"      value={tarefas.length} Icon={Receipt} bg={D.blueSoft} color={D.blue}/>
+                <MCard D={D} label="Pendências" value={tarefasPainel.filter(t=>t.status==="pendente"||t.status==="vencido").length} Icon={Clock} bg={D.orangeSoft} color={D.orange} highlight={D.orangeText}/>
+                <MCard D={D} label="Urgentes"   value={tarefasPainel.filter(t=>t.status==="vencido").length} Icon={Zap} bg={D.redSoft} color={D.red} highlight={D.redText}/>
+                <MCard D={D} label="Concluídas" value={tarefasPainel.filter(t=>t.status==="pago").length} Icon={CheckCircle} bg={D.greenSoft} color={D.green} highlight={D.greenText}/>
+                <MCard D={D} label="Total"      value={tarefasPainel.length} Icon={Receipt} bg={D.blueSoft} color={D.blue}/>
               </div>
               <div className="bv-dash-grid">
               <div>
+              {!isComercial&&(
               <div className="bv-card" style={{...st.card,marginBottom:20}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1776,13 +1799,14 @@ export default function App() {
                 })}
                 <div style={{fontSize:11,color:D.muted,marginTop:4,paddingTop:12,borderTop:"1px solid "+D.border}}>Dados atualizados em tempo real</div>
               </div>
-              {renderProrrogacoesCard(4)}
+              )}
+              {!isComercial&&renderProrrogacoesCard(4)}
               <div className="bv-card" style={st.card}>
                 <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Tarefas recentes</div>
                 <div style={{overflowX:"auto"}}>
                 <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                   <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","Vencimento","Responsável","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-                  <tbody>{tarefas.slice(0,5).map(t=>{
+                  <tbody>{tarefasPainel.slice(0,5).map(t=>{
                     const fn=users.find(u=>u.id===t.responsavel);
                     return (
                       <tr key={t.id} style={{borderBottom:"1px solid "+D.border}}>
@@ -1800,9 +1824,10 @@ export default function App() {
               </div>
 
               <div>
-                <MiniCalendario D={D} st={st} tarefas={tarefas} setTab={setTab}/>
-                <StatusDonutCard D={D} st={st} tarefas={tarefas} setTab={setTab}/>
+                <MiniCalendario D={D} st={st} tarefas={tarefasPainel} setTab={setTab}/>
+                <StatusDonutCard D={D} st={st} tarefas={tarefasPainel} setTab={setTabVisivel}/>
 
+                {!isComercial&&(
                 <div className="bv-card" style={st.card}>
                   <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Atividades recentes</div>
                   {auditLog.length===0?(
@@ -1821,6 +1846,7 @@ export default function App() {
                     </div>
                   )}
                 </div>
+                )}
               </div>
 
               </div>
@@ -1856,13 +1882,13 @@ export default function App() {
                       </div>
                       <div>
                         <MiniCalendario D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab}/>
-                        <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab} title="Minhas tarefas por status"/>
+                        <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTabVisivel} title="Minhas tarefas por status"/>
                       </div>
                     </div>
                   ):(
                     <div className="bv-dash-grid">
                       <MiniCalendario D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab}/>
-                      <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab} title="Minhas tarefas por status"/>
+                      <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTabVisivel} title="Minhas tarefas por status"/>
                     </div>
                   )}
                 </div>
@@ -1875,7 +1901,7 @@ export default function App() {
           )}
 
           {/* PRORROGAÇÃO DE BOLETOS */}
-          {tab==="prorrogacao"&&(isAdmin||isFin||isDemo)&&(
+          {tab==="prorrogacao"&&(isAdmin||isFin||isDemo||isComercial)&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Prorrogação de Boletos</div><div style={{fontSize:13,color:D.muted}}>{prorrogacoes.length} NF(s) cadastrada(s)</div></div>
               {renderProrrogacoesCard()}
@@ -1883,7 +1909,7 @@ export default function App() {
           )}
 
           {/* PENDÊNCIAS */}
-          {tab==="pendencias"&&(
+          {tab==="pendencias"&&!isComercial&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Pendências</div><div style={{fontSize:13,color:D.muted}}>{pendsVis.length} em aberto</div></div>
               {pendsVis.length===0&&<div style={{textAlign:"center",padding:"3rem"}}><CheckCircle size={40} color={D.green} style={{display:"block",margin:"0 auto 10px"}}/><div style={{color:D.muted}}>Nenhuma pendência!</div></div>}
@@ -2102,12 +2128,12 @@ export default function App() {
           )}
 
           {/* CONTROLE DE AVARIAS */}
-          {tab==="avarias"&&(isAdmin||isFin||isDemo)&&(
-            <Avarias D={D} st={st} addA={addA} addN={addN} user={user} isDemo={isDemo}/>
+          {tab==="avarias"&&(isAdmin||isFin||isDemo||isComercial)&&(
+            <Avarias D={D} st={st} addA={addA} addN={addN} user={user} isDemo={somenteLeitura}/>
           )}
 
-          {tab==="abatimentos"&&(isAdmin||isFin||isDemo)&&(
-            <Abatimentos D={D} st={st} addA={addA} addN={addN} user={user} isDemo={isDemo} onCancelamentoMudou={refreshCancelPendentes}/>
+          {tab==="abatimentos"&&(isAdmin||isFin||isDemo||isComercial)&&(
+            <Abatimentos D={D} st={st} addA={addA} addN={addN} user={user} isDemo={somenteLeitura} onCancelamentoMudou={refreshCancelPendentes}/>
           )}
           {tab==="aprovacoes"&&isAprovadorCancelamento&&(
             <AprovacoesCancelamento D={D} st={st} addN={addN} user={user} onMudou={refreshCancelPendentes}/>
@@ -2115,7 +2141,7 @@ export default function App() {
 
           {/* CALENDÁRIO */}
           {tab==="calendario"&&(
-            <Calendario D={D} st={st} tarefas={tarefas} prorrogacoes={prorrogacoes} eventos={eventos} setEventos={setEventos} users={users}/>
+            <Calendario D={D} st={st} tarefas={tarefas} prorrogacoes={isComercial?[]:prorrogacoes} eventos={eventos} setEventos={setEventos} users={users}/>
           )}
 
           {/* MENSAGENS */}
