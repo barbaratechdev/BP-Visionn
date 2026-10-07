@@ -1800,7 +1800,7 @@ export default function App() {
                 <div style={{fontSize:11,color:D.muted,marginTop:4,paddingTop:12,borderTop:"1px solid "+D.border}}>Dados atualizados em tempo real</div>
               </div>
               )}
-              {!isComercial&&renderProrrogacoesCard(4)}
+              {renderProrrogacoesCard(4)}
               <div className="bv-card" style={st.card}>
                 <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Tarefas recentes</div>
                 <div style={{overflowX:"auto"}}>
