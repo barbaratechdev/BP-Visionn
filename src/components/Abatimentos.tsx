@@ -364,7 +364,7 @@ export default function Abatimentos(p) {
                     <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
                       <button style={{...st.btn,padding:"4px 8px",fontSize:11,opacity:pedidoPorAbatimento[a.id]&&pedidoPorAbatimento[a.id].status==="PENDENTE"?0.5:1}} title={pedidoPorAbatimento[a.id]&&pedidoPorAbatimento[a.id].status==="PENDENTE"?"Não é possível editar com cancelamento pendente":"Editar"} disabled={!!pedidoPorAbatimento[a.id]&&pedidoPorAbatimento[a.id].status==="PENDENTE"} onClick={()=>abrirEditar(a)}><Pencil size={12}/></button>
                       {a.status==="ATIVO"&&isAprovador&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} title="Cancelar" onClick={()=>{setCancelando(a);setCancelMotivo("");setCancelErr("");}}><Ban size={12}/></button>}
-                      {a.status==="ATIVO"&&!isAprovador&&!(pedidoPorAbatimento[a.id]&&pedidoPorAbatimento[a.id].status==="PENDENTE")&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} title="Solicitar cancelamento" onClick={()=>abrirSolicitar(a)}><Send size={12}/>Solicitar cancelamento</button>}
+                      {a.status==="ATIVO"&&!isAprovador&&!(pedidoPorAbatimento[a.id]&&pedidoPorAbatimento[a.id].status==="PENDENTE")&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} title="Solicitar cancelamento" aria-label="Solicitar cancelamento" onClick={()=>abrirSolicitar(a)}><Ban size={12}/></button>}
                     </div>
                   )}
                 </td>
