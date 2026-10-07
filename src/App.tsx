@@ -198,6 +198,12 @@ export default function App() {
   // como Financeiro (\b pra não pegar "Mariana" etc.). Ver
   // 20260914000000_supervisores_edicao_financeiro.sql pro espelho no banco.
   const isSupervisoresExtra = !!(isFin || (user && user.name && /\b(esmeralda|ana)\b/i.test(user.name)));
+  // Comercial NÃO acessa os dados internos de RH, Representantes e Supervisores: as três abas
+  // ficam escondidas e as listas nem são carregadas. A proteção real é o RLS
+  // (20261008000000_comercial_sem_dados_internos.sql), que devolve zero linhas pro Comercial.
+  const verRH = !isComercial && !!(verTudo || isRHTelaExtra);
+  const verRepresentantes = !isComercial && !!(isDemo || verTudo);
+  const verSupervisores = !isComercial && !!(verTudo || isSupervisoresExtra);
   // Incluir/editar supervisor segue a mesma regra: todo Financeiro pode,
   // além da mesma exceção nominal — desativar continua exclusivo de admin.
   const podeEditarSupervisores = !!(isFin || (user && user.name && /\b(esmeralda|ana)\b/i.test(user.name)));
@@ -310,6 +316,10 @@ export default function App() {
     // Mesma RPC que o módulo Supervisores usa (supervisores_lista) — não é
     // uma segunda fonte, é a leitura da mesma public.supervisores a partir
     // de Representantes, que precisa da lista pro dropdown/filtro/coluna.
+    // Representantes/Supervisores não são carregados pro Comercial (o RLS devolveria zero linhas;
+    // evita a consulta à toa). Recebe o perfil porque roda antes do estado "user" atualizar.
+    const podeLerCadastros = p => !(p && p.role==="func" && p.setor==="Comercial");
+
     async function carregarSupervisoresCadastro(){
       const { data, error } = await supabase.rpc("supervisores_lista");
       if(!ativo||error||!data) return;
@@ -372,8 +382,7 @@ export default function App() {
         carregarTarefas();
         carregarPendencias();
         carregarContratos();
-        carregarRepresentantes();
-        carregarSupervisoresCadastro();
+        if(podeLerCadastros(logado)){ carregarRepresentantes(); carregarSupervisoresCadastro(); }
         carregarAuditoria();
         carregarDemoResponsavelPermitido(logado);
         carregarDemoFuncionariosTeste(logado);
@@ -401,10 +410,11 @@ export default function App() {
           const perfil = logado||fallbackProfile(novaSessao.user);
           if(!logado) setUser(perfil);
           if(ehLoginNovo) setTab(perfil.role==="admin"?"painel":"tarefas");
+          if(ehLoginNovo&&podeLerCadastros(perfil)){ carregarRepresentantes(); carregarSupervisoresCadastro(); }
           carregarDemoResponsavelPermitido(perfil);
           carregarDemoFuncionariosTeste(perfil);
         });
-        if(ehLoginNovo){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarRepresentantes(); carregarSupervisoresCadastro(); carregarAuditoria(); }
+        if(ehLoginNovo){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarAuditoria(); }
       }
     });
 
@@ -1519,10 +1529,10 @@ export default function App() {
     {id:"abatimentos",label:"Controle de Abatimentos",Icon:Percent,show:isDemo||verTudo},
     {id:"aprovacoes",label:"Aprovações de Cancelamento",Icon:ClipboardCheck,show:isAprovadorCancelamento},
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
-    {id:"rh",label:"RH",Icon:Briefcase,show:verTudo||isRHTelaExtra},
+    {id:"rh",label:"RH",Icon:Briefcase,show:verRH},
     {id:"contratos",label:"Contratos",Icon:FileText,show:isDemo||verTudo},
-    {id:"representantes",label:"Representantes",Icon:Users,show:isDemo||verTudo},
-    {id:"supervisores",label:"Supervisores",Icon:UserCog,show:verTudo||isSupervisoresExtra},
+    {id:"representantes",label:"Representantes",Icon:Users,show:verRepresentantes},
+    {id:"supervisores",label:"Supervisores",Icon:UserCog,show:verSupervisores},
     {id:"calendario",label:"Calendário",Icon:Calendar,show:true},
     {id:"auditoria",label:"Auditoria",Icon:ClipboardList,show:isDemo||verTudo},
     {id:"config",label:"Configurações",Icon:Settings,show:!isDemo},
@@ -2047,7 +2057,7 @@ export default function App() {
           )}
 
           {/* REPRESENTANTES */}
-          {tab==="representantes"&&(isDemo||verTudo)&&(
+          {tab==="representantes"&&verRepresentantes&&(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
                 <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Representantes</div><div style={{fontSize:13,color:D.muted}}>{representantesVisiveis.length} de {representantes.length} representante(s)</div></div>
@@ -2128,12 +2138,12 @@ export default function App() {
           )}
 
           {/* SUPERVISORES */}
-          {tab==="supervisores"&&(verTudo||isSupervisoresExtra)&&(
-            <Supervisores D={D} st={st} isAdmin={isAdmin} isDemo={isDemo} podeEditar={isAdmin||podeEditarSupervisores||isRH||isComercial} addA={addA} addN={addN}/>
+          {tab==="supervisores"&&verSupervisores&&(
+            <Supervisores D={D} st={st} isAdmin={isAdmin} isDemo={isDemo} podeEditar={isAdmin||podeEditarSupervisores||isRH} addA={addA} addN={addN}/>
           )}
 
           {/* RH */}
-          {tab==="rh"&&(verTudo||isRHTelaExtra)&&(
+          {tab==="rh"&&verRH&&(
             <RH D={D} st={st} addA={addA} addN={addN} user={user} somenteLeitura={!(isAdmin||isRH||isRHTelaExtra)}/>
           )}
 
