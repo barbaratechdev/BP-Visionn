@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent, ClipboardCheck } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, SIDEBAR, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, mapDiretorioRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
+import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
 import { useDraggable } from "./lib/useDraggable";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
@@ -20,7 +20,6 @@ import AprovacoesCancelamento from "./components/AprovacoesCancelamento";
 import { APROVADOR_CANCELAMENTO_ID, useCancelamentoAvisos } from "./lib/cancelamentos";
 import MiniCalendario from "./components/MiniCalendario";
 import StatusDonutCard from "./components/StatusDonutCard";
-import GoogleIcon from "./components/GoogleIcon";
 
 export default function App() {
   const [dark, setDark] = useState(false);
@@ -76,7 +75,6 @@ export default function App() {
   const [novaSenha1, setNovaSenha1] = useState("");
   const [novaSenha2, setNovaSenha2] = useState("");
   const [recoveryLoading, setRecoveryLoading] = useState(false);
-  const [showGoogle, setShowGoogle] = useState(false);
   const [tab, setTab] = useState("painel");
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [contratos, setContratos] = useState<Contrato[]>([]);
@@ -237,14 +235,9 @@ export default function App() {
   useEffect(()=>{
     let ativo = true;
 
-    // Diretório público (nome/setor/avatar), visível mesmo sem login — alimenta
-    // o seletor de conta e o preview da tela de login. Só preenche se "users"
-    // ainda estiver vazio, pra nunca sobrescrever a lista completa já carregada.
-    async function carregarDiretorioPublico(){
-      const { data, error } = await supabase.rpc("profiles_publico");
-      if(!ativo||error||!data) return;
-      setUsers(prev=>prev.length?prev:data.map(mapDiretorioRow));
-    }
+    // A tela de login não consulta nenhum diretório de usuários: antes de
+    // autenticar, nenhum nome/e-mail de conta é lido do banco (profiles_publico
+    // deixou de ser chamada — o acesso anônimo a ela foi retirado).
 
     // Lista completa (todos os campos), exige usuário autenticado — é o que
     // alimenta Configurações > Equipe, os seletores de responsável etc.
@@ -335,8 +328,6 @@ export default function App() {
       if(!ativo||error||!data) return;
       setDemoFuncionariosTeste(data);
     }
-
-    carregarDiretorioPublico();
 
     supabase.auth.getSession().then(async ({data})=>{
       if(!ativo) return;
@@ -789,12 +780,6 @@ export default function App() {
     setRecoveryLoading(false);
     if(error){ setForgotErr("Não foi possível alterar a senha. Tente novamente."); return; }
     setPasswordRecovery(false); setNovaSenha1(""); setNovaSenha2("");
-  }
-
-  function preencherEmailGoogle(id){
-    const f=users.find(u=>u.id===id);
-    if(!f||!f.email) return;
-    setLoginEmail(f.email); setLoginErr(""); setLoginSenha(""); setShowGoogle(false);
   }
 
   async function salvarFoto(){
@@ -1573,13 +1558,6 @@ export default function App() {
             <Mail size={15} color={D.muted} style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
             <input type="email" placeholder="seu.email@bp-visionn.com" value={loginEmail} onChange={e=>{setLoginEmail(e.target.value);setLoginErr("");}} style={{...st.inp,paddingLeft:36}} autoFocus/>
           </div>
-          {users.filter(u=>u.email&&u.email.toLowerCase()===loginEmail.trim().toLowerCase()).map(u=>(
-            <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:dark?D.white:D.bg,borderRadius:10,marginBottom:16,border:"1px solid "+D.border}}>
-              <Av name={u.name} initials={u.initials} color={u.color} size={32}/>
-              <div><div style={{fontWeight:600,fontSize:13,color:D.text}}>{u.name}</div><div style={{fontSize:11,color:D.muted}}>{u.setor}</div></div>
-            </div>
-          ))}
-
           <label style={st.lbl}>Senha</label>
           <div style={{position:"relative",marginBottom:12}}>
             <input type={senhaVis?"text":"password"} placeholder="Digite sua senha" value={loginSenha} onChange={e=>{setLoginSenha(e.target.value);setLoginErr("");}} onKeyDown={e=>e.key==="Enter"&&doLogin()} style={{...st.inp,paddingRight:40}}/>
@@ -1597,17 +1575,6 @@ export default function App() {
           {loginErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{loginErr}</div>}
 
           <button style={{...st.btnBlue,width:"100%",justifyContent:"center",padding:"12px"}} onClick={doLogin} disabled={loginLoading}>{loginLoading?"Entrando...":<>Entrar <ArrowRight size={15}/></>}</button>
-
-          <div style={{display:"flex",alignItems:"center",gap:12,margin:"14px 0 10px"}}>
-            <div style={{flex:1,height:1,background:D.border}}/>
-            <span style={{fontSize:12,color:D.muted}}>ou</span>
-            <div style={{flex:1,height:1,background:D.border}}/>
-          </div>
-
-          <button onClick={()=>setShowGoogle(true)} style={{...st.btn,width:"100%",justifyContent:"center",padding:"11px",background:dark?D.bg:D.white}}>
-            <GoogleIcon size={16}/>
-            Entrar com Google
-          </button>
         </div>
       </div>
 
@@ -1640,28 +1607,6 @@ export default function App() {
         </div>
       )}
 
-      {showGoogle&&(
-        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={()=>setShowGoogle(false)}>
-          <div className="bv-modal-card" style={{background:"#fff",borderRadius:18,padding:"0",maxWidth:400,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
-            <div style={{padding:"28px 24px 16px",textAlign:"center"}}>
-              <GoogleIcon size={36} style={{margin:"0 auto 14px"}}/>
-              <div style={{fontWeight:600,fontSize:16,color:"#202124"}}>Escolha uma conta</div>
-              <div style={{fontSize:13,color:"#5f6368",marginTop:4}}>para continuar no BP-Visionn</div>
-            </div>
-            <div style={{borderTop:"1px solid #e8eaed"}}>
-              {users.map(u=>(
-                <div key={u.id} onClick={()=>preencherEmailGoogle(u.id)} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 24px",cursor:"pointer",transition:"background-color .12s ease"}} onMouseEnter={e=>e.currentTarget.style.background="#f8f9fa"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <Av name={u.name} initials={u.initials} color={u.color} size={36}/>
-                  <div><div style={{fontWeight:500,fontSize:14,color:"#202124"}}>{u.name}</div><div style={{fontSize:12,color:"#5f6368"}}>{u.setor}</div></div>
-                </div>
-              ))}
-            </div>
-            <div style={{padding:"14px 24px",borderTop:"1px solid #e8eaed"}}>
-              <button style={{width:"100%",padding:"9px",borderRadius:8,border:"1px solid #dadce0",background:"#fff",cursor:"pointer",fontSize:13,color:"#5f6368",fontWeight:500}} onClick={()=>setShowGoogle(false)}>Cancelar</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 

@@ -158,12 +158,6 @@ export function mapProfileRow(row): User {
   };
 }
 
-// Diretório público (função profiles_publico, sem exigir login) — só os campos
-// exibidos na tela de login (nome/setor/avatar). Usado antes de autenticar.
-export function mapDiretorioRow(row): User {
-  return { id:row.id, name:row.name, role:"func", setor:row.setor, initials:row.initials || getIn(row.name), color:row.color || "#2563EB", senha:"", email:row.email, status:"offline" };
-}
-
 // Fallback só usado se o profile ainda não existir (ex.: trigger não processou a tempo).
 export function fallbackProfile(authUser: { id:string; email?:string }): User {
   const nome = (authUser.email||"Usuário").split("@")[0];
