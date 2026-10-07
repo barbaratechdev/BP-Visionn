@@ -58,6 +58,8 @@ function statusCor(s,D){
 export default function Ferias(p) {
   const D = p.D, st = p.st, addA = p.addA, addN = p.addN, funcionarios = p.funcionarios || [];
   const funcionarioFixo = p.funcionarioFixo || null;
+  // Somente leitura (ex.: Financeiro/Comercial veem o RH mas não alteram). A proteção real é o RLS.
+  const somenteLeitura = !!p.somenteLeitura;
   const onRegistrarOcorrencia = p.onRegistrarOcorrencia;
   const [lista, setLista] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -79,11 +81,13 @@ export default function Ferias(p) {
   useEffect(()=>{ carregar(); },[]);
 
   function abrirNovo(funcionarioId?:string){
+    if(somenteLeitura) return;
     setForm({...FORM_VAZIO, funcionarioId: funcionarioId||(funcionarioFixo?funcionarioFixo.id:"")});
     setFormErr(""); setShowForm(true);
   }
 
   function abrirEditar(f){
+    if(somenteLeitura) return;
     setForm({id:f.id,funcionarioId:f.funcionarioId,periodoAquisitivoInicio:f.periodoAquisitivoInicio,periodoAquisitivoFim:f.periodoAquisitivoFim,dataInicio:f.dataInicio,dataFim:f.dataFim,status:f.status,observacoes:f.observacoes});
     setFormErr(""); setShowForm(true);
   }
@@ -91,6 +95,7 @@ export default function Ferias(p) {
   function fecharForm(){ setShowForm(false); setFormErr(""); }
 
   async function salvar(){
+    if(somenteLeitura) return;
     if(!form.funcionarioId){ setFormErr("Selecione o funcionário."); return; }
     if(!form.periodoAquisitivoInicio||!form.periodoAquisitivoFim){ setFormErr("Informe o período aquisitivo."); return; }
     if(form.periodoAquisitivoFim<form.periodoAquisitivoInicio){ setFormErr("O fim do período aquisitivo não pode ser antes do início."); return; }
@@ -136,6 +141,7 @@ export default function Ferias(p) {
   // então isso aqui só é permitido vindo de um registro que já tem os
   // outros campos preenchidos.
   async function mudarStatus(f,novoStatus){
+    if(somenteLeitura) return;
     if(novoStatus!=="Pendente"&&(!f.dataInicio||!f.dataFim)){
       abrirEditar({...f,status:novoStatus});
       return;
@@ -164,7 +170,7 @@ export default function Ferias(p) {
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
         <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>{funcionarioFixo?"Férias":"Controle de Férias"}</div><div style={{fontSize:13,color:D.muted}}>{visiveis.length} registro(s)</div></div>
-        <button style={st.btnBlue} onClick={()=>abrirNovo()}><Plus size={15}/>Nova Férias</button>
+        {!somenteLeitura&&<button style={st.btnBlue} onClick={()=>abrirNovo()}><Plus size={15}/>Nova Férias</button>}
       </div>
 
       <div className="bv-card" style={{...st.card,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
@@ -209,14 +215,14 @@ export default function Ferias(p) {
                 <td data-label="Término" style={{padding:"10px 8px",color:D.muted}}>{f.dataFim?fData(f.dataFim):"—"}</td>
                 <td data-label="Dias" style={{padding:"10px 8px",color:D.muted}}>{f.dias||"—"}</td>
                 <td data-label="Status" style={{padding:"10px 8px"}}>
-                  <select value={f.status} onChange={e=>mudarStatus(f,e.target.value)} style={{fontSize:11,fontWeight:600,background:sc.bg,color:sc.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
+                  <select value={f.status} disabled={somenteLeitura} onChange={e=>mudarStatus(f,e.target.value)} style={{fontSize:11,fontWeight:600,background:sc.bg,color:sc.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",outline:"none"}}>
                     {STATUS_OPCOES.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </td>
                 <td style={{padding:"10px 8px"}}>
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
                     {!funcionarioFixo&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Histórico do funcionário" onClick={()=>setHistoricoDe(f.funcionarioId)}><History size={12}/></button>}
-                    <button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Editar" onClick={()=>abrirEditar(f)}><Pencil size={12}/></button>
+                    {!somenteLeitura&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Editar" onClick={()=>abrirEditar(f)}><Pencil size={12}/></button>}
                   </div>
                 </td>
               </tr>

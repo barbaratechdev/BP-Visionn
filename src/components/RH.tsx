@@ -50,6 +50,8 @@ function mensagemErroSalvarFuncionario(error){
 export default function RH(p) {
   const D = p.D, st = p.st, addA = p.addA, addN = p.addN;
   const usuarioNome = nomeVisivel(p.user);
+  // Somente leitura (Financeiro/Comercial veem o RH mas não alteram). A proteção real é o RLS.
+  const somenteLeitura = !!p.somenteLeitura;
   const [aba, setAba] = useState("funcionarios");
   const [lista, setLista] = useState([]);
   const [feriasList, setFeriasList] = useState([]);
@@ -82,10 +84,12 @@ export default function RH(p) {
   useEffect(()=>{ carregar(); },[]);
 
   function abrirNovo(){
+    if(somenteLeitura) return;
     setForm(FORM_VAZIO); setFormErr(""); setShowForm(true); resetDrag();
   }
 
   function abrirEditar(f){
+    if(somenteLeitura) return;
     setForm({id:f.id,nome:f.nome,cargo:f.cargo,cpf:f.cpf,dataNascimento:f.dataNascimento,email:f.email,setor:f.setor,estadoFilial:f.estadoFilial,telefone:f.telefone,dataEntrada:f.dataEntrada,tipoVinculo:f.tipoVinculo,valeTransporte:f.valeTransporte,valeRefeicao:f.valeRefeicao,observacoes:f.observacoes,status:f.status,dataSaida:f.dataSaida});
     setFormErr(""); setShowForm(true); resetDrag();
   }
@@ -93,6 +97,7 @@ export default function RH(p) {
   function fecharForm(){ setShowForm(false); setFormErr(""); }
 
   async function salvar(){
+    if(somenteLeitura) return;
     if(!form.nome.trim()){ setFormErr("Informe o nome completo."); return; }
     if(form.status==="Inativo"&&!form.dataSaida){ setFormErr("Informe a data de saída."); return; }
     setSalvando(true); setFormErr("");
@@ -168,8 +173,9 @@ export default function RH(p) {
           funcionario={funcionarioAberto}
           D={D} st={st} addA={addA} addN={addN}
           usuarioNome={usuarioNome}
+          somenteLeitura={somenteLeitura}
           onVoltar={()=>setFuncionarioAbertoId(null)}
-          onEditar={()=>abrirEditar(funcionarioAberto)}
+          onEditar={somenteLeitura?undefined:()=>abrirEditar(funcionarioAberto)}
         />
       ) : (
       <>
@@ -180,7 +186,7 @@ export default function RH(p) {
       </div>
 
       {aba==="ferias"?(
-        <Ferias D={D} st={st} addA={addA} addN={addN} funcionarios={lista}/>
+        <Ferias D={D} st={st} addA={addA} addN={addN} funcionarios={lista} somenteLeitura={somenteLeitura}/>
       ):aba==="alertas"?(
         <RHAlertas D={D} st={st} funcionarios={lista} exames={examesList} ferias={feriasList} onVerGrupo={verGrupoDeAlerta}/>
       ):loading?(
@@ -189,7 +195,7 @@ export default function RH(p) {
       <>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
         <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>RH</div><div style={{fontSize:13,color:D.muted}}>{visiveis.length} funcionário(s)</div></div>
-        <button style={st.btnBlue} onClick={abrirNovo}><Plus size={15}/>Novo Funcionário</button>
+        {!somenteLeitura&&<button style={st.btnBlue} onClick={abrirNovo}><Plus size={15}/>Novo Funcionário</button>}
       </div>
 
       {filtroIds&&(
@@ -250,7 +256,7 @@ export default function RH(p) {
                 <td style={{padding:"10px 8px"}} onClick={e=>e.stopPropagation()}>
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
                     <button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Ver perfil completo" onClick={()=>setFuncionarioAbertoId(f.id)}><Eye size={12}/></button>
-                    <button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Editar" onClick={()=>abrirEditar(f)}><Pencil size={12}/></button>
+                    {!somenteLeitura&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Editar" onClick={()=>abrirEditar(f)}><Pencil size={12}/></button>}
                   </div>
                 </td>
               </tr>

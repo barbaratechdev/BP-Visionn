@@ -46,6 +46,8 @@ const TABS = [
 export default function FuncionarioPerfil(p) {
   const D = p.D, st = p.st, addA = p.addA, addN = p.addN, funcionario = p.funcionario;
   const onVoltar = p.onVoltar, onEditar = p.onEditar, usuarioNome = p.usuarioNome;
+  // Somente leitura (Financeiro/Comercial veem o RH mas não alteram). A proteção real é o RLS.
+  const somenteLeitura = !!p.somenteLeitura;
   const [aba, setAba] = useState("resumo");
   const [loading, setLoading] = useState(true);
   const [salarios, setSalarios] = useState([]);
@@ -81,6 +83,7 @@ export default function FuncionarioPerfil(p) {
   // automaticamente (depois de salvar salário/exame/documento/férias)
   // quanto manualmente (formulário da própria aba Histórico).
   async function registrarOcorrencia(tipo, descricao, opts?: {data?:string, observacoes?:string}){
+    if(somenteLeitura) return;
     const extra = opts||{};
     const payload = { funcionario_id:funcionario.id, tipo, descricao, data: extra.data||hoje, observacoes: extra.observacoes||null, criado_por_nome: usuarioNome||null };
     const { data, error } = await supabase.from("funcionario_ocorrencias").insert(payload).select().single();
@@ -106,6 +109,7 @@ export default function FuncionarioPerfil(p) {
   const [salSalvando, setSalSalvando] = useState(false);
 
   async function salvarSalario(){
+    if(somenteLeitura) return;
     const valorNum = parseMoedaInput(salForm.valor);
     if(valorNum==null||valorNum<0){ setSalErr("Informe um valor válido."); return; }
     setSalSalvando(true); setSalErr("");
@@ -128,10 +132,11 @@ export default function FuncionarioPerfil(p) {
   const [exErr, setExErr] = useState("");
   const [exSalvando, setExSalvando] = useState(false);
 
-  function abrirNovoExame(){ setExForm(EXAME_FORM_VAZIO); setExEditandoId(null); setExErr(""); setShowExameForm(true); }
-  function abrirEditarExame(e){ setExForm({ano:String(e.ano),dataExame:e.dataExame,dataProximoExame:e.dataProximoExame,status:e.status,observacoes:e.observacoes}); setExEditandoId(e.id); setExErr(""); setShowExameForm(true); }
+  function abrirNovoExame(){ if(somenteLeitura) return; setExForm(EXAME_FORM_VAZIO); setExEditandoId(null); setExErr(""); setShowExameForm(true); }
+  function abrirEditarExame(e){ if(somenteLeitura) return; setExForm({ano:String(e.ano),dataExame:e.dataExame,dataProximoExame:e.dataProximoExame,status:e.status,observacoes:e.observacoes}); setExEditandoId(e.id); setExErr(""); setShowExameForm(true); }
 
   async function salvarExame(){
+    if(somenteLeitura) return;
     const ano = Number(exForm.ano);
     if(!ano){ setExErr("Informe o ano do exame."); return; }
     setExSalvando(true); setExErr("");
@@ -156,9 +161,10 @@ export default function FuncionarioPerfil(p) {
   const [docErr, setDocErr] = useState("");
   const [docSalvando, setDocSalvando] = useState(false);
 
-  function abrirNovoDocumento(){ setDocForm(DOC_FORM_VAZIO); setDocErr(""); setShowDocForm(true); }
+  function abrirNovoDocumento(){ if(somenteLeitura) return; setDocForm(DOC_FORM_VAZIO); setDocErr(""); setShowDocForm(true); }
 
   async function salvarDocumento(){
+    if(somenteLeitura) return;
     if(!docForm.data){ setDocErr("Informe a data."); return; }
     setDocSalvando(true); setDocErr("");
     const payload = { funcionario_id:funcionario.id, tipo:docForm.tipo, data:docForm.data, descricao:docForm.descricao.trim()||null, observacoes:docForm.observacoes.trim()||null };
@@ -180,6 +186,7 @@ export default function FuncionarioPerfil(p) {
   const [ocoSalvando, setOcoSalvando] = useState(false);
 
   async function salvarOcorrenciaManual(){
+    if(somenteLeitura) return;
     if(!ocoForm.descricao.trim()){ setOcoErr("Descreva o que aconteceu."); return; }
     setOcoSalvando(true); setOcoErr("");
     await registrarOcorrencia(ocoForm.tipo, ocoForm.descricao.trim(), {data:ocoForm.data||hoje, observacoes:ocoForm.observacoes.trim()||null});
@@ -204,7 +211,7 @@ export default function FuncionarioPerfil(p) {
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           <span style={{fontSize:11,fontWeight:600,background:funcionario.status==="Ativo"?D.greenSoft:D.redSoft,color:funcionario.status==="Ativo"?D.greenText:D.redText,borderRadius:20,padding:"4px 12px"}}>{funcionario.status}</span>
-          <button style={st.btn} onClick={onEditar}><Pencil size={13}/>Editar dados</button>
+          {onEditar&&<button style={st.btn} onClick={onEditar}><Pencil size={13}/>Editar dados</button>}
         </div>
       </div>
 
@@ -317,6 +324,7 @@ export default function FuncionarioPerfil(p) {
       {/* SALÁRIO */}
       {aba==="salario"&&(
         <div>
+          {!somenteLeitura&&(
           <div className="bv-card" style={st.card}>
             <div style={{fontSize:11,fontWeight:600,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10}}>Registrar novo valor</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12}}>
@@ -327,6 +335,7 @@ export default function FuncionarioPerfil(p) {
             {salErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginTop:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{salErr}</div>}
             <button style={{...st.btnBlue,marginTop:12}} onClick={salvarSalario} disabled={salSalvando}>{salSalvando?"Salvando...":<><Save size={14}/>Registrar salário</>}</button>
           </div>
+          )}
 
           <div className="bv-card" style={st.card}>
             <div style={{fontSize:11,fontWeight:600,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10}}>Histórico salarial</div>
@@ -349,7 +358,7 @@ export default function FuncionarioPerfil(p) {
 
       {/* FÉRIAS — reaproveita o componente já existente, travado neste funcionário */}
       {aba==="ferias"&&(
-        <Ferias D={D} st={st} addA={addA} addN={addN} funcionarios={[funcionario]} funcionarioFixo={funcionario} onRegistrarOcorrencia={registrarOcorrencia}/>
+        <Ferias D={D} st={st} addA={addA} addN={addN} funcionarios={[funcionario]} funcionarioFixo={funcionario} onRegistrarOcorrencia={registrarOcorrencia} somenteLeitura={somenteLeitura}/>
       )}
 
       {/* EXAMES */}
@@ -357,7 +366,7 @@ export default function FuncionarioPerfil(p) {
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
             <div style={{fontSize:14,fontWeight:600,color:D.text}}>Exames periódicos</div>
-            <button style={st.btnBlue} onClick={abrirNovoExame}><Plus size={15}/>Novo registro</button>
+            {!somenteLeitura&&<button style={st.btnBlue} onClick={abrirNovoExame}><Plus size={15}/>Novo registro</button>}
           </div>
           <div className="bv-card" style={st.card}>
             {exames.length===0?<div style={{textAlign:"center",padding:"1.5rem",color:D.muted}}>Nenhum exame registrado.</div>:(
@@ -374,7 +383,7 @@ export default function FuncionarioPerfil(p) {
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <span style={{fontSize:11,fontWeight:600,background:sc.bg,color:sc.c,borderRadius:20,padding:"3px 10px"}}>{sit}</span>
-                        <button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarExame(e)}><Pencil size={12}/></button>
+                        {!somenteLeitura&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarExame(e)}><Pencil size={12}/></button>}
                       </div>
                     </div>
                   );
@@ -390,7 +399,7 @@ export default function FuncionarioPerfil(p) {
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
             <div style={{fontSize:14,fontWeight:600,color:D.text}}>Documentos / Evidências</div>
-            <button style={st.btnBlue} onClick={abrirNovoDocumento}><Plus size={15}/>Novo registro</button>
+            {!somenteLeitura&&<button style={st.btnBlue} onClick={abrirNovoDocumento}><Plus size={15}/>Novo registro</button>}
           </div>
           <div className="bv-card" style={st.card}>
             {documentos.length===0?<div style={{textAlign:"center",padding:"1.5rem",color:D.muted}}>Nenhum documento registrado.</div>:(
@@ -416,7 +425,7 @@ export default function FuncionarioPerfil(p) {
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
             <div style={{fontSize:14,fontWeight:600,color:D.text}}>Linha do tempo</div>
-            <button style={st.btnBlue} onClick={()=>{setOcoForm(OCO_FORM_VAZIO);setOcoErr("");setShowOcoForm(true);}}><Plus size={15}/>Novo registro</button>
+            {!somenteLeitura&&<button style={st.btnBlue} onClick={()=>{setOcoForm(OCO_FORM_VAZIO);setOcoErr("");setShowOcoForm(true);}}><Plus size={15}/>Novo registro</button>}
           </div>
           <div className="bv-card" style={st.card}>
             {ocorrencias.length===0?<div style={{textAlign:"center",padding:"1.5rem",color:D.muted}}>Nenhuma ocorrência registrada.</div>:(
@@ -450,7 +459,7 @@ export default function FuncionarioPerfil(p) {
           ):(
             <div style={{fontSize:13,color:D.muted}}>Nenhuma observação registrada.</div>
           )}
-          <button style={{...st.btn,marginTop:16}} onClick={onEditar}><Pencil size={13}/>Editar observações</button>
+          {onEditar&&<button style={{...st.btn,marginTop:16}} onClick={onEditar}><Pencil size={13}/>Editar observações</button>}
         </div>
       )}
 

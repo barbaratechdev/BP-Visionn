@@ -165,13 +165,16 @@ export default function App() {
   const isFin   = user && (user.setor==="Financeiro" || user.id==="95dd833e-db0e-4e65-b7fe-1188ed8ee5a3"); // Ariana (Financeiro - MA): exceção por id, espelha is_financeiro()
   const isRH    = user && user.setor==="RH";
   const isDemo  = user && user.role==="demo";
-  // Comercial: setor "Comercial" + role func — espelha is_comercial() no banco (sem nome
-  // nem id fixo; o setor só muda pela admin). Só LEITURA em Prorrogação/Avarias/Abatimentos:
-  // o banco já nega qualquer escrita; aqui só se evita mostrar botões que falhariam.
-  // Obs.: Avarias/Abatimentos recebem este flag na prop "isDemo" (nome histórico — nesses
-  // componentes ela só controla "podeEditar").
+  // Comercial: setor "Comercial" + role func — espelha is_comercial() no banco (sem nome nem id
+  // fixo; o setor só muda pela admin).
   const isComercial = !!(user && user.role==="func" && user.setor==="Comercial");
-  const somenteLeitura = !!isDemo || isComercial;
+  // Quem OPERA Prorrogação/Avarias/Abatimentos: admin, Financeiro e Comercial (espelha as policies de
+  // escrita). Os demais que veem essas abas (RH, demo) ficam somente leitura — a proteção real é o RLS;
+  // aqui só se evita mostrar botões que falhariam.
+  // Obs.: Avarias/Abatimentos recebem este flag na prop "isDemo" (nome histórico — lá ela só controla "podeEditar").
+  const somenteLeitura = !(isAdmin || isFin || isComercial);
+  // Contratos: só admin e Financeiro escrevem (os demais veem, somente leitura).
+  const podeContratos = !!(isAdmin || isFin);
   // Aprovações de Cancelamento (Abatimentos): só a Barbára, por id — a trava
   // real está no banco (20261002000010 + 20261002000020). Também alimenta o contador de
   // pendentes e as notificações de solicitação/decisão.
@@ -185,6 +188,10 @@ export default function App() {
   // Representantes/Supervisores (que hoje acompanham isRH).
   const ID_RH_TELA_EXTRA = "273eca2f-509e-424a-a12e-bcf3ce7c7a7e";
   const isRHTelaExtra = !!(user && user.id===ID_RH_TELA_EXTRA);
+  // Regra geral: Bárbara, Financeiro, RH e Comercial VEEM todas as abas (leitura por setor — espelha
+  // pode_ver_modulos() no banco). Ver a aba NÃO dá permissão de escrever: cada módulo tem seus próprios
+  // flags de escrita e o RLS é a proteção real.
+  const verTudo = !!(isAdmin || isFin || isRH || isComercial);
   // Aba Supervisores: liberada por perfil pra todo o setor Financeiro
   // (isFin — mesma regra usada em Representantes/Contratos/Auditoria), mais
   // uma exceção nominal pra Esmeralda e Ana caso não estejam cadastradas
@@ -204,11 +211,10 @@ export default function App() {
   // RLS (tarefa_visivel_para_demo) já garante isso na consulta em si, este
   // filtro aqui é defesa em profundidade do lado do cliente, não a proteção
   // principal.
-  // Dashboard do Comercial: só as tarefas atribuídas a ele (nada de equipe, boletos nem log geral).
-  const tarefasPainel = isComercial ? tarefas.filter(t=>t.responsavel===(user&&user.id)) : tarefas;
-  // O atalho "Ver pendências" do gráfico de status leva à aba Pendências, que o Comercial não tem:
-  // para ele o destino vira Tarefas (evita cair numa tela vazia).
-  const setTabVisivel = (t)=>setTab(isComercial&&t==="pendencias"?"tarefas":t);
+  // Dashboard pessoal (Kayane, Jefferson): só as tarefas atribuídas à própria pessoa (nada de equipe,
+  // boletos nem log geral). Bárbara e Financeiro mantêm a visão de equipe; a demo segue o seu fluxo.
+  const dashPessoal = !isDemo && !isAdmin && !isFin;
+  const tarefasPainel = dashPessoal ? tarefas.filter(t=>t.responsavel===(user&&user.id)) : tarefas;
   const tVis = (isAdmin ? tarefas : isDemo ? tarefas.filter(t=>t.responsavel===demoResponsavelId) : tarefas.filter(t=>t.responsavel===(user&&user.id)))
     .filter(t=>(fStatus==="todos"||t.status===fStatus)&&(!fResponsavel||t.responsavel===fResponsavel)&&(!search||t.fornecedor.toLowerCase().includes(search.toLowerCase())));
   const pends    = tarefas.filter(t=>t.status==="pendente"||t.status==="vencido");
@@ -516,7 +522,7 @@ export default function App() {
                     {pr.situacao==="Recusado"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>· {fData(pr.dataAprovacao)}</div>}
                   </td>
                   <td style={{padding:"10px 8px",display:"flex",gap:4}}>
-                    {(isAdmin||isFin)&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
+                    {(isAdmin||isFin||isComercial)&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
                     {(isAdmin||isFin)&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}
                   </td>
                 </tr>
@@ -1055,7 +1061,7 @@ export default function App() {
   }
 
   async function addContrato(){
-    if(bloqueadoDemo()) return;
+    if(bloqueadoDemo()||!podeContratos) return;
     const representanteId = newC.representanteId;
     const porcentagem = (newC.porcentagem || "").toString().trim();
     const porcentagemNum = Number(porcentagem);
@@ -1153,6 +1159,7 @@ export default function App() {
 
   async function excluirNF(id){
     if(bloqueadoDemo()||bloqueadoSomenteLeitura()) return;
+    if(!(isAdmin||isFin)) return;   // excluir boleto segue só Financeiro/admin (o RLS também barra)
     const { error } = await supabase.from("pendencias").delete().eq("id", id);
     if(error) return;
     setProrrogacoes(prev=>prev.filter(x=>x.id!==id));
@@ -1358,7 +1365,7 @@ export default function App() {
 
   // Salva a última versão do texto do contrato (histórico de revisão) no banco.
   async function salvarDocumento(id,texto){
-    if(bloqueadoDemo()) return;
+    if(bloqueadoDemo()||!podeContratos) return;
     const { error } = await supabase.from("contratos").update({ documento_texto: texto }).eq("id", id);
     if(error) return;
     setContratos(prev=>prev.map(x=>x.id===id?{...x,documentoTexto:texto}:x));
@@ -1504,20 +1511,20 @@ export default function App() {
   }
 
   const NAV=[
-    {id:"painel",label:"Dashboard",Icon:LayoutDashboard,show:isAdmin||isDemo||isComercial},
+    {id:"painel",label:"Dashboard",Icon:LayoutDashboard,show:isDemo||verTudo},
     {id:"tarefas",label:"Tarefas",Icon:Receipt,show:true},
-    {id:"pendencias",label:"Pendências",Icon:Clock,show:!isComercial},
-    {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:isAdmin||isFin||isDemo||isComercial},
-    {id:"avarias",label:"Controle de Avarias",Icon:ShieldAlert,show:isAdmin||isFin||isDemo||isComercial},
-    {id:"abatimentos",label:"Controle de Abatimentos",Icon:Percent,show:isAdmin||isFin||isDemo||isComercial},
+    {id:"pendencias",label:"Pendências",Icon:Clock,show:true},
+    {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:isDemo||verTudo},
+    {id:"avarias",label:"Controle de Avarias",Icon:ShieldAlert,show:isDemo||verTudo},
+    {id:"abatimentos",label:"Controle de Abatimentos",Icon:Percent,show:isDemo||verTudo},
     {id:"aprovacoes",label:"Aprovações de Cancelamento",Icon:ClipboardCheck,show:isAprovadorCancelamento},
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
-    {id:"rh",label:"RH",Icon:Briefcase,show:isAdmin||isRH||isRHTelaExtra},
-    {id:"contratos",label:"Contratos",Icon:FileText,show:isAdmin||isFin||isDemo},
-    {id:"representantes",label:"Representantes",Icon:Users,show:isAdmin||isFin||isRH||isDemo},
-    {id:"supervisores",label:"Supervisores",Icon:UserCog,show:isAdmin||isSupervisoresExtra||isRH},
+    {id:"rh",label:"RH",Icon:Briefcase,show:verTudo||isRHTelaExtra},
+    {id:"contratos",label:"Contratos",Icon:FileText,show:isDemo||verTudo},
+    {id:"representantes",label:"Representantes",Icon:Users,show:isDemo||verTudo},
+    {id:"supervisores",label:"Supervisores",Icon:UserCog,show:verTudo||isSupervisoresExtra},
     {id:"calendario",label:"Calendário",Icon:Calendar,show:true},
-    {id:"auditoria",label:"Auditoria",Icon:ClipboardList,show:isAdmin||isDemo||isFin},
+    {id:"auditoria",label:"Auditoria",Icon:ClipboardList,show:isDemo||verTudo},
     {id:"config",label:"Configurações",Icon:Settings,show:!isDemo},
   ].filter(n=>n.show);
 
@@ -1741,7 +1748,7 @@ export default function App() {
         <div style={{flex:1,padding:"1.9rem 2.2rem",overflowY:"auto",background:D.bg}}>
 
           {/* DASHBOARD */}
-          {tab==="painel"&&(isAdmin||isDemo||isComercial)&&(
+          {tab==="painel"&&(isDemo||verTudo)&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:22,fontWeight:800,color:D.text,letterSpacing:"-0.3px"}}>Dashboard</div><div style={{fontSize:13,color:D.muted,marginTop:2}}>Bem-vinda, {nomeVisivel(user).split(" ")[0]} ao BP-Visionn</div></div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:20}}>
@@ -1756,7 +1763,7 @@ export default function App() {
               </div>
               <div className="bv-dash-grid">
               <div>
-              {!isComercial&&(
+              {!dashPessoal&&(
               <div className="bv-card" style={{...st.card,marginBottom:20}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
                   <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -1800,7 +1807,7 @@ export default function App() {
                 <div style={{fontSize:11,color:D.muted,marginTop:4,paddingTop:12,borderTop:"1px solid "+D.border}}>Dados atualizados em tempo real</div>
               </div>
               )}
-              {renderProrrogacoesCard(4)}
+              {(!dashPessoal||isComercial)&&renderProrrogacoesCard(4)}
               <div className="bv-card" style={st.card}>
                 <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Tarefas recentes</div>
                 <div style={{overflowX:"auto"}}>
@@ -1814,7 +1821,10 @@ export default function App() {
                         <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{fData(t.vencimento)}</td>
                         <td data-label="Responsável" style={{padding:"10px 8px"}}>{fn&&<div style={{display:"flex",alignItems:"center",gap:6}}><Av name={fn.name} initials={fn.initials} color={fn.color} size={22}/><span style={{color:D.muted}}>{fn.name}</span></div>}</td>
                         <td data-label="Status" style={{padding:"10px 8px"}}><Badge status={t.status}/></td>
-                        <td style={{padding:"10px 8px"}}>{!isDemo&&t.status!=="pago"&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>setConfirm(t.id)}><CheckCircle size={12}/>Concluir</button>}</td>
+                        <td style={{padding:"10px 8px"}}>
+                          {(isAdmin||(isFin&&t.responsavel===user.id))&&t.status!=="pago"&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>setConfirm(t.id)}><CheckCircle size={12}/>Concluir</button>}
+                          {(isAdmin||(isFin&&t.responsavel===user.id))&&t.status==="pago"&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"55"}} onClick={()=>reabrir(t.id)}><AlertCircle size={12}/>Reabrir</button>}
+                        </td>
                       </tr>
                     );
                   })}</tbody>
@@ -1825,9 +1835,9 @@ export default function App() {
 
               <div>
                 <MiniCalendario D={D} st={st} tarefas={tarefasPainel} setTab={setTab}/>
-                <StatusDonutCard D={D} st={st} tarefas={tarefasPainel} setTab={setTabVisivel}/>
+                <StatusDonutCard D={D} st={st} tarefas={tarefasPainel} setTab={setTab}/>
 
-                {!isComercial&&(
+                {!dashPessoal&&(
                 <div className="bv-card" style={st.card}>
                   <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Atividades recentes</div>
                   {auditLog.length===0?(
@@ -1882,13 +1892,13 @@ export default function App() {
                       </div>
                       <div>
                         <MiniCalendario D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab}/>
-                        <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTabVisivel} title="Minhas tarefas por status"/>
+                        <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab} title="Minhas tarefas por status"/>
                       </div>
                     </div>
                   ):(
                     <div className="bv-dash-grid">
                       <MiniCalendario D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab}/>
-                      <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTabVisivel} title="Minhas tarefas por status"/>
+                      <StatusDonutCard D={D} st={st} tarefas={tarefas.filter(t=>t.responsavel===user.id)} setTab={setTab} title="Minhas tarefas por status"/>
                     </div>
                   )}
                 </div>
@@ -1901,7 +1911,7 @@ export default function App() {
           )}
 
           {/* PRORROGAÇÃO DE BOLETOS */}
-          {tab==="prorrogacao"&&(isAdmin||isFin||isDemo||isComercial)&&(
+          {tab==="prorrogacao"&&(isDemo||verTudo)&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Prorrogação de Boletos</div><div style={{fontSize:13,color:D.muted}}>{prorrogacoes.length} NF(s) cadastrada(s)</div></div>
               {renderProrrogacoesCard()}
@@ -1909,7 +1919,7 @@ export default function App() {
           )}
 
           {/* PENDÊNCIAS */}
-          {tab==="pendencias"&&!isComercial&&(
+          {tab==="pendencias"&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Pendências</div><div style={{fontSize:13,color:D.muted}}>{pendsVis.length} em aberto</div></div>
               {pendsVis.length===0&&<div style={{textAlign:"center",padding:"3rem"}}><CheckCircle size={40} color={D.green} style={{display:"block",margin:"0 auto 10px"}}/><div style={{color:D.muted}}>Nenhuma pendência!</div></div>}
@@ -1928,11 +1938,11 @@ export default function App() {
           )}
 
           {/* CONTRATOS */}
-          {tab==="contratos"&&(isAdmin||isFin||isDemo)&&(
+          {tab==="contratos"&&(isDemo||verTudo)&&(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
                 <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Contratos</div><div style={{fontSize:13,color:D.muted}}>{contratos.length} representante(s)</div></div>
-                {!isDemo&&<button style={st.btnBlue} onClick={()=>setShowCForm(p=>!p)}><Plus size={15}/>Novo contrato</button>}
+                {podeContratos&&<button style={st.btnBlue} onClick={()=>setShowCForm(p=>!p)}><Plus size={15}/>Novo contrato</button>}
               </div>
               <div style={{display:"flex",gap:4,marginBottom:20,background:D.bg,borderRadius:10,padding:4,width:"fit-content"}}>
                 {[{id:"lista",label:"📋 Lista"},{id:"modelos",label:"📄 Modelos"}].map(a=>(
@@ -1989,7 +1999,7 @@ export default function App() {
                     <div className="bv-card" key={key} style={st.card}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                         <div style={{fontWeight:600,fontSize:15,color:D.text}}>{TIPO_MOD[key].emoji} {TIPO_MOD[key].label}</div>
-                        {!isDemo&&(editMod===key?(
+                        {podeContratos&&(editMod===key?(
                           <div style={{display:"flex",gap:8}}>
                             <button style={st.btnBlue} onClick={()=>{setModelos(p=>({...p,[key]:modEdit}));setEditMod(null);addA("Edição de informações","Modelo",TIPO_MOD[key].label+" editado");}}><Save size={13}/>Salvar</button>
                             <button style={st.btn} onClick={()=>setEditMod(null)}>Cancelar</button>
@@ -2023,7 +2033,7 @@ export default function App() {
                       <>
                         <pre style={{fontSize:13,color:D.text,background:D.bg,borderRadius:10,padding:"1.25rem",lineHeight:1.8,whiteSpace:"pre-wrap",margin:"0 0 16px",fontFamily:"'Times New Roman',serif"}}>{docEdit||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato)}</pre>
                         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                          {!isDemo&&<button style={st.btn} onClick={()=>{setDocEdit(docEdit||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato));setEditDoc(true);}}><Edit3 size={14}/>Editar</button>}
+                          {podeContratos&&<button style={st.btn} onClick={()=>{setDocEdit(docEdit||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato));setEditDoc(true);}}><Edit3 size={14}/>Editar</button>}
                           <button style={st.btnBlue} onClick={()=>window.print()}><Printer size={14}/>Imprimir</button>
                           <button style={{...st.btnBlue,background:D.green}} onClick={()=>{if(docEdit) salvarDocumento(showContrato.id,docEdit); exportPDF(showContrato,docEdit||undefined);}}><Save size={14}/>Exportar PDF</button>
                           <button style={st.btn} onClick={()=>{setShowContrato(null);setEditDoc(false);setDocEdit("");}}>Fechar</button>
@@ -2037,7 +2047,7 @@ export default function App() {
           )}
 
           {/* REPRESENTANTES */}
-          {tab==="representantes"&&(isAdmin||isFin||isRH||isDemo)&&(
+          {tab==="representantes"&&(isDemo||verTudo)&&(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
                 <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Representantes</div><div style={{fontSize:13,color:D.muted}}>{representantesVisiveis.length} de {representantes.length} representante(s)</div></div>
@@ -2118,21 +2128,21 @@ export default function App() {
           )}
 
           {/* SUPERVISORES */}
-          {tab==="supervisores"&&(isAdmin||isSupervisoresExtra||isRH)&&(
-            <Supervisores D={D} st={st} isAdmin={isAdmin} isDemo={isDemo} podeEditar={isAdmin||podeEditarSupervisores||isRH} addA={addA} addN={addN}/>
+          {tab==="supervisores"&&(verTudo||isSupervisoresExtra)&&(
+            <Supervisores D={D} st={st} isAdmin={isAdmin} isDemo={isDemo} podeEditar={isAdmin||podeEditarSupervisores||isRH||isComercial} addA={addA} addN={addN}/>
           )}
 
           {/* RH */}
-          {tab==="rh"&&(isAdmin||isRH||isRHTelaExtra)&&(
-            <RH D={D} st={st} addA={addA} addN={addN} user={user}/>
+          {tab==="rh"&&(verTudo||isRHTelaExtra)&&(
+            <RH D={D} st={st} addA={addA} addN={addN} user={user} somenteLeitura={!(isAdmin||isRH||isRHTelaExtra)}/>
           )}
 
           {/* CONTROLE DE AVARIAS */}
-          {tab==="avarias"&&(isAdmin||isFin||isDemo||isComercial)&&(
+          {tab==="avarias"&&(isDemo||verTudo)&&(
             <Avarias D={D} st={st} addA={addA} addN={addN} user={user} isDemo={somenteLeitura}/>
           )}
 
-          {tab==="abatimentos"&&(isAdmin||isFin||isDemo||isComercial)&&(
+          {tab==="abatimentos"&&(isDemo||verTudo)&&(
             <Abatimentos D={D} st={st} addA={addA} addN={addN} user={user} isDemo={somenteLeitura} onCancelamentoMudou={refreshCancelPendentes}/>
           )}
           {tab==="aprovacoes"&&isAprovadorCancelamento&&(
@@ -2141,7 +2151,7 @@ export default function App() {
 
           {/* CALENDÁRIO */}
           {tab==="calendario"&&(
-            <Calendario D={D} st={st} tarefas={tarefas} prorrogacoes={isComercial?[]:prorrogacoes} eventos={eventos} setEventos={setEventos} users={users}/>
+            <Calendario D={D} st={st} tarefas={tarefas} prorrogacoes={(isAdmin||isFin)?prorrogacoes:[]} eventos={eventos} setEventos={setEventos} users={users}/>
           )}
 
           {/* MENSAGENS */}
@@ -2150,7 +2160,7 @@ export default function App() {
           )}
 
           {/* AUDITORIA */}
-          {tab==="auditoria"&&(isAdmin||isDemo||isFin)&&(
+          {tab==="auditoria"&&(isDemo||verTudo)&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Auditoria</div><div style={{fontSize:13,color:D.muted}}>Log de alterações</div></div>
               <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
