@@ -204,6 +204,10 @@ export default function App() {
   const verRH = !isComercial && !!(verTudo || isRHTelaExtra);
   const verRepresentantes = !isComercial && !!(isDemo || verTudo);
   const verSupervisores = !isComercial && !!(verTudo || isSupervisoresExtra);
+  // Módulos operacionais (Prorrogação de Boletos, Avarias, Abatimentos e Contratos): só quem os opera
+  // — admin, Financeiro e Comercial — além da Demonstração. O RH não vê essas abas nem carrega os
+  // dados; a proteção real é o RLS (20261008000100_rh_sem_modulos_operacionais.sql).
+  const verOperacao = !!(isDemo || isAdmin || isFin || isComercial);
   // Incluir/editar supervisor segue a mesma regra: todo Financeiro pode,
   // além da mesma exceção nominal — desativar continua exclusivo de admin.
   const podeEditarSupervisores = !!(isFin || (user && user.name && /\b(esmeralda|ana)\b/i.test(user.name)));
@@ -319,6 +323,9 @@ export default function App() {
     // Representantes/Supervisores não são carregados pro Comercial (o RLS devolveria zero linhas;
     // evita a consulta à toa). Recebe o perfil porque roda antes do estado "user" atualizar.
     const podeLerCadastros = p => !(p && p.role==="func" && p.setor==="Comercial");
+    // Prorrogação (tabela pendencias) e Contratos não são carregados pro RH que não é admin/
+    // Financeiro/Comercial/demo — espelha verOperacao. Tarefas (aba Pendências) carregam pra todos.
+    const podeLerOperacao = p => !(p && p.role==="func" && p.setor==="RH");
 
     async function carregarSupervisoresCadastro(){
       const { data, error } = await supabase.rpc("supervisores_lista");
@@ -380,8 +387,7 @@ export default function App() {
         setUser(logado);
         setTab(logado.role==="admin"?"painel":"tarefas");
         carregarTarefas();
-        carregarPendencias();
-        carregarContratos();
+        if(podeLerOperacao(logado)){ carregarPendencias(); carregarContratos(); }
         if(podeLerCadastros(logado)){ carregarRepresentantes(); carregarSupervisoresCadastro(); }
         carregarAuditoria();
         carregarDemoResponsavelPermitido(logado);
@@ -410,11 +416,12 @@ export default function App() {
           const perfil = logado||fallbackProfile(novaSessao.user);
           if(!logado) setUser(perfil);
           if(ehLoginNovo) setTab(perfil.role==="admin"?"painel":"tarefas");
+          if(ehLoginNovo&&podeLerOperacao(perfil)){ carregarPendencias(); carregarContratos(); }
           if(ehLoginNovo&&podeLerCadastros(perfil)){ carregarRepresentantes(); carregarSupervisoresCadastro(); }
           carregarDemoResponsavelPermitido(perfil);
           carregarDemoFuncionariosTeste(perfil);
         });
-        if(ehLoginNovo){ carregarTarefas(); carregarPendencias(); carregarContratos(); carregarAuditoria(); }
+        if(ehLoginNovo){ carregarTarefas(); carregarAuditoria(); }
       }
     });
 
@@ -1524,13 +1531,13 @@ export default function App() {
     {id:"painel",label:"Dashboard",Icon:LayoutDashboard,show:isDemo||verTudo},
     {id:"tarefas",label:"Tarefas",Icon:Receipt,show:true},
     {id:"pendencias",label:"Pendências",Icon:Clock,show:true},
-    {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:isDemo||verTudo},
-    {id:"avarias",label:"Controle de Avarias",Icon:ShieldAlert,show:isDemo||verTudo},
-    {id:"abatimentos",label:"Controle de Abatimentos",Icon:Percent,show:isDemo||verTudo},
+    {id:"prorrogacao",label:"Prorrogação de Boletos",Icon:CalendarClock,show:verOperacao},
+    {id:"avarias",label:"Controle de Avarias",Icon:ShieldAlert,show:verOperacao},
+    {id:"abatimentos",label:"Controle de Abatimentos",Icon:Percent,show:verOperacao},
     {id:"aprovacoes",label:"Aprovações de Cancelamento",Icon:ClipboardCheck,show:isAprovadorCancelamento},
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
     {id:"rh",label:"RH",Icon:Briefcase,show:verRH},
-    {id:"contratos",label:"Contratos",Icon:FileText,show:isDemo||verTudo},
+    {id:"contratos",label:"Contratos",Icon:FileText,show:verOperacao},
     {id:"representantes",label:"Representantes",Icon:Users,show:verRepresentantes},
     {id:"supervisores",label:"Supervisores",Icon:UserCog,show:verSupervisores},
     {id:"calendario",label:"Calendário",Icon:Calendar,show:true},
@@ -1921,7 +1928,7 @@ export default function App() {
           )}
 
           {/* PRORROGAÇÃO DE BOLETOS */}
-          {tab==="prorrogacao"&&(isDemo||verTudo)&&(
+          {tab==="prorrogacao"&&verOperacao&&(
             <div>
               <div style={{marginBottom:20}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Prorrogação de Boletos</div><div style={{fontSize:13,color:D.muted}}>{prorrogacoes.length} NF(s) cadastrada(s)</div></div>
               {renderProrrogacoesCard()}
@@ -1948,7 +1955,7 @@ export default function App() {
           )}
 
           {/* CONTRATOS */}
-          {tab==="contratos"&&(isDemo||verTudo)&&(
+          {tab==="contratos"&&verOperacao&&(
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
                 <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Contratos</div><div style={{fontSize:13,color:D.muted}}>{contratos.length} representante(s)</div></div>
@@ -2148,11 +2155,11 @@ export default function App() {
           )}
 
           {/* CONTROLE DE AVARIAS */}
-          {tab==="avarias"&&(isDemo||verTudo)&&(
+          {tab==="avarias"&&verOperacao&&(
             <Avarias D={D} st={st} addA={addA} addN={addN} user={user} isDemo={somenteLeitura}/>
           )}
 
-          {tab==="abatimentos"&&(isDemo||verTudo)&&(
+          {tab==="abatimentos"&&verOperacao&&(
             <Abatimentos D={D} st={st} addA={addA} addN={addN} user={user} isDemo={somenteLeitura} onCancelamentoMudou={refreshCancelPendentes}/>
           )}
           {tab==="aprovacoes"&&isAprovadorCancelamento&&(
