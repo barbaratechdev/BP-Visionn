@@ -94,7 +94,9 @@ export default function RH(p) {
     setFormErr(""); setShowForm(true); resetDrag();
   }
 
-  function fecharForm(){ setShowForm(false); setFormErr(""); }
+  function fecharForm(){ setShowForm(false); setForm(FORM_VAZIO); setFormErr(""); }
+  // Cancelar: só fecha e limpa (nada é gravado). Travado durante o salvamento — a gravação já foi enviada.
+  function cancelarForm(){ if(salvando) return; fecharForm(); }
 
   async function salvar(){
     if(somenteLeitura) return;
@@ -330,7 +332,7 @@ export default function RH(p) {
             {formErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginTop:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{formErr}</div>}
 
             <div style={{display:"flex",gap:10,marginTop:18}}>
-              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharForm}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:salvando?"not-allowed":"pointer",opacity:salvando?0.55:1,fontSize:14,color:D.text,fontWeight:500}} onClick={cancelarForm} disabled={salvando}>Cancelar</button>
               <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={salvar} disabled={salvando}>{salvando?"Salvando...":<><Save size={14}/>Salvar</>}</button>
             </div>
           </div>

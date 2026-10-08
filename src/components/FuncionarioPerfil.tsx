@@ -125,6 +125,10 @@ export default function FuncionarioPerfil(p) {
     setSalForm({dataAlteracao:hoje,valor:"",motivo:""});
   }
 
+  // Cancelar: descarta o que foi digitado (volta ao formulário inicial). Não grava nada.
+  const salPreenchido = !!(salForm.valor || salForm.motivo || salForm.dataAlteracao!==hoje);
+  function cancelarSalario(){ if(salSalvando) return; setSalForm({dataAlteracao:hoje,valor:"",motivo:""}); setSalErr(""); }
+
   // --- Exames ------------------------------------------------------------
   const [showExameForm, setShowExameForm] = useState(false);
   const [exForm, setExForm] = useState(EXAME_FORM_VAZIO);
@@ -133,6 +137,8 @@ export default function FuncionarioPerfil(p) {
   const [exSalvando, setExSalvando] = useState(false);
 
   function abrirNovoExame(){ if(somenteLeitura) return; setExForm(EXAME_FORM_VAZIO); setExEditandoId(null); setExErr(""); setShowExameForm(true); }
+  // Cancelar dos formulários em janela: fecha e limpa (nada é gravado); travado durante o salvamento.
+  function cancelarExame(){ if(exSalvando) return; setShowExameForm(false); setExForm(EXAME_FORM_VAZIO); setExEditandoId(null); setExErr(""); }
   function abrirEditarExame(e){ if(somenteLeitura) return; setExForm({ano:String(e.ano),dataExame:e.dataExame,dataProximoExame:e.dataProximoExame,status:e.status,observacoes:e.observacoes}); setExEditandoId(e.id); setExErr(""); setShowExameForm(true); }
 
   async function salvarExame(){
@@ -162,6 +168,7 @@ export default function FuncionarioPerfil(p) {
   const [docSalvando, setDocSalvando] = useState(false);
 
   function abrirNovoDocumento(){ if(somenteLeitura) return; setDocForm(DOC_FORM_VAZIO); setDocErr(""); setShowDocForm(true); }
+  function cancelarDocumento(){ if(docSalvando) return; setShowDocForm(false); setDocForm(DOC_FORM_VAZIO); setDocErr(""); }
 
   async function salvarDocumento(){
     if(somenteLeitura) return;
@@ -184,6 +191,8 @@ export default function FuncionarioPerfil(p) {
   const [ocoForm, setOcoForm] = useState(OCO_FORM_VAZIO);
   const [ocoErr, setOcoErr] = useState("");
   const [ocoSalvando, setOcoSalvando] = useState(false);
+
+  function cancelarOcorrencia(){ if(ocoSalvando) return; setShowOcoForm(false); setOcoForm(OCO_FORM_VAZIO); setOcoErr(""); }
 
   async function salvarOcorrenciaManual(){
     if(somenteLeitura) return;
@@ -333,7 +342,10 @@ export default function FuncionarioPerfil(p) {
               <div style={{gridColumn:"1/-1"}}><label style={rLbl}>Motivo/observação (opcional)</label><input style={rInp} placeholder="Ex.: reajuste anual, promoção..." value={salForm.motivo} onChange={e=>setSalForm(f=>({...f,motivo:e.target.value}))}/></div>
             </div>
             {salErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginTop:12,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{salErr}</div>}
-            <button style={{...st.btnBlue,marginTop:12}} onClick={salvarSalario} disabled={salSalvando}>{salSalvando?"Salvando...":<><Save size={14}/>Registrar salário</>}</button>
+            <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
+              <button style={st.btnBlue} onClick={salvarSalario} disabled={salSalvando}>{salSalvando?"Salvando...":<><Save size={14}/>Registrar salário</>}</button>
+              {salPreenchido&&<button style={{...st.btn,cursor:salSalvando?"not-allowed":"pointer",opacity:salSalvando?0.55:1}} onClick={cancelarSalario} disabled={salSalvando}>Cancelar</button>}
+            </div>
           </div>
           )}
 
@@ -486,7 +498,7 @@ export default function FuncionarioPerfil(p) {
             </div>
             {exErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginTop:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{exErr}</div>}
             <div style={{display:"flex",gap:10,marginTop:18}}>
-              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setShowExameForm(false)}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:exSalvando?"not-allowed":"pointer",opacity:exSalvando?0.55:1,fontSize:14,color:D.text,fontWeight:500}} onClick={cancelarExame} disabled={exSalvando}>Cancelar</button>
               <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={salvarExame} disabled={exSalvando}>{exSalvando?"Salvando...":<><Save size={14}/>Salvar</>}</button>
             </div>
           </div>
@@ -511,7 +523,7 @@ export default function FuncionarioPerfil(p) {
             </div>
             {docErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginTop:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{docErr}</div>}
             <div style={{display:"flex",gap:10,marginTop:18}}>
-              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setShowDocForm(false)}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:docSalvando?"not-allowed":"pointer",opacity:docSalvando?0.55:1,fontSize:14,color:D.text,fontWeight:500}} onClick={cancelarDocumento} disabled={docSalvando}>Cancelar</button>
               <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={salvarDocumento} disabled={docSalvando}>{docSalvando?"Salvando...":<><Save size={14}/>Salvar</>}</button>
             </div>
           </div>
@@ -536,7 +548,7 @@ export default function FuncionarioPerfil(p) {
             </div>
             {ocoErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginTop:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{ocoErr}</div>}
             <div style={{display:"flex",gap:10,marginTop:18}}>
-              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={()=>setShowOcoForm(false)}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:ocoSalvando?"not-allowed":"pointer",opacity:ocoSalvando?0.55:1,fontSize:14,color:D.text,fontWeight:500}} onClick={cancelarOcorrencia} disabled={ocoSalvando}>Cancelar</button>
               <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={salvarOcorrenciaManual} disabled={ocoSalvando}>{ocoSalvando?"Salvando...":<><Save size={14}/>Salvar</>}</button>
             </div>
           </div>

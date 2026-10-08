@@ -92,7 +92,9 @@ export default function Ferias(p) {
     setFormErr(""); setShowForm(true);
   }
 
-  function fecharForm(){ setShowForm(false); setFormErr(""); }
+  function fecharForm(){ setShowForm(false); setForm(FORM_VAZIO); setFormErr(""); }
+  // Cancelar (botão ou clique fora): só fecha e limpa (nada é gravado). Travado durante o salvamento.
+  function cancelarForm(){ if(salvando) return; fecharForm(); }
 
   async function salvar(){
     if(somenteLeitura) return;
@@ -235,7 +237,7 @@ export default function Ferias(p) {
 
       {/* MODAL: cadastro / edição */}
       {showForm&&(
-        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={fecharForm}>
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}} onClick={cancelarForm}>
           <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:560,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
             <div style={{width:48,height:48,borderRadius:12,background:D.purpleSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><CalendarClock size={22} color={D.purple}/></div>
             <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:4}}>{form.id?"Editar Férias":"Nova Férias"}</div>
@@ -269,7 +271,7 @@ export default function Ferias(p) {
             {formErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginTop:14,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{formErr}</div>}
 
             <div style={{display:"flex",gap:10,marginTop:18}}>
-              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:14,color:D.text,fontWeight:500}} onClick={fecharForm}>Cancelar</button>
+              <button style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:salvando?"not-allowed":"pointer",opacity:salvando?0.55:1,fontSize:14,color:D.text,fontWeight:500}} onClick={cancelarForm} disabled={salvando}>Cancelar</button>
               <button style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:D.blue,cursor:"pointer",fontSize:14,color:"#fff",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={salvar} disabled={salvando}>{salvando?"Salvando...":<><Save size={14}/>Salvar</>}</button>
             </div>
           </div>
