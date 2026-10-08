@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, User, DollarSign, CalendarClock, Stethoscope, FileText, History, StickyNote, Pencil, Plus, Save, AlertCircle, AlertTriangle } from "lucide-react";
+import { ArrowLeft, User, DollarSign, Stethoscope, FileText, History, Pencil, Plus, Save, AlertCircle, AlertTriangle } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { fData, fBRL, fTempoDeEmpresa, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, mapSalarioRow, mapExameRow, mapDocumentoRow, mapOcorrenciaRow, mapFeriasRow, situacaoExame } from "../lib/helpers";
 import { hoje } from "../constants";
@@ -25,12 +25,9 @@ function corSituacaoExame(s,D){
 const TABS = [
   {id:"resumo",label:"Resumo",Icon:User},
   {id:"dados",label:"Dados",Icon:User},
-  {id:"salario",label:"Salário",Icon:DollarSign},
-  {id:"ferias",label:"Férias",Icon:CalendarClock},
+  {id:"remuneracao",label:"Remuneração e Férias",Icon:DollarSign},
   {id:"exames",label:"Exames",Icon:Stethoscope},
-  {id:"documentos",label:"Documentos",Icon:FileText},
   {id:"historico",label:"Histórico",Icon:History},
-  {id:"observacoes",label:"Observações",Icon:StickyNote},
 ];
 
 // Perfil completo do funcionário — substitui o antigo modal de "detalhes"
@@ -304,35 +301,56 @@ export default function FuncionarioPerfil(p) {
       {aba==="dados"&&(
         <div className="bv-card" style={st.card}>
           <div style={{fontSize:11,fontWeight:600,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10}}>Dados cadastrais</div>
-          <div style={{background:D.bg,borderRadius:10,padding:"4px 14px"}}>
+          {/* Mesmos campos de sempre, agrupados; no máximo 2 colunas quando cabe, 1 em tela estreita. */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,max(300px,calc(50% - 8px))),1fr))",gap:16,alignItems:"start"}}>
             {[
-              {label:"Nome completo", value:funcionario.nome},
-              {label:"CPF", value:funcionario.cpf||"—"},
-              {label:"Data de nascimento", value:funcionario.dataNascimento?fData(funcionario.dataNascimento):"—"},
-              {label:"Telefone", value:funcionario.telefone||"—"},
-              {label:"E-mail", value:funcionario.email||"—"},
-              {label:"Cargo", value:funcionario.cargo||"—"},
-              {label:"Setor", value:funcionario.setor||"—"},
-              {label:"Estado/Filial", value:funcionario.estadoFilial||"—"},
-              {label:"Data de admissão", value:funcionario.dataEntrada?fData(funcionario.dataEntrada):"—"},
-              {label:"Tipo de vínculo", value:funcionario.tipoVinculo},
-              {label:"Vale-Transporte", value:funcionario.valeTransporte?"Sim":"Não"},
-              {label:"Vale-Refeição", value:funcionario.valeRefeicao?"Sim":"Não"},
-              {label:"Status", value:funcionario.status},
-              {label:"Data de saída", value:funcionario.dataSaida?fData(funcionario.dataSaida):"—"},
-            ].map((r,i)=>(
-              <div key={r.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderTop:i>0?"1px solid "+D.border:"none",gap:10}}>
-                <span style={{fontSize:12.5,color:D.muted}}>{r.label}</span>
-                <span style={{fontSize:13,color:D.text,fontWeight:600,textAlign:"right"}}>{r.value}</span>
+              {titulo:"Dados pessoais", campos:[
+                {label:"Nome completo", value:funcionario.nome},
+                {label:"CPF", value:funcionario.cpf||"—"},
+                {label:"Data de nascimento", value:funcionario.dataNascimento?fData(funcionario.dataNascimento):"—"},
+              ]},
+              {titulo:"Contato", campos:[
+                {label:"Telefone", value:funcionario.telefone||"—"},
+                {label:"E-mail", value:funcionario.email||"—"},
+              ]},
+              {titulo:"Dados profissionais", campos:[
+                {label:"Cargo", value:funcionario.cargo||"—"},
+                {label:"Setor", value:funcionario.setor||"—"},
+                {label:"Estado/Filial", value:funcionario.estadoFilial||"—"},
+                {label:"Data de admissão", value:funcionario.dataEntrada?fData(funcionario.dataEntrada):"—"},
+                {label:"Tipo de vínculo", value:funcionario.tipoVinculo},
+              ]},
+              {titulo:"Benefícios", campos:[
+                {label:"Vale-Transporte", value:funcionario.valeTransporte?"Sim":"Não"},
+                {label:"Vale-Refeição", value:funcionario.valeRefeicao?"Sim":"Não"},
+              ]},
+              {titulo:"Situação funcional", campos:[
+                {label:"Status", value:funcionario.status},
+                {label:"Data de saída", value:funcionario.dataSaida?fData(funcionario.dataSaida):"—"},
+              ]},
+            ].map(g=>(
+              <div key={g.titulo}>
+                <div style={{fontSize:11,fontWeight:700,color:D.text,textTransform:"uppercase",letterSpacing:0.4,marginBottom:6,paddingLeft:2}}>{g.titulo}</div>
+                <div style={{background:D.bg,borderRadius:10,padding:"4px 14px"}}>
+                  {g.campos.map((r,i)=>(
+                    <div key={r.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderTop:i>0?"1px solid "+D.border:"none",gap:10}}>
+                      <span style={{fontSize:12.5,color:D.muted,flexShrink:0}}>{r.label}</span>
+                      <span style={{fontSize:13,color:D.text,fontWeight:600,textAlign:"right",minWidth:0,overflowWrap:"anywhere"}}>{r.value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* SALÁRIO */}
-      {aba==="salario"&&(
+      {/* REMUNERAÇÃO E FÉRIAS — as antigas abas Salário e Férias, na mesma página, sem mudar nada do conteúdo */}
+      {aba==="remuneracao"&&(
         <div>
+          <div style={{marginBottom:14}}><div style={{fontSize:20,fontWeight:700,color:D.text}}>Remuneração</div><div style={{fontSize:13,color:D.muted}}>{salarios.length} lançamento(s)</div></div>
+          {/* Registro + histórico lado a lado quando cabe; empilham em tela estreita */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,340px),1fr))",gap:14,alignItems:"start"}}>
           {!somenteLeitura&&(
           <div className="bv-card" style={st.card}>
             <div style={{fontSize:11,fontWeight:600,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10}}>Registrar novo valor</div>
@@ -365,12 +383,13 @@ export default function FuncionarioPerfil(p) {
               </div>
             )}
           </div>
-        </div>
-      )}
+          </div>
 
-      {/* FÉRIAS — reaproveita o componente já existente, travado neste funcionário */}
-      {aba==="ferias"&&(
-        <Ferias D={D} st={st} addA={addA} addN={addN} funcionarios={[funcionario]} funcionarioFixo={funcionario} onRegistrarOcorrencia={registrarOcorrencia} somenteLeitura={somenteLeitura}/>
+          {/* FÉRIAS — reaproveita o componente já existente (com o próprio título, filtro e "Nova férias"), travado neste funcionário */}
+          <div style={{borderTop:"1px solid "+D.border,marginTop:12,paddingTop:22}}>
+            <Ferias D={D} st={st} addA={addA} addN={addN} funcionarios={[funcionario]} funcionarioFixo={funcionario} onRegistrarOcorrencia={registrarOcorrencia} somenteLeitura={somenteLeitura}/>
+          </div>
+        </div>
       )}
 
       {/* EXAMES */}
@@ -406,38 +425,16 @@ export default function FuncionarioPerfil(p) {
         </div>
       )}
 
-      {/* DOCUMENTOS */}
-      {aba==="documentos"&&(
-        <div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <div style={{fontSize:14,fontWeight:600,color:D.text}}>Documentos / Evidências</div>
-            {!somenteLeitura&&<button style={st.btnBlue} onClick={abrirNovoDocumento}><Plus size={15}/>Novo registro</button>}
-          </div>
-          <div className="bv-card" style={st.card}>
-            {documentos.length===0?<div style={{textAlign:"center",padding:"1.5rem",color:D.muted}}>Nenhum documento registrado.</div>:(
-              <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                {documentos.map((d,i)=>(
-                  <div key={d.id} style={{padding:"10px 0",borderTop:i>0?"1px solid "+D.border:"none"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",gap:10}}>
-                      <span style={{fontSize:13,color:D.text,fontWeight:600}}>{d.tipo}</span>
-                      <span style={{fontSize:12,color:D.muted}}>{fData(d.data)}</span>
-                    </div>
-                    {d.descricao&&<div style={{fontSize:12.5,color:D.muted,marginTop:3}}>{d.descricao}</div>}
-                    {d.observacoes&&<div style={{fontSize:12,color:D.muted,marginTop:2,fontStyle:"italic"}}>{d.observacoes}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* HISTÓRICO */}
       {aba==="historico"&&(
         <div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
             <div style={{fontSize:14,fontWeight:600,color:D.text}}>Linha do tempo</div>
-            {!somenteLeitura&&<button style={st.btnBlue} onClick={()=>{setOcoForm(OCO_FORM_VAZIO);setOcoErr("");setShowOcoForm(true);}}><Plus size={15}/>Novo registro</button>}
+            {!somenteLeitura&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {/* Documentos não têm mais aba própria: o cadastro (mesmo modal/salvarDocumento de antes) entra por aqui */}
+              <button style={st.btn} onClick={abrirNovoDocumento}><FileText size={14}/>Novo documento</button>
+              <button style={st.btnBlue} onClick={()=>{setOcoForm(OCO_FORM_VAZIO);setOcoErr("");setShowOcoForm(true);}}><Plus size={15}/>Novo registro</button>
+            </div>}
           </div>
           <div className="bv-card" style={st.card}>
             {ocorrencias.length===0?<div style={{textAlign:"center",padding:"1.5rem",color:D.muted}}>Nenhuma ocorrência registrada.</div>:(
@@ -459,19 +456,6 @@ export default function FuncionarioPerfil(p) {
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* OBSERVAÇÕES */}
-      {aba==="observacoes"&&(
-        <div className="bv-card" style={st.card}>
-          <div style={{fontSize:11,fontWeight:600,color:D.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10}}>Observações gerais</div>
-          {funcionario.observacoes?(
-            <div style={{fontSize:13.5,color:D.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{funcionario.observacoes}</div>
-          ):(
-            <div style={{fontSize:13,color:D.muted}}>Nenhuma observação registrada.</div>
-          )}
-          {onEditar&&<button style={{...st.btn,marginTop:16}} onClick={onEditar}><Pencil size={13}/>Editar observações</button>}
         </div>
       )}
 
