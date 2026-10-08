@@ -2068,7 +2068,7 @@ export default function App() {
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
                 <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Representantes</div><div style={{fontSize:13,color:D.muted}}>{representantesVisiveis.length} de {representantes.length} representante(s)</div></div>
-                {!isDemo&&<button style={st.btnBlue} onClick={abrirNovoRep}><Plus size={15}/>Novo representante</button>}
+                {(isAdmin||isFin)&&<button style={st.btnBlue} onClick={abrirNovoRep}><Plus size={15}/>Novo representante</button>}
               </div>
 
               <div className="bv-card" style={{...st.card,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
@@ -2130,7 +2130,7 @@ export default function App() {
                           <td data-label="Saída" style={{padding:"10px 8px",color:D.muted}}>{r.dataSaida||"—"}</td>
                           <td style={{padding:"10px 8px"}}>
                             <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
-                              {!isDemo&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarRep(r)}><Pencil size={12}/>Editar</button>}
+                              {(isAdmin||isFin)&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} onClick={()=>abrirEditarRep(r)}><Pencil size={12}/>Editar</button>}
                               {isAdmin&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} title="Excluir" onClick={()=>setConfirmDelRep({id:r.id,nome:r.nome})}><Trash2 size={12}/></button>}
                             </div>
                           </td>
@@ -2146,7 +2146,7 @@ export default function App() {
 
           {/* SUPERVISORES */}
           {tab==="supervisores"&&verSupervisores&&(
-            <Supervisores D={D} st={st} isAdmin={isAdmin} isDemo={isDemo} podeEditar={isAdmin||podeEditarSupervisores||isRH} addA={addA} addN={addN}/>
+            <Supervisores D={D} st={st} isAdmin={isAdmin} isDemo={isDemo} podeEditar={isAdmin||podeEditarSupervisores} addA={addA} addN={addN}/>
           )}
 
           {/* RH */}
