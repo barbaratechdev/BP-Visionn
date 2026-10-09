@@ -107,6 +107,8 @@ export default function App() {
   // Filtro por Estado da página Prorrogação de Boletos (só visualização — não altera registros).
   const [filtroEstadoPr, setFiltroEstadoPr] = useState("todos");
   const [buscaPr, setBuscaPr] = useState("");   // busca própria (fornecedor ou nº da NF) — não é a busca geral do topo
+  // Filtro por Situação: chaves só da tela; "pendente" = ehAguardando ("Aguardando retorno" + legado "Em negociação").
+  const [filtroSituacaoPr, setFiltroSituacaoPr] = useState("todas");
   const [showContrato, setShowContrato] = useState<Contrato | null>(null);
   const [editDoc, setEditDoc] = useState(false);
   const [docEdit, setDocEdit] = useState("");
@@ -482,9 +484,13 @@ export default function App() {
     // Filtro por Estado + busca (fornecedor ou nº da NF, trecho, sem diferenciar maiúsculas):
     // só na página própria (sem "limite"); o Estado compara o campo estado do registro.
     const termoPr = buscaPr.trim().toLowerCase();
-    const filtrando = !limite && (filtroEstadoPr!=="todos" || !!termoPr);
+    const filtrando = !limite && (filtroEstadoPr!=="todos" || filtroSituacaoPr!=="todas" || !!termoPr);
     const doEstado = !limite && filtroEstadoPr!=="todos" ? ordenadas.filter(pr=>pr.estado===filtroEstadoPr) : ordenadas;
-    const lista = limite ? ordenadas.slice(0,limite) : termoPr ? doEstado.filter(pr=>(pr.fornecedor||"").toLowerCase().includes(termoPr)||(pr.nf||"").toLowerCase().includes(termoPr)) : doEstado;
+    // Situação: compara o valor salvo (pendencias.situacao), sem alterá-lo.
+    const naSituacao = pr => filtroSituacaoPr==="pendente" ? ehAguardando(pr.situacao) : filtroSituacaoPr==="aprovado" ? pr.situacao==="Prorrogação Aprovada" : filtroSituacaoPr==="recusado" ? pr.situacao==="Recusado" : true;
+    const doSituacao = !limite && filtroSituacaoPr!=="todas" ? doEstado.filter(naSituacao) : doEstado;
+    const rotuloSituacaoPr = ({pendente:"Pendente",aprovado:"Aprovado",recusado:"Recusado"})[filtroSituacaoPr];
+    const lista = limite ? ordenadas.slice(0,limite) : termoPr ? doSituacao.filter(pr=>(pr.fornecedor||"").toLowerCase().includes(termoPr)||(pr.nf||"").toLowerCase().includes(termoPr)) : doSituacao;
     return (
       <div className="bv-card" style={{...st.card,marginBottom:20}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -525,6 +531,11 @@ export default function App() {
                 <option value="todos">Todos</option><option value="Pará">Pará</option><option value="Maranhão">Maranhão</option><option value="Piauí">Piauí</option>
               </select>
             </div>
+            <div style={{minWidth:160}}><label style={st.lbl}>Situação</label>
+              <select style={st.inp} value={filtroSituacaoPr} onChange={e=>setFiltroSituacaoPr(e.target.value)}>
+                <option value="todas">Todas</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="recusado">Recusado</option>
+              </select>
+            </div>
             <div style={{flex:1,minWidth:200,maxWidth:420}}><label style={st.lbl}>Buscar</label>
               <div style={{position:"relative"}}>
                 <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
@@ -534,7 +545,7 @@ export default function App() {
             {filtrando&&<div style={{fontSize:12,color:D.muted,paddingBottom:10}}>{lista.length} de {prorrogacoes.length} NF(s)</div>}
           </div>
         )}
-        {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:lista.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>{doEstado.length===0?<>Nenhum registro encontrado para {filtroEstadoPr}.</>:<>Nenhuma NF encontrada para "{buscaPr.trim()}"{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>}</div>:(
+        {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:lista.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>{doEstado.length===0?<>Nenhum registro encontrado para {filtroEstadoPr}.</>:doSituacao.length===0?<>Nenhuma NF com situação {rotuloSituacaoPr}{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>:<>Nenhuma NF encontrada para "{buscaPr.trim()}"{rotuloSituacaoPr?<> com situação {rotuloSituacaoPr}</>:null}{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>}</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Data de Inclusão","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
