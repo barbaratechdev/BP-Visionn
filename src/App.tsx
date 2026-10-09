@@ -104,6 +104,9 @@ export default function App() {
   const [showCForm, setShowCForm] = useState(false);
   const [showProrr, setShowProrr] = useState<string | null>(null);
   const [showProrrForm, setShowProrrForm] = useState(false);
+  // Filtro por Estado da página Prorrogação de Boletos (só visualização — não altera registros).
+  const [filtroEstadoPr, setFiltroEstadoPr] = useState("todos");
+  const [buscaPr, setBuscaPr] = useState("");   // busca própria (fornecedor ou nº da NF) — não é a busca geral do topo
   const [showContrato, setShowContrato] = useState<Contrato | null>(null);
   const [editDoc, setEditDoc] = useState(false);
   const [docEdit, setDocEdit] = useState("");
@@ -476,7 +479,12 @@ export default function App() {
       }
       return 0;
     });
-    const lista = limite ? ordenadas.slice(0,limite) : ordenadas;
+    // Filtro por Estado + busca (fornecedor ou nº da NF, trecho, sem diferenciar maiúsculas):
+    // só na página própria (sem "limite"); o Estado compara o campo estado do registro.
+    const termoPr = buscaPr.trim().toLowerCase();
+    const filtrando = !limite && (filtroEstadoPr!=="todos" || !!termoPr);
+    const doEstado = !limite && filtroEstadoPr!=="todos" ? ordenadas.filter(pr=>pr.estado===filtroEstadoPr) : ordenadas;
+    const lista = limite ? ordenadas.slice(0,limite) : termoPr ? doEstado.filter(pr=>(pr.fornecedor||"").toLowerCase().includes(termoPr)||(pr.nf||"").toLowerCase().includes(termoPr)) : doEstado;
     return (
       <div className="bv-card" style={{...st.card,marginBottom:20}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -510,7 +518,23 @@ export default function App() {
             </div>
           </div>
         )}
-        {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:(
+        {!limite&&prorrogacoes.length>0&&(
+          <div style={{display:"flex",alignItems:"flex-end",gap:10,flexWrap:"wrap",marginBottom:14}}>
+            <div style={{minWidth:180}}><label style={st.lbl}>Estado</label>
+              <select style={st.inp} value={filtroEstadoPr} onChange={e=>setFiltroEstadoPr(e.target.value)}>
+                <option value="todos">Todos</option><option value="Pará">Pará</option><option value="Maranhão">Maranhão</option><option value="Piauí">Piauí</option>
+              </select>
+            </div>
+            <div style={{flex:1,minWidth:200,maxWidth:420}}><label style={st.lbl}>Buscar</label>
+              <div style={{position:"relative"}}>
+                <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
+                <input placeholder="Fornecedor ou nº da NF" value={buscaPr} onChange={e=>setBuscaPr(e.target.value)} style={{...st.inp,paddingLeft:32}}/>
+              </div>
+            </div>
+            {filtrando&&<div style={{fontSize:12,color:D.muted,paddingBottom:10}}>{lista.length} de {prorrogacoes.length} NF(s)</div>}
+          </div>
+        )}
+        {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:lista.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>{doEstado.length===0?<>Nenhum registro encontrado para {filtroEstadoPr}.</>:<>Nenhuma NF encontrada para "{buscaPr.trim()}"{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>}</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Data de Inclusão","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
