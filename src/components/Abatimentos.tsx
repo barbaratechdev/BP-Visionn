@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Plus, Search, Printer, AlertCircle, Ban, Pencil, Send } from "lucide-react";
+import { Plus, Search, Printer, AlertCircle, Ban, Pencil, Send, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { fBRL, fData, fDataHoraBR, parseMoedaInput, fMoedaInput, mapAbatimentoRow, nomeVisivel } from "../lib/helpers";
 import { APROVADOR_CANCELAMENTO_ID, mapSolicitacaoRow, mensagemErroCancelamento } from "../lib/cancelamentos";
-import { TIPOS_ABATIMENTO, SITUACOES_ABATIMENTO, situacaoLabel, parsePercentual, fPercentual, fPercentualInput, filtrarAbatimentos, calcularResumo, ehIncompatibilidadeDeBanco } from "../lib/abatimentos";
+import { TIPOS_ABATIMENTO, SITUACOES_ABATIMENTO, situacaoLabel, filtrarAbatimentos, calcularResumo, ehIncompatibilidadeDeBanco } from "../lib/abatimentos";
 import { hoje, ESTADOS_FILIAL } from "../constants";
 import { useDraggable } from "../lib/useDraggable";
 import CampoValor from "./CampoValor";
@@ -12,14 +12,14 @@ import CampoValor from "./CampoValor";
 // vira REALIZADO quando o desconto é efetivamente aplicado no boleto.
 // tipoLegado: registro antigo sem classificação — pode ser editado sem
 // escolher o tipo (novos registros sempre exigem).
-const FORM_VAZIO = {id:null,laboratorio:"",filial:"",tipo:"",nfd:"",nf:"",percentual:"",valorAbatimento:"",valorPago:"",data:hoje,situacao:"PENDENTE",tipoLegado:false};
+const FORM_VAZIO = {id:null,laboratorio:"",filial:"",tipo:"",nfd:"",nf:"",valorAbatimento:"",valorPago:"",data:hoje,situacao:"PENDENTE",tipoLegado:false};
 
 function mensagemErroSalvar(error){
   console.error("Erro ao salvar abatimento:", error);
   if(!error) return "Não foi possível salvar. Verifique os dados e tente novamente.";
   if(error.code==="42501") return "Você não tem permissão para registrar abatimentos. Fale com a administração do sistema.";
   if(error.code==="23502") return "Preencha todos os campos obrigatórios antes de salvar.";
-  if(error.code==="23514") return "Um dos valores informados não é válido — confira filial, tipo, percentual e valores.";
+  if(error.code==="23514") return "Um dos valores informados não é válido — confira filial, tipo e valores.";
   if(ehIncompatibilidadeDeBanco(error)) return "O banco de dados ainda não foi atualizado para os novos campos do abatimento. Fale com a administração do sistema.";
   return "Não foi possível salvar"+(error.code?" (código "+error.code+")":"")+". Se o problema continuar, informe esse código ao suporte.";
 }
@@ -28,7 +28,8 @@ function mensagemErroSalvar(error){
 // boletos, pro Financeiro ter uma consulta centralizada. Auto-contido
 // (busca os próprios dados via useEffect), mesmo padrão de Avarias.tsx —
 // não entra no mega-fetch central de App.tsx. Sem exclusão física: corrigir
-// é cancelar (status), mesmo conceito de avarias. Independente de
+// é cancelar (status), mesmo conceito de avarias. Cancelado pode ser excluído
+// (lógico, só a aprovadora) — ver 20261013000000_abatimentos_exclusao_logica.sql. Independente de
 // Avarias/NFD por decisão explícita — sem vínculo entre os dois módulos.
 export default function Abatimentos(p) {
   const D = p.D, st = p.st, addA = p.addA, addN = p.addN, user = p.user;
@@ -70,6 +71,10 @@ export default function Abatimentos(p) {
   const [solMotivo, setSolMotivo] = useState("");
   const [solErr, setSolErr] = useState("");
   const [solSalvando, setSolSalvando] = useState(false);
+  // Barbára: exclusão (lógica) de abatimento já CANCELADO.
+  const [excluindo, setExcluindo] = useState(null);
+  const [exclErr, setExclErr] = useState("");
+  const [exclSalvando, setExclSalvando] = useState(false);
 
   // silencioso: recarga disparada por Realtime não pisca "Carregando..." na lista.
   async function carregar(silencioso=false){
@@ -106,7 +111,7 @@ export default function Abatimentos(p) {
   function abrirNovo(){ setForm(FORM_VAZIO); setFormErr(""); setShowForm(true); resetDrag(); }
 
   function abrirEditar(a){
-    setForm({id:a.id,laboratorio:a.laboratorio,filial:a.filial,tipo:a.tipoAbatimento,nfd:a.nfd,nf:a.nf,percentual:fPercentualInput(a.percentual),valorAbatimento:fMoedaInput(a.valorAbatimento),valorPago:fMoedaInput(a.valorPago),data:a.data,situacao:a.situacao,tipoLegado:!a.tipoAbatimento});
+    setForm({id:a.id,laboratorio:a.laboratorio,filial:a.filial,tipo:a.tipoAbatimento,nfd:a.nfd,nf:a.nf,valorAbatimento:fMoedaInput(a.valorAbatimento),valorPago:fMoedaInput(a.valorPago),data:a.data,situacao:a.situacao,tipoLegado:!a.tipoAbatimento});
     setFormErr(""); setShowForm(true); resetDrag();
   }
 
@@ -119,8 +124,6 @@ export default function Abatimentos(p) {
     if(!form.filial){ setFormErr("Selecione a filial."); return; }
     if(!form.tipo && !form.tipoLegado){ setFormErr("Selecione o tipo de abatimento."); return; }
     if(!form.nf.trim()){ setFormErr("Informe o número do boleto."); return; }
-    const percentual = parsePercentual(form.percentual);
-    if(percentual===undefined){ setFormErr("Informe um percentual válido entre 0 e 100 (ou deixe em branco)."); return; }
     const valorAbatimento = parseMoedaInput(form.valorAbatimento);
     if(valorAbatimento==null||valorAbatimento<0){ setFormErr("Informe um valor de abatimento válido."); return; }
     // Valor Pago não é mais indicador do módulo: campo opcional (vazio = 0; a coluna segue guardada).
@@ -134,7 +137,6 @@ export default function Abatimentos(p) {
       tipo_abatimento: form.tipo||null,
       nfd: form.nfd.trim()||null,
       nf: form.nf.trim(),
-      percentual,
       valor_abatimento: valorAbatimento,
       valor_pago: valorPago,
       data: form.data,
@@ -185,6 +187,27 @@ export default function Abatimentos(p) {
     await carregar(true);
     if(onCancelamentoMudou) onCancelamentoMudou();
     fecharCancelar();
+  }
+
+  function fecharExcluir(){ if(exclSalvando) return; setExcluindo(null); setExclErr(""); }
+
+  // Exclusão lógica — o banco só aceita da aprovadora e só de CANCELADO; a linha
+  // continua no banco (some da lista pela RLS) e a função grava a auditoria.
+  async function confirmarExcluir(){
+    if(!excluindo||exclSalvando) return;
+    setExclSalvando(true); setExclErr("");
+    const { error } = await supabase.rpc("excluir_abatimento_cancelado",{p_abatimento_id:excluindo.id});
+    setExclSalvando(false);
+    if(error){
+      console.error("Erro ao excluir abatimento:", error);
+      setExclErr(error.code==="42501"?"Você não tem permissão para excluir abatimentos.":error.code==="23514"?"Somente abatimentos cancelados podem ser excluídos.":error.code==="P0002"?"Este abatimento não foi encontrado (pode já ter sido excluído).":"Não foi possível excluir"+(error.code?" (código "+error.code+")":"")+". Tente novamente.");
+      return;
+    }
+    const nf = excluindo.nf, id = excluindo.id;
+    setLista(prev=>prev.filter(x=>x.id!==id));
+    setExcluindo(null);
+    addN("Abatimento excluído: boleto "+nf);
+    carregar(true);
   }
 
   function abrirSolicitar(a){ setSolicitando(a); setSolMotivo(""); setSolErr(""); }
@@ -239,7 +262,6 @@ export default function Abatimentos(p) {
       {h:"Tipo de Abatimento", get:a=>a.tipoAbatimento},
       {h:"Nº da NFD", get:a=>a.nfd},
       {h:"Nº do Boleto", get:a=>a.nf},
-      {h:"Percentual (%)", get:a=>a.percentual==null?"":fPercentual(a.percentual)},
       {h:"Valor do Abatimento", get:a=>fBRL(a.valorAbatimento)},
       {h:"Data", get:a=>a.data?fData(a.data):"—"},
       {h:"Status", get:a=>a.status==="CANCELADO"?"Cancelado":situacaoLabel(a.situacao)},
@@ -337,7 +359,7 @@ export default function Abatimentos(p) {
         {visiveis.length===0?<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum abatimento encontrado.</div>:(
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","Filial","Tipo de Abatimento","Nº da NFD","Nº do Boleto","Percentual (%)","Valor do Abatimento","Data","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","Filial","Tipo de Abatimento","Nº da NFD","Nº do Boleto","Valor do Abatimento","Data","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
             <tbody>{visiveis.map(a=>(
               <tr key={a.id} style={{borderBottom:"1px solid "+D.border,opacity:a.status==="CANCELADO"?0.55:1}}>
                 <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>{a.laboratorio}</td>
@@ -345,7 +367,6 @@ export default function Abatimentos(p) {
                 <td data-label="Tipo de Abatimento" style={{padding:"10px 8px",color:D.muted}}>{a.tipoAbatimento||"—"}</td>
                 <td data-label="Nº da NFD" style={{padding:"10px 8px",color:D.text}}>{a.nfd||"—"}</td>
                 <td data-label="Nº do Boleto" style={{padding:"10px 8px",color:D.text}}>{a.nf}</td>
-                <td data-label="Percentual (%)" style={{padding:"10px 8px",color:D.muted}}>{fPercentual(a.percentual)}</td>
                 <td data-label="Valor do Abatimento" style={{padding:"10px 8px",color:D.text,whiteSpace:"nowrap"}}>{fBRL(a.valorAbatimento)}</td>
                 <td data-label="Data" style={{padding:"10px 8px",color:D.muted}}>{a.data?fData(a.data):"—"}</td>
                 <td data-label="Status" style={{padding:"10px 8px"}}>
@@ -365,6 +386,7 @@ export default function Abatimentos(p) {
                       <button style={{...st.btn,padding:"4px 8px",fontSize:11,opacity:pedidoPorAbatimento[a.id]&&pedidoPorAbatimento[a.id].status==="PENDENTE"?0.5:1}} title={pedidoPorAbatimento[a.id]&&pedidoPorAbatimento[a.id].status==="PENDENTE"?"Não é possível editar com cancelamento pendente":"Editar"} disabled={!!pedidoPorAbatimento[a.id]&&pedidoPorAbatimento[a.id].status==="PENDENTE"} onClick={()=>abrirEditar(a)}><Pencil size={12}/></button>
                       {a.status==="ATIVO"&&isAprovador&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} title="Cancelar" onClick={()=>{setCancelando(a);setCancelMotivo("");setCancelErr("");}}><Ban size={12}/></button>}
                       {a.status==="ATIVO"&&!isAprovador&&!(pedidoPorAbatimento[a.id]&&pedidoPorAbatimento[a.id].status==="PENDENTE")&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} title="Solicitar cancelamento" aria-label="Solicitar cancelamento" onClick={()=>abrirSolicitar(a)}><Ban size={12}/></button>}
+                      {a.status==="CANCELADO"&&isAprovador&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} title="Excluir" aria-label="Excluir abatimento cancelado" onClick={()=>{setExcluindo(a);setExclErr("");}}><Trash2 size={12}/></button>}
                     </div>
                   )}
                 </td>
@@ -402,7 +424,6 @@ export default function Abatimentos(p) {
               </div>
               <div><label style={st.lbl}>Nº da NFD (Nota Fiscal de Devolução)</label><input style={st.inp} placeholder="Opcional" value={form.nfd} onChange={e=>{setForm(f=>({...f,nfd:e.target.value}));setFormErr("");}}/></div>
               <div><label style={st.lbl}>Nº do Boleto</label><input style={st.inp} value={form.nf} onChange={e=>{setForm(f=>({...f,nf:e.target.value}));setFormErr("");}}/></div>
-              <div><label style={st.lbl}>Percentual (%)</label><input style={st.inp} inputMode="decimal" placeholder="Opcional — ex.: 2 ou 2,5" value={form.percentual} onChange={e=>{setForm(f=>({...f,percentual:e.target.value}));setFormErr("");}}/></div>
               <div><label style={st.lbl}>Valor do Abatimento (R$)</label><CampoValor style={st.inp} value={form.valorAbatimento} onChange={v=>setForm(f=>({...f,valorAbatimento:v}))} onBlur={()=>setForm(f=>({...f,valorAbatimento:fMoedaInput(f.valorAbatimento)}))}/></div>
               <div><label style={st.lbl}>Valor Pago (R$) — opcional</label><CampoValor style={st.inp} value={form.valorPago} onChange={v=>setForm(f=>({...f,valorPago:v}))} onBlur={()=>setForm(f=>({...f,valorPago:fMoedaInput(f.valorPago)}))}/></div>
               <div><label style={st.lbl}>Data</label><input type="date" style={st.inp} value={form.data} onChange={e=>{setForm(f=>({...f,data:e.target.value}));setFormErr("");}}/></div>
@@ -438,6 +459,22 @@ export default function Abatimentos(p) {
             <div style={{display:"flex",gap:10}}>
               <button style={{flex:1,padding:"9px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:13,color:D.text,fontWeight:500}} onClick={fecharCancelar}>Voltar</button>
               <button style={{flex:1,padding:"9px",borderRadius:10,border:"none",background:D.red,cursor:"pointer",fontSize:13,color:"#fff",fontWeight:600}} onClick={confirmarCancelar} disabled={cancelSalvando}>{cancelSalvando?"Cancelando...":"Cancelar abatimento"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: confirmar exclusão de abatimento cancelado (só a Barbára) */}
+      {excluindo&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:600,padding:"1rem"}} onClick={fecharExcluir}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:16,padding:"1.6rem",maxWidth:380,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:44,height:44,borderRadius:12,background:D.redSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><Trash2 size={20} color={D.red}/></div>
+            <div style={{fontWeight:700,fontSize:15,color:D.text,marginBottom:6}}>Excluir abatimento cancelado?</div>
+            <div style={{fontSize:13,color:D.muted,marginBottom:14}}>Boleto {excluindo.nf} — {excluindo.laboratorio} ({fBRL(excluindo.valorAbatimento)}). O lançamento sai da lista; a auditoria e o histórico do cancelamento são preservados.</div>
+            {exclErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:14,display:"flex",alignItems:"center",gap:6,textAlign:"left"}}><AlertCircle size={13}/>{exclErr}</div>}
+            <div style={{display:"flex",gap:10}}>
+              <button style={{flex:1,padding:"9px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:13,color:D.text,fontWeight:500}} onClick={fecharExcluir}>Voltar</button>
+              <button style={{flex:1,padding:"9px",borderRadius:10,border:"none",background:D.red,cursor:"pointer",fontSize:13,color:"#fff",fontWeight:600}} onClick={confirmarExcluir} disabled={exclSalvando}>{exclSalvando?"Excluindo...":"Excluir"}</button>
             </div>
           </div>
         </div>
