@@ -74,7 +74,9 @@ export default function Ferias(p) {
   async function carregar(){
     setLoading(true);
     const { data, error } = await supabase.from("ferias").select("*, funcionarios(nome, setor)").order("periodo_aquisitivo_inicio",{ascending:false});
-    if(!error&&data) setLista(data.map(mapFeriasRow));
+    // Funcionário excluído (lógico) não é mais lido pela RLS: o embed volta nulo e as
+    // férias dele (que seguem guardadas no banco) saem da tela junto com ele.
+    if(!error&&data) setLista(data.filter(r=>r.funcionarios).map(mapFeriasRow));
     setLoading(false);
   }
 

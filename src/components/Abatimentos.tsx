@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Search, Printer, AlertCircle, Ban, Pencil, Send, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { fBRL, fData, fDataHoraBR, parseMoedaInput, fMoedaInput, mapAbatimentoRow, nomeVisivel } from "../lib/helpers";
-import { APROVADOR_CANCELAMENTO_ID, mapSolicitacaoRow, mensagemErroCancelamento } from "../lib/cancelamentos";
+import { ehAprovadorCancelamento, mapSolicitacaoRow, mensagemErroCancelamento } from "../lib/cancelamentos";
 import { TIPOS_ABATIMENTO, SITUACOES_ABATIMENTO, situacaoLabel, filtrarAbatimentos, calcularResumo, ehIncompatibilidadeDeBanco } from "../lib/abatimentos";
 import { hoje, ESTADOS_FILIAL } from "../constants";
 import { useDraggable } from "../lib/useDraggable";
@@ -36,10 +36,10 @@ export default function Abatimentos(p) {
   const isDemo = !!p.isDemo;
   const podeEditar = !isDemo;
   const usuarioNome = nomeVisivel(user);
-  // Só a Barbára cancela direto; o Financeiro solicita e ela decide (a trava
+  // Só as aprovadoras (Barbára e Thaisa) cancelam direto; o Financeiro solicita e elas decidem (a trava
   // real é no banco — ver 20261002000010/20261002000020). onCancelamentoMudou avisa o App
   // (contador de pendentes da aprovadora) quando algo muda por aqui.
-  const isAprovador = !!user && user.id===APROVADOR_CANCELAMENTO_ID;
+  const isAprovador = ehAprovadorCancelamento(user);
   const onCancelamentoMudou = p.onCancelamentoMudou;
 
   const [lista, setLista] = useState([]);
@@ -486,7 +486,7 @@ export default function Abatimentos(p) {
           <div className="bv-modal-card" style={{background:D.white,borderRadius:16,padding:"1.6rem",maxWidth:460,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box"}} onClick={e=>e.stopPropagation()}>
             <div style={{width:44,height:44,borderRadius:12,background:D.redSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><Send size={20} color={D.red}/></div>
             <div style={{fontWeight:700,fontSize:15,color:D.text,marginBottom:6,textAlign:"center"}}>Solicitar cancelamento</div>
-            <div style={{fontSize:13,color:D.muted,marginBottom:14,textAlign:"center"}}>O abatimento continua ativo até a aprovação da Barbára. Você acompanha o status aqui na lista.</div>
+            <div style={{fontSize:13,color:D.muted,marginBottom:14,textAlign:"center"}}>O abatimento continua ativo até a aprovação da Supervisão. Você acompanha o status aqui na lista.</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 14px",background:D.bg,borderRadius:10,padding:"12px 14px",marginBottom:14,fontSize:13}}>
               <div style={{gridColumn:"1/-1"}}><div style={{fontSize:11,color:D.muted}}>Fornecedor (laboratório)</div><div style={{fontWeight:600,color:D.text}}>{solicitando.laboratorio}</div></div>
               <div><div style={{fontSize:11,color:D.muted}}>Nº do Boleto</div><div style={{fontWeight:600,color:D.text}}>{solicitando.nf}</div></div>

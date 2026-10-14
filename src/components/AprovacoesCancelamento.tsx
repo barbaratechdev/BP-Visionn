@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Search, AlertCircle, CheckCircle, XCircle, Eye, ClipboardCheck } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { fBRL, fData, fDataHoraBR } from "../lib/helpers";
-import { APROVADOR_CANCELAMENTO_ID, SOLICITACAO_STATUS, mapSolicitacaoRow, mensagemErroCancelamento } from "../lib/cancelamentos";
+import { ehAprovadorCancelamento, SOLICITACAO_STATUS, mapSolicitacaoRow, mensagemErroCancelamento } from "../lib/cancelamentos";
 
 // Dia (YYYY-MM-DD) em Brasília de um timestamp — pros filtros De/Até.
 function diaBR(iso){
@@ -10,7 +10,7 @@ function diaBR(iso){
   return isNaN(d.getTime()) ? "" : d.toLocaleDateString("sv-SE",{timeZone:"America/Sao_Paulo"});
 }
 
-// Aprovações de Cancelamento — só a Barbára (a trava real é no banco:
+// Aprovações de Cancelamento — só as aprovadoras, Barbára e Thaisa (a trava real é no banco:
 // decidir_cancelamento_abatimento recusa qualquer outra pessoa). Auto-contido,
 // mesmo padrão de Abatimentos.tsx. Aprovar efetiva o cancelamento do
 // abatimento no mesmo passo, dentro de uma transação no banco; recusar exige
@@ -18,7 +18,7 @@ function diaBR(iso){
 export default function AprovacoesCancelamento(p) {
   const D = p.D, st = p.st, addN = p.addN, user = p.user;
   const onMudou = p.onMudou;
-  const autorizada = !!user && user.id===APROVADOR_CANCELAMENTO_ID;
+  const autorizada = ehAprovadorCancelamento(user);
 
   const [lista, setLista] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { Plus, Search, Pencil, Eye, Save, AlertCircle, Briefcase, AlertTriangle } from "lucide-react";
+import { Plus, Search, Pencil, Eye, Save, AlertCircle, Briefcase, AlertTriangle, Trash2, Download, CheckCircle2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { fData, mapFuncionarioRow, mapFeriasRow, mapExameRow, nomeVisivel } from "../lib/helpers";
 import { hoje, ESTADOS_FILIAL } from "../constants";
 import { useDraggable } from "../lib/useDraggable";
+import { ehAprovadorCancelamento } from "../lib/cancelamentos";
+import { gerarXlsx, baixarArquivo } from "../lib/xlsx";
 import Av from "./Av";
 import Ferias from "./Ferias";
 import FuncionarioPerfil from "./FuncionarioPerfil";
@@ -25,6 +27,12 @@ function mensagemErroSalvarFuncionario(error){
   if(error.code==="23505") return "Já existe um registro com esses dados.";
   return "Não foi possível salvar"+(error.code?" (código "+error.code+")":"")+". Se o problema continuar, informe esse código ao suporte.";
 }
+
+// Filtro/relatório por Estado: vem do próprio cadastro (estado_filial, lista
+// fechada — ver ESTADOS_FILIAL). As duas filiais do Pará contam como PA.
+// Sem estado cadastrado → "" (aparece só em "Todos").
+const ESTADOS_FILTRO = [{valor:"PA",label:"PA — Pará"},{valor:"PI",label:"PI — Piauí"},{valor:"MA",label:"MA — Maranhão"}];
+function estadoUF(estadoFilial){ const uf=(estadoFilial||"").slice(0,2); return ["PA","PI","MA"].includes(uf)?uf:""; }
 
 // Aba "RH" — cadastro de funcionários da empresa, mantido pelo setor de
 // RH. Separado de "profiles" (contas de login), "representantes"
@@ -52,6 +60,9 @@ export default function RH(p) {
   const usuarioNome = nomeVisivel(p.user);
   // Somente leitura (Financeiro/Comercial veem o RH mas não alteram). A proteção real é o RLS.
   const somenteLeitura = !!p.somenteLeitura;
+  // Exclusão (lógica), só de funcionário Inativo: mesmo critério da exclusão de abatimentos — a trava real é a função
+  // excluir_funcionario no banco (ver 20261014000000_funcionarios_exclusao_logica.sql).
+  const podeExcluir = !somenteLeitura && ehAprovadorCancelamento(p.user);
   const [aba, setAba] = useState("funcionarios");
   const [lista, setLista] = useState([]);
   const [feriasList, setFeriasList] = useState([]);
@@ -60,7 +71,14 @@ export default function RH(p) {
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroVinculo, setFiltroVinculo] = useState("todos");
+  const [filtroEstado, setFiltroEstado] = useState("todos");
   const [filtroIds, setFiltroIds] = useState(null);
+  const [excluindo, setExcluindo] = useState(null);
+  const [exclErr, setExclErr] = useState("");
+  const [exclSalvando, setExclSalvando] = useState(false);
+  // Confirmação visível da exclusão (some sozinha).
+  const [aviso, setAviso] = useState("");
+  useEffect(()=>{ if(!aviso) return; const t=setTimeout(()=>setAviso(""),5000); return ()=>clearTimeout(t); },[aviso]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   const [formErr, setFormErr] = useState("");
@@ -150,6 +168,7 @@ export default function RH(p) {
     const ultimaFerias = feriasDoFunc[0]||null;
     return {
       proximoExame: ultimoExame&&ultimoExame.dataProximoExame ? fData(ultimoExame.dataProximoExame) : "—",
+      proximoExameData: ultimoExame&&ultimoExame.dataProximoExame ? ultimoExame.dataProximoExame : "",
       situacaoFerias: ultimaFerias ? ultimaFerias.status : "—",
     };
   }
@@ -157,6 +176,7 @@ export default function RH(p) {
   const visiveis = lista.filter(f=>
     (filtroStatus==="todos"||f.status===filtroStatus) &&
     (filtroVinculo==="todos"||f.tipoVinculo===filtroVinculo) &&
+    (filtroEstado==="todos"||estadoUF(f.estadoFilial)===filtroEstado) &&
     (!filtroIds||filtroIds.includes(f.id)) &&
     (!busca || f.nome.toLowerCase().includes(busca.toLowerCase()) || f.telefone.includes(busca) || (f.cargo||"").toLowerCase().includes(busca.toLowerCase()))
   );
@@ -166,6 +186,47 @@ export default function RH(p) {
   function verGrupoDeAlerta(ids){
     setFiltroIds(ids);
     setAba("funcionarios");
+  }
+
+  function fecharExcluir(){ if(exclSalvando) return; setExcluindo(null); setExclErr(""); }
+
+  // Exclusão lógica — o banco só aceita da pessoa autorizada; o cadastro e todo o
+  // histórico (férias, exames, documentos, salários, ocorrências) ficam no banco, o
+  // funcionário só some da leitura (RLS). A função grava a auditoria.
+  async function confirmarExcluir(){
+    if(!excluindo||exclSalvando) return;
+    setExclSalvando(true); setExclErr("");
+    const { error } = await supabase.rpc("excluir_funcionario",{p_funcionario_id:excluindo.id});
+    setExclSalvando(false);
+    if(error){
+      console.error("Erro ao excluir funcionário:", error);
+      setExclErr(error.code==="42501"?"Você não tem permissão para excluir funcionários.":error.code==="23514"?"Somente funcionários inativos podem ser excluídos.":error.code==="P0002"?"Este funcionário não foi encontrado (pode já ter sido excluído).":"Não foi possível excluir"+(error.code?" (código "+error.code+")":"")+". Tente novamente.");
+      return;
+    }
+    const nome = excluindo.nome, id = excluindo.id;
+    setLista(prev=>prev.filter(x=>x.id!==id));
+    if(filtroIds) setFiltroIds(prev=>prev?prev.filter(x=>x!==id):prev);
+    setExcluindo(null);
+    setAviso("Funcionário excluído: "+nome+". O histórico foi preservado.");
+    addN("Funcionário excluído: "+nome);
+  }
+
+  // Exportação (.xlsx) — exatamente o que está na tela (todos os filtros + pesquisa).
+  // Sem dados pessoais (CPF, nascimento, e-mail, telefone, observações).
+  function exportar(){
+    const colunas = [
+      {titulo:"Funcionário",largura:34},{titulo:"Cargo",largura:24},{titulo:"Setor",largura:20},
+      {titulo:"Estado",largura:9},{titulo:"Filial",largura:26},{titulo:"Vínculo",largura:13},
+      {titulo:"Status",largura:10},{titulo:"Data de admissão",largura:17,tipo:"data" as const},
+      {titulo:"Data de saída",largura:15,tipo:"data" as const},{titulo:"Próximo exame",largura:16,tipo:"data" as const},
+      {titulo:"Situação das férias",largura:20},
+    ];
+    const linhas = visiveis.map(f=>{
+      const r = resumoDoFuncionario(f.id);
+      return [f.nome, f.cargo||"", f.setor||"", estadoUF(f.estadoFilial), f.estadoFilial||"", f.tipoVinculo||"", f.status||"",
+        f.dataEntrada||"", f.dataSaida||"", r.proximoExameData, r.situacaoFerias==="—"?"":r.situacaoFerias];
+    });
+    baixarArquivo(gerarXlsx("Funcionários", colunas, linhas), "Relatorio_RH_BP_Visionn.xlsx");
   }
 
   return (
@@ -197,8 +258,17 @@ export default function RH(p) {
       <>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
         <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>RH</div><div style={{fontSize:13,color:D.muted}}>{visiveis.length} funcionário(s)</div></div>
-        {!somenteLeitura&&<button style={st.btnBlue} onClick={abrirNovo}><Plus size={15}/>Novo Funcionário</button>}
+        <div style={{display:"flex",gap:8}}>
+          <button style={st.btn} onClick={exportar} disabled={visiveis.length===0} title={visiveis.length===0?"Nenhum funcionário para exportar":"Exportar a lista filtrada para Excel"}><Download size={14}/>Exportar</button>
+          {!somenteLeitura&&<button style={st.btnBlue} onClick={abrirNovo}><Plus size={15}/>Novo Funcionário</button>}
+        </div>
       </div>
+
+      {aviso&&(
+        <div role="status" style={{display:"flex",alignItems:"center",gap:10,background:D.greenSoft,color:D.greenText,borderRadius:10,padding:"9px 14px",marginBottom:14,fontSize:13}}>
+          <CheckCircle2 size={14}/>{aviso}
+        </div>
+      )}
 
       {filtroIds&&(
         <div style={{display:"flex",alignItems:"center",gap:10,background:D.orangeSoft,color:D.orangeText,borderRadius:10,padding:"9px 14px",marginBottom:14,fontSize:13}}>
@@ -232,6 +302,13 @@ export default function RH(p) {
             <option value="Inativo">Inativo</option>
           </select>
         </div>
+        <div style={{flex:"1 1 140px"}}>
+          <label style={st.lbl}>Estado</label>
+          <select style={st.inp} value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)}>
+            <option value="todos">Todos</option>
+            {ESTADOS_FILTRO.map(e=><option key={e.valor} value={e.valor}>{e.label}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="bv-card" style={st.card}>
@@ -259,6 +336,7 @@ export default function RH(p) {
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
                     <button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Ver perfil completo" onClick={()=>setFuncionarioAbertoId(f.id)}><Eye size={12}/></button>
                     {!somenteLeitura&&<button style={{...st.btn,padding:"4px 8px",fontSize:11}} title="Editar" onClick={()=>abrirEditar(f)}><Pencil size={12}/></button>}
+                    {podeExcluir&&f.status==="Inativo"&&<button style={{...st.btn,padding:"4px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} title="Excluir" aria-label="Excluir funcionário" onClick={()=>{setExcluindo(f);setExclErr("");}}><Trash2 size={12}/></button>}
                   </div>
                 </td>
               </tr>
@@ -271,6 +349,22 @@ export default function RH(p) {
       </>
       )}
       </>
+      )}
+
+      {/* MODAL: confirmar exclusão de funcionário (só a pessoa autorizada) */}
+      {excluindo&&(
+        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:600,padding:"1rem"}} onClick={fecharExcluir}>
+          <div className="bv-modal-card" style={{background:D.white,borderRadius:16,padding:"1.6rem",maxWidth:400,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:44,height:44,borderRadius:12,background:D.redSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><Trash2 size={20} color={D.red}/></div>
+            <div style={{fontWeight:700,fontSize:15,color:D.text,marginBottom:6}}>Excluir funcionário?</div>
+            <div style={{fontSize:13,color:D.muted,marginBottom:14}}><strong style={{color:D.text}}>{excluindo.nome}</strong>{excluindo.cargo?" — "+excluindo.cargo:""}{excluindo.estadoFilial?" ("+excluindo.estadoFilial+")":""}. O funcionário sai da listagem do RH; férias, exames, documentos, salários e histórico continuam guardados.</div>
+            {exclErr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginBottom:14,display:"flex",alignItems:"center",gap:6,textAlign:"left"}}><AlertCircle size={13}/>{exclErr}</div>}
+            <div style={{display:"flex",gap:10}}>
+              <button style={{flex:1,padding:"9px",borderRadius:10,border:"1px solid "+D.border,background:D.white,cursor:"pointer",fontSize:13,color:D.text,fontWeight:500}} onClick={fecharExcluir}>Voltar</button>
+              <button style={{flex:1,padding:"9px",borderRadius:10,border:"none",background:D.red,cursor:"pointer",fontSize:13,color:"#fff",fontWeight:600}} onClick={confirmarExcluir} disabled={exclSalvando}>{exclSalvando?"Excluindo...":"Excluir"}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL: cadastro / edição — fica acessível tanto na lista quanto de

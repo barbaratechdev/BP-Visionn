@@ -17,7 +17,7 @@ import RH from "./components/RH";
 import Avarias from "./components/Avarias";
 import Abatimentos from "./components/Abatimentos";
 import AprovacoesCancelamento from "./components/AprovacoesCancelamento";
-import { APROVADOR_CANCELAMENTO_ID, useCancelamentoAvisos } from "./lib/cancelamentos";
+import { ehAprovadorCancelamento, useCancelamentoAvisos } from "./lib/cancelamentos";
 import MiniCalendario from "./components/MiniCalendario";
 import StatusDonutCard from "./components/StatusDonutCard";
 
@@ -180,10 +180,10 @@ export default function App() {
   const somenteLeitura = !(isAdmin || isFin || isComercial);
   // Contratos: só admin e Financeiro escrevem (os demais veem, somente leitura).
   const podeContratos = !!(isAdmin || isFin);
-  // Aprovações de Cancelamento (Abatimentos): só a Barbára, por id — a trava
+  // Aprovações de Cancelamento (Abatimentos): só as aprovadoras (Barbára e Thaisa), por id — a trava
   // real está no banco (20261002000010 + 20261002000020). Também alimenta o contador de
   // pendentes e as notificações de solicitação/decisão.
-  const isAprovadorCancelamento = !!(user && user.id===APROVADOR_CANCELAMENTO_ID);
+  const isAprovadorCancelamento = ehAprovadorCancelamento(user);
   const { pendentes: cancelPendentes, refresh: refreshCancelPendentes } = useCancelamentoAvisos(user, addN);
   // Aba RH: liberada pontualmente pra Maria K (setor cadastrado é
   // "RH - Cadastro", que não bate com o valor exato "RH" checado acima) —

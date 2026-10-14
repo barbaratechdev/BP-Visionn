@@ -2,10 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "./supabase";
 import { fBRL } from "./helpers";
 
-// Barbára Pinon — única aprovadora de cancelamentos. Precisa bater com
-// is_aprovador_cancelamento() no banco (20261002000010/20261002000020): a trava de verdade
+// Supervisão — aprovadoras de cancelamentos (e das exclusões lógicas): Barbára Pinon e Thaisa,
+// com os mesmos privilégios. Lista EXPLÍCITA (não é por role: outro admin não entra sozinho).
+// Precisa bater com is_aprovador_cancelamento() no banco (20261014000100): a trava de verdade
 // é lá; aqui só decide o que a interface mostra.
-export const APROVADOR_CANCELAMENTO_ID = "6db64d55-bca1-49d0-b789-dabdbc646463";
+export const APROVADORES_CANCELAMENTO_IDS = [
+  "6db64d55-bca1-49d0-b789-dabdbc646463", // Barbára Pinon
+  "62a9289c-95e3-4efd-bace-3a4ba8f9f014", // Thaisa
+];
+export function ehAprovadorCancelamento(user){ return !!user && APROVADORES_CANCELAMENTO_IDS.includes(user.id); }
 
 export const SOLICITACAO_STATUS = {
   PENDENTE: "Pendente",
@@ -46,7 +51,7 @@ export function mensagemErroCancelamento(error, padrao){
   return padrao + (error&&error.code?" (código "+error.code+")":"");
 }
 
-// Avisos do fluxo: contador de pendentes (Barbára) e notificação das
+// Avisos do fluxo: contador de pendentes (aprovadoras) e notificação das
 // decisões (quem solicitou). Persistente de verdade — vem do banco, não do
 // estado local do sino —, então chega mesmo se a pessoa não estava online na
 // hora: ao entrar, carrega o que ficou pendente/decidido; depois escuta o
@@ -57,14 +62,14 @@ export function useCancelamentoAvisos(user, addN){
   useEffect(()=>{ addNRef.current = addN; });
 
   const refresh = useCallback(async ()=>{
-    if(!user || user.id!==APROVADOR_CANCELAMENTO_ID) return;
+    if(!ehAprovadorCancelamento(user)) return;
     const { count, error } = await supabase.from("cancelamento_solicitacoes").select("id",{count:"exact",head:true}).eq("status","PENDENTE");
     if(!error) setPendentes(count||0);
   },[user&&user.id]);
 
   useEffect(()=>{
     if(!user || user.role==="demo") return;
-    const ehAprovador = user.id===APROVADOR_CANCELAMENTO_ID;
+    const ehAprovador = ehAprovadorCancelamento(user);
     const chaveVisto = "bv_cancel_visto_"+user.id;
     let cancelado = false;
 
