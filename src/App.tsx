@@ -237,12 +237,15 @@ export default function App() {
   const unread   = notifs.filter(n=>!n.read).length;
   const responsavelPadrao = (users.find(u=>u.role==="func")||users[0]||{id:""}).id;
   const representantesAtivos = representantes.filter(r=>r.status==="Ativo");
-  const representantesVisiveis = representantes.filter(r=>
+  // Ativos primeiro, inativos depois — partição estável: dentro de cada grupo fica a ordem
+  // atual (por nome). Calculado a cada render, então inativar/reativar reposiciona na hora.
+  const representantesFiltrados = representantes.filter(r=>
     (repFiltroRegiao==="todos"||r.regiao===repFiltroRegiao) &&
     (repFiltroStatus==="todos"||r.status===repFiltroStatus) &&
     (repFiltroSupervisor==="todos"||r.supervisorCadastroId===repFiltroSupervisor) &&
     (!repSearch || r.nome.toLowerCase().includes(repSearch.toLowerCase()) || (r.cpf&&r.cpf.includes(repSearch)))
   );
+  const representantesVisiveis = [...representantesFiltrados.filter(r=>r.status==="Ativo"), ...representantesFiltrados.filter(r=>r.status!=="Ativo")];
 
   useEffect(()=>{
     function h(e){ if(notifRef.current&&!notifRef.current.contains(e.target)) setShowNotif(false); }
