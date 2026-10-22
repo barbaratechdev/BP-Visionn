@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { supabase } from "./lib/supabase";
-import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent, ClipboardCheck } from "lucide-react";
+import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent, ClipboardCheck, Contact } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, SIDEBAR, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
 import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
@@ -20,6 +20,8 @@ import AprovacoesCancelamento from "./components/AprovacoesCancelamento";
 import { ehAprovadorCancelamento, useCancelamentoAvisos } from "./lib/cancelamentos";
 import MiniCalendario from "./components/MiniCalendario";
 import StatusDonutCard from "./components/StatusDonutCard";
+import CadastroClientes from "./components/CadastroClientes";
+import { podeVerCadastroClientes, podeEditarCadastroClientes, podeAdministrarCadastroClientes } from "./lib/cadastroClientes";
 
 export default function App() {
   const [dark, setDark] = useState(false);
@@ -215,6 +217,11 @@ export default function App() {
   // Incluir/editar supervisor segue a mesma regra: todo Financeiro pode —
   // desativar continua exclusivo de admin.
   const podeEditarSupervisores = !!isFin;
+  // Cadastro de Clientes: espelha cadastro_clientes_pode_ver/editar/administrar
+  // (20261022000100_cadastro_clientes.sql) — o RLS é a proteção real.
+  const verCadastroClientes = podeVerCadastroClientes(user);
+  const podeEditarClientes = podeEditarCadastroClientes(user);
+  const podeAdministrarClientes = podeAdministrarCadastroClientes(user);
   // Funcionária do financeiro: na aba Tarefas ela vê o grid de Prorrogação de
   // Boletos + Calendário — a lista de Tarefas entra na coluna principal desse
   // mesmo grid (logo abaixo de Prorrogação), em vez de ficar solta depois
@@ -1575,6 +1582,7 @@ export default function App() {
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
     {id:"rh",label:"RH",Icon:Briefcase,show:verRH},
     {id:"contratos",label:"Contratos",Icon:FileText,show:verOperacao},
+    {id:"clientes",label:"Cadastro de Clientes",Icon:Contact,show:verCadastroClientes},
     {id:"representantes",label:"Representantes",Icon:Users,show:verRepresentantes},
     {id:"supervisores",label:"Supervisores",Icon:UserCog,show:verSupervisores},
     {id:"calendario",label:"Calendário",Icon:Calendar,show:true},
@@ -2198,6 +2206,9 @@ export default function App() {
 
           {tab==="abatimentos"&&verOperacao&&(
             <Abatimentos D={D} st={st} addA={addA} addN={addN} user={user} isDemo={somenteLeitura} onCancelamentoMudou={refreshCancelPendentes}/>
+          )}
+          {tab==="clientes"&&verCadastroClientes&&(
+            <CadastroClientes D={D} st={st} addA={addA} addN={addN} user={user} podeEditar={podeEditarClientes} podeAdministrar={podeAdministrarClientes}/>
           )}
           {tab==="aprovacoes"&&isAprovadorCancelamento&&(
             <AprovacoesCancelamento D={D} st={st} addN={addN} user={user} onMudou={refreshCancelPendentes}/>
