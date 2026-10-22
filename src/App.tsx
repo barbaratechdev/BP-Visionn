@@ -198,11 +198,10 @@ export default function App() {
   // flags de escrita e o RLS é a proteção real.
   const verTudo = !!(isAdmin || isFin || isRH || isComercial);
   // Aba Supervisores: liberada por perfil pra todo o setor Financeiro
-  // (isFin — mesma regra usada em Representantes/Contratos/Auditoria), mais
-  // uma exceção nominal pra Esmeralda e Ana caso não estejam cadastradas
-  // como Financeiro (\b pra não pegar "Mariana" etc.). Ver
-  // 20260914000000_supervisores_edicao_financeiro.sql pro espelho no banco.
-  const isSupervisoresExtra = !!(isFin || (user && user.name && /\b(esmeralda|ana)\b/i.test(user.name)));
+  // (isFin — mesma regra usada em Representantes/Contratos/Auditoria).
+  // Espelho no banco: pode_editar_supervisores() = is_financeiro()
+  // (migration supervisores_remove_excecao_nominal).
+  const isSupervisoresExtra = !!isFin;
   // Comercial NÃO acessa os dados internos de RH, Representantes e Supervisores: as três abas
   // ficam escondidas e as listas nem são carregadas. A proteção real é o RLS
   // (20261008000000_comercial_sem_dados_internos.sql), que devolve zero linhas pro Comercial.
@@ -213,9 +212,9 @@ export default function App() {
   // — admin, Financeiro e Comercial — além da Demonstração. O RH não vê essas abas nem carrega os
   // dados; a proteção real é o RLS (20261008000100_rh_sem_modulos_operacionais.sql).
   const verOperacao = !!(isDemo || isAdmin || isFin || isComercial);
-  // Incluir/editar supervisor segue a mesma regra: todo Financeiro pode,
-  // além da mesma exceção nominal — desativar continua exclusivo de admin.
-  const podeEditarSupervisores = !!(isFin || (user && user.name && /\b(esmeralda|ana)\b/i.test(user.name)));
+  // Incluir/editar supervisor segue a mesma regra: todo Financeiro pode —
+  // desativar continua exclusivo de admin.
+  const podeEditarSupervisores = !!isFin;
   // Funcionária do financeiro: na aba Tarefas ela vê o grid de Prorrogação de
   // Boletos + Calendário — a lista de Tarefas entra na coluna principal desse
   // mesmo grid (logo abaixo de Prorrogação), em vez de ficar solta depois
