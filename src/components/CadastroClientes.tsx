@@ -5,7 +5,7 @@ import { fDataHoraBR, nomeVisivel } from "../lib/helpers";
 import { useDraggable } from "../lib/useDraggable";
 import {
   SITUACOES, situacaoInfo, DOCS_OK_PENDENTE, ALVARAS, OPCOES_CONTROLADOS, OPCOES_SINTEGRA, OPCOES_SERASA,
-  mapClienteRow, payloadCliente, hojeBelem, statusAlvara, alvaraInfo, documentosPendentes, alertasCliente,
+  mapClienteRow, payloadCliente, hojeBelem, statusAlvara, alvaraInfo, documentosPendentes, alertasCliente, PENDENCIAS_EXTRAS,
   formatarCnpj, soDigitos, cnpjDigitosOk, razoesParecidas, mensagemErroCliente, imprimirFicha,
 } from "../lib/cadastroClientes";
 import MCard from "./MCard";
@@ -208,7 +208,7 @@ export default function CadastroClientes(p) {
         <div style={{flex:"1 1 130px"}}><label style={st.lbl}>Incluído de</label><input type="date" style={st.inp} value={fDe} onChange={e=>setFDe(e.target.value)}/></div>
         <div style={{flex:"1 1 130px"}}><label style={st.lbl}>Até</label><input type="date" style={st.inp} value={fAte} onChange={e=>setFAte(e.target.value)}/></div>
         <div style={{flex:"1 1 190px"}}><label style={st.lbl}>Documento pendente</label>
-          {sel(fDoc,setFDoc,[...DOCS_OK_PENDENTE.map(d=>({v:d.campo,l:d.label})),...ALVARAS.map(a=>({v:a.campo,l:a.label+" (sem data)"}))],"Qualquer")}
+          {sel(fDoc,setFDoc,[...DOCS_OK_PENDENTE.map(d=>({v:d.campo,l:d.label})),...ALVARAS.map(a=>({v:a.campo,l:a.label+" (sem data)"})),...PENDENCIAS_EXTRAS.map(p=>({v:p.campo,l:p.label}))],"Qualquer")}
         </div>
         <div style={{flex:"1 1 170px"}}><label style={st.lbl}>Alvarás</label>{sel(fAlvara,setFAlvara,[{v:"VENCIDO",l:"Com alvará vencido"},{v:"A_VENCER",l:"Com alvará a vencer (30 dias)"}],"Todos")}</div>
         {podeAdministrar&&<label style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color:D.text,padding:"8px 0",cursor:"pointer"}}><input type="checkbox" checked={mostrarExcluidos} onChange={e=>setMostrarExcluidos(e.target.checked)}/>Mostrar excluídos</label>}
