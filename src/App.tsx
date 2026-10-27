@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent, ClipboardCheck, Contact } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, SIDEBAR, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
+import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, MOTIVOS_BOLETO, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
 import { useDraggable } from "./lib/useDraggable";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
@@ -22,6 +22,13 @@ import MiniCalendario from "./components/MiniCalendario";
 import StatusDonutCard from "./components/StatusDonutCard";
 import CadastroClientes from "./components/CadastroClientes";
 import { podeVerCadastroClientes, podeEditarCadastroClientes, podeAdministrarCadastroClientes } from "./lib/cadastroClientes";
+
+// Colunas da tabela de Prorrogação de Boletos (28/10/2026): Motivo entre Fornecedor e NF. As colunas curtas têm
+// a largura do conteúdo medido a 13 px (+ 12 px de espaçamento e folga); o Fornecedor (w vazio) fica com o resto.
+const COLUNAS_BOLETOS = [
+  {h:"Fornecedor", w:""}, {h:"Motivo", w:"14%"}, {h:"NF", w:"82px"}, {h:"Valor", w:"100px"}, {h:"Vencimento", w:"84px"},
+  {h:"Estado", w:"76px"}, {h:"Data de Inclusão", w:"84px"}, {h:"Situação", w:"118px"}, {h:"", w:"80px"},
+];
 
 export default function App() {
   const [dark, setDark] = useState(false);
@@ -111,6 +118,13 @@ export default function App() {
   const [buscaPr, setBuscaPr] = useState("");   // busca própria (fornecedor ou nº da NF) — não é a busca geral do topo
   // Filtro por Situação: chaves só da tela; "pendente" = ehAguardando ("Aguardando retorno" + legado "Em negociação").
   const [filtroSituacaoPr, setFiltroSituacaoPr] = useState("todas");
+  // Filtro por Motivo ("todos" ou um dos MOTIVOS_BOLETO) e paginação da página própria (20 por página por padrão).
+  const [filtroMotivoPr, setFiltroMotivoPr] = useState("todos");
+  const [paginaPr, setPaginaPr] = useState(1);
+  const [porPaginaPr, setPorPaginaPr] = useState(20);
+  const [irParaPr, setIrParaPr] = useState<string | null>(null);   // boleto recém-incluído: a lista abre na página dele
+  const [erroNovoPr, setErroNovoPr] = useState("");
+  const [erroEditPr, setErroEditPr] = useState("");
   const [showContrato, setShowContrato] = useState<Contrato | null>(null);
   const [editDoc, setEditDoc] = useState(false);
   const [docEdit, setDocEdit] = useState("");
@@ -125,9 +139,9 @@ export default function App() {
   const respFiltroRef = useRef<HTMLDivElement | null>(null);
   const [newT, setNewT] = useState({fornecedor:"",valor:"",vencimento:"",responsavel:"",obs:""});
   const [newC, setNewC] = useState({representanteId:"",cpfCnpj:"",porcentagem:"",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"});
-  const [newPr, setNewPr] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno",valor:"" as number | string});
+  const [newPr, setNewPr] = useState({fornecedor:"",nf:"",motivo:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno",valor:"" as number | string});
   const [editPr, setEditPr] = useState<string | null>(null);
-  const [editPrData, setEditPrData] = useState({fornecedor:"",nf:"",vencimento:"",estado:"Pará",valor:"" as number | string});
+  const [editPrData, setEditPrData] = useState({fornecedor:"",nf:"",motivo:"",motivoOriginal:"",vencimento:"",estado:"Pará",valor:"" as number | string});
   const [showAprovarPr, setShowAprovarPr] = useState<string | null>(null);
   const [dataAprovacaoInput, setDataAprovacaoInput] = useState(hoje);
   const [dataAprovacaoErr, setDataAprovacaoErr] = useState("");
@@ -493,13 +507,23 @@ export default function App() {
     // Filtro por Estado + busca (fornecedor ou nº da NF, trecho, sem diferenciar maiúsculas):
     // só na página própria (sem "limite"); o Estado compara o campo estado do registro.
     const termoPr = buscaPr.trim().toLowerCase();
-    const filtrando = !limite && (filtroEstadoPr!=="todos" || filtroSituacaoPr!=="todas" || !!termoPr);
+    const filtrando = !limite && (filtroEstadoPr!=="todos" || filtroSituacaoPr!=="todas" || filtroMotivoPr!=="todos" || !!termoPr);
     const doEstado = !limite && filtroEstadoPr!=="todos" ? ordenadas.filter(pr=>pr.estado===filtroEstadoPr) : ordenadas;
     // Situação: compara o valor salvo (pendencias.situacao), sem alterá-lo.
     const naSituacao = pr => filtroSituacaoPr==="pendente" ? ehAguardando(pr.situacao) : filtroSituacaoPr==="aprovado" ? pr.situacao==="Prorrogação Aprovada" : filtroSituacaoPr==="recusado" ? pr.situacao==="Recusado" : true;
     const doSituacao = !limite && filtroSituacaoPr!=="todas" ? doEstado.filter(naSituacao) : doEstado;
     const rotuloSituacaoPr = ({pendente:"Pendente",aprovado:"Aprovado",recusado:"Recusado"})[filtroSituacaoPr];
-    const lista = limite ? ordenadas.slice(0,limite) : termoPr ? doSituacao.filter(pr=>(pr.fornecedor||"").toLowerCase().includes(termoPr)||(pr.nf||"").toLowerCase().includes(termoPr)) : doSituacao;
+    // Motivo: compara o valor salvo (pendencias.motivo); boletos antigos sem motivo só aparecem em "Todos".
+    const doMotivo = !limite && filtroMotivoPr!=="todos" ? doSituacao.filter(pr=>pr.motivo===filtroMotivoPr) : doSituacao;
+    const lista = limite ? ordenadas.slice(0,limite) : termoPr ? doMotivo.filter(pr=>(pr.fornecedor||"").toLowerCase().includes(termoPr)||(pr.nf||"").toLowerCase().includes(termoPr)) : doMotivo;
+    // Paginação (só na página própria): a página atual nunca passa da última, mesmo depois de filtrar ou excluir.
+    const totalPaginasPr = limite ? 1 : Math.max(1, Math.ceil(lista.length/porPaginaPr));
+    const posNovoPr = irParaPr ? lista.findIndex(pr=>pr.id===irParaPr) : -1;
+    const paginaAtualPr = posNovoPr>=0 ? Math.floor(posNovoPr/porPaginaPr)+1 : Math.min(paginaPr, totalPaginasPr);
+    const inicioPr = limite ? 0 : (paginaAtualPr-1)*porPaginaPr;
+    const listaPagina = limite ? lista : lista.slice(inicioPr, inicioPr+porPaginaPr);
+    const irPaginaPr = n => { setPaginaPr(n); setIrParaPr(null); };
+    const filtrarPr = (set, v) => { set(v); irPaginaPr(1); };
     return (
       <div className="bv-card" style={{...st.card,marginBottom:20}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -514,6 +538,11 @@ export default function App() {
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:10}}>
               <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={newPr.fornecedor} onChange={e=>setNewPr(p=>({...p,fornecedor:e.target.value}))}/></div>
               <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} placeholder="NF-000" value={newPr.nf} onChange={e=>setNewPr(p=>({...p,nf:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Motivo *</label>
+                <select style={{...st.inp,...(erroNovoPr&&!newPr.motivo?{border:"1px solid "+D.red}:{})}} value={newPr.motivo} onChange={e=>{setNewPr(p=>({...p,motivo:e.target.value}));setErroNovoPr("");}}>
+                  <option value="">Selecione...</option>{MOTIVOS_BOLETO.map(m=><option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
               <div><label style={st.lbl}>Valor (opcional)</label><CampoValor style={st.inp} value={newPr.valor} onChange={v=>setNewPr(p=>({...p,valor:v}))} onBlur={()=>setNewPr(p=>({...p,valor:fMoedaInput(p.valor)}))}/></div>
               <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={newPr.vencimento} onChange={e=>setNewPr(p=>({...p,vencimento:e.target.value}))}/></div>
               <div><label style={st.lbl}>Estado</label>
@@ -527,54 +556,65 @@ export default function App() {
                 </select>
               </div>
             </div>
+            {erroNovoPr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginTop:10,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{erroNovoPr}</div>}
             <div style={{display:"flex",gap:8,marginTop:10}}>
               <button style={st.btnBlue} onClick={addNF}><CheckCircle size={13}/>Salvar</button>
-              <button style={st.btn} onClick={()=>setShowProrrForm(false)}>Cancelar</button>
+              <button style={st.btn} onClick={()=>{setShowProrrForm(false);setErroNovoPr("");}}>Cancelar</button>
             </div>
           </div>
         )}
         {!limite&&prorrogacoes.length>0&&(
           <div style={{display:"flex",alignItems:"flex-end",gap:10,flexWrap:"wrap",marginBottom:14}}>
             <div style={{minWidth:180}}><label style={st.lbl}>Estado</label>
-              <select style={st.inp} value={filtroEstadoPr} onChange={e=>setFiltroEstadoPr(e.target.value)}>
+              <select style={st.inp} value={filtroEstadoPr} onChange={e=>filtrarPr(setFiltroEstadoPr,e.target.value)}>
                 <option value="todos">Todos</option><option value="Pará">Pará</option><option value="Maranhão">Maranhão</option><option value="Piauí">Piauí</option>
               </select>
             </div>
             <div style={{minWidth:160}}><label style={st.lbl}>Situação</label>
-              <select style={st.inp} value={filtroSituacaoPr} onChange={e=>setFiltroSituacaoPr(e.target.value)}>
+              <select style={st.inp} value={filtroSituacaoPr} onChange={e=>filtrarPr(setFiltroSituacaoPr,e.target.value)}>
                 <option value="todas">Todas</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="recusado">Recusado</option>
+              </select>
+            </div>
+            <div style={{minWidth:210}}><label style={st.lbl}>Motivo</label>
+              <select style={st.inp} value={filtroMotivoPr} onChange={e=>filtrarPr(setFiltroMotivoPr,e.target.value)}>
+                <option value="todos">Todos</option>{MOTIVOS_BOLETO.map(m=><option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div style={{flex:1,minWidth:200,maxWidth:420}}><label style={st.lbl}>Buscar</label>
               <div style={{position:"relative"}}>
                 <Search size={14} color={D.muted} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)"}}/>
-                <input placeholder="Fornecedor ou nº da NF" value={buscaPr} onChange={e=>setBuscaPr(e.target.value)} style={{...st.inp,paddingLeft:32}}/>
+                <input placeholder="Fornecedor ou nº da NF" value={buscaPr} onChange={e=>filtrarPr(setBuscaPr,e.target.value)} style={{...st.inp,paddingLeft:32}}/>
               </div>
             </div>
             {filtrando&&<div style={{fontSize:12,color:D.muted,paddingBottom:10}}>{lista.length} de {prorrogacoes.length} NF(s)</div>}
           </div>
         )}
-        {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:lista.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>{doEstado.length===0?<>Nenhum registro encontrado para {filtroEstadoPr}.</>:doSituacao.length===0?<>Nenhuma NF com situação {rotuloSituacaoPr}{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>:<>Nenhuma NF encontrada para "{buscaPr.trim()}"{rotuloSituacaoPr?<> com situação {rotuloSituacaoPr}</>:null}{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>}</div>:(
+        {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:lista.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>{doEstado.length===0?<>Nenhum registro encontrado para {filtroEstadoPr}.</>:doSituacao.length===0?<>Nenhuma NF com situação {rotuloSituacaoPr}{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>:doMotivo.length===0?<>Nenhuma NF com motivo "{filtroMotivoPr}"{rotuloSituacaoPr?<> e situação {rotuloSituacaoPr}</>:null}{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>:<>Nenhuma NF encontrada para "{buscaPr.trim()}"{rotuloSituacaoPr?<> com situação {rotuloSituacaoPr}</>:null}{filtroMotivoPr!=="todos"?<> e motivo "{filtroMotivoPr}"</>:null}{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>}</div>:(
           <div style={{overflowX:"auto"}}>
-          <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Fornecedor","NF","Valor","Vencimento","Estado","Data de Inclusão","Situação",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-            <tbody>{lista.map(pr=>{
+          {/* Larguras fixas por coluna (bv-tabela-boletos, só a partir de 681 px): o Fornecedor deixa de
+              ocupar o espaço sobrando e as colunas curtas ficam sem cortes; no celular a tabela vira cartões. */}
+          <table className="bv-table bv-tabela-boletos" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <colgroup>{COLUNAS_BOLETOS.map(c=><col key={c.h} style={c.w?{width:c.w}:undefined}/>)}</colgroup>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{COLUNAS_BOLETOS.map(c=><th key={c.h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{c.h}</th>)}</tr></thead>
+            <tbody>{listaPagina.map(pr=>{
               const ec=eCor(pr.situacao);
               const criador=users.find(u=>u.id===pr.criadoPor);
+              const [diaInclusao, horaInclusao] = pr.criadoEmHora ? fDataHoraBR(pr.criadoEmHora).split(" às ") : ["—", ""];
               return (
                 <Fragment key={pr.id}>
                 <tr style={{borderBottom:"1px solid "+D.border}}>
-                  <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text}}>
+                  <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text,overflowWrap:"anywhere"}}>
                     {pr.fornecedor}
                     <div style={{fontSize:10,color:D.muted,fontWeight:400,marginTop:2}}>Incluído por {criador?nomeVisivel(criador):"—"}</div>
                   </td>
-                  <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace"}}>{pr.nf}</td>
-                  <td data-label="Valor" style={{padding:"10px 8px",color:D.muted}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
-                  <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
+                  <td data-label="Motivo" style={{padding:"10px 8px",color:pr.motivo?D.text:D.muted,fontStyle:pr.motivo?"normal":"italic"}}>{pr.motivo||"Não informado"}</td>
+                  <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace",overflowWrap:"anywhere"}}>{pr.nf}</td>
+                  <td data-label="Valor" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
+                  <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
                   <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
-                  <td data-label="Data de Inclusão" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{pr.criadoEmHora?fDataHoraBR(pr.criadoEmHora):"—"}</td>
+                  <td data-label="Data de Inclusão" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{diaInclusao}{horaInclusao&&<span className="bv-hora-inclusao"> às {horaInclusao}</span>}</td>
                   <td data-label="Situação" style={{padding:"10px 8px"}}>
-                    <select value={pr.situacao} disabled={somenteLeitura} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:somenteLeitura?"default":"pointer",outline:"none"}}>
+                    <select value={pr.situacao} disabled={somenteLeitura} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:somenteLeitura?"default":"pointer",outline:"none",maxWidth:"100%"}}>
                       <option value="Aguardando retorno">Pendente</option>
                       {pr.situacao==="Em negociação"&&<option value="Em negociação" style={{display:"none"}}>Pendente</option>}
                       <option value="Prorrogação Aprovada">✓ Aprovado</option><option value="Recusado">✕ Recusado</option>
@@ -582,17 +622,24 @@ export default function App() {
                     {pr.situacao==="Prorrogação Aprovada"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>· {fData(pr.dataAprovacao)}</div>}
                     {pr.situacao==="Recusado"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>· {fData(pr.dataAprovacao)}</div>}
                   </td>
-                  <td style={{padding:"10px 8px",display:"flex",gap:4}}>
+                  <td style={{padding:"10px 8px"}}><div style={{display:"flex",gap:4}}>
                     {(isAdmin||isFin||isComercial)&&<button style={{...st.btn,padding:"3px 8px",fontSize:11}} onClick={()=>abrirEditPr(pr)}><Edit3 size={12}/></button>}
                     {(isAdmin||isFin)&&<button style={{...st.btn,padding:"3px 8px",fontSize:11,color:D.redText,borderColor:D.red+"44"}} onClick={()=>excluirNF(pr.id)}><X size={12}/></button>}
-                  </td>
+                  </div></td>
                 </tr>
                 {editPr===pr.id&&(
                   <tr>
-                    <td colSpan={8} style={{padding:14,background:D.bg}}>
+                    <td colSpan={COLUNAS_BOLETOS.length} style={{padding:14,background:D.bg}}>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
                         <div><label style={st.lbl}>Fornecedor</label><input style={st.inp} value={editPrData.fornecedor} onChange={e=>setEditPrData(p=>({...p,fornecedor:e.target.value}))}/></div>
                         <div><label style={st.lbl}>Nº da NF</label><input style={st.inp} value={editPrData.nf} onChange={e=>setEditPrData(p=>({...p,nf:e.target.value}))}/></div>
+                        <div><label style={st.lbl}>Motivo{editPrData.motivoOriginal?" *":""}</label>
+                          <select style={st.inp} value={editPrData.motivo} onChange={e=>{setEditPrData(p=>({...p,motivo:e.target.value}));setErroEditPr("");}}>
+                            {/* "Não informado" só para boletos antigos que ainda não têm motivo. */}
+                            {!editPrData.motivoOriginal&&<option value="">Não informado</option>}
+                            {MOTIVOS_BOLETO.map(m=><option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
                         <div><label style={st.lbl}>Valor (opcional)</label><CampoValor style={st.inp} value={editPrData.valor} onChange={v=>setEditPrData(p=>({...p,valor:v}))} onBlur={()=>setEditPrData(p=>({...p,valor:fMoedaInput(p.valor)}))}/></div>
                         <div><label style={st.lbl}>Vencimento</label><input type="date" style={st.inp} value={editPrData.vencimento} onChange={e=>setEditPrData(p=>({...p,vencimento:e.target.value}))}/></div>
                         <div><label style={st.lbl}>Estado</label>
@@ -602,9 +649,10 @@ export default function App() {
                         </div>
                         <div><label style={st.lbl}>Data de inclusão</label><div style={{...st.inp,background:D.bg,color:D.muted,cursor:"default"}}>{pr.criadoEmHora?fDataHoraBR(pr.criadoEmHora):"—"}</div></div>
                       </div>
+                      {erroEditPr&&<div style={{fontSize:12,color:D.redText,background:D.redSoft,borderRadius:8,padding:"7px 10px",marginTop:10,display:"flex",alignItems:"center",gap:6}}><AlertCircle size={13}/>{erroEditPr}</div>}
                       <div style={{display:"flex",gap:8,marginTop:10}}>
                         <button style={st.btnBlue} onClick={salvarEditPr}><Save size={13}/>Salvar</button>
-                        <button style={st.btn} onClick={()=>setEditPr(null)}>Cancelar</button>
+                        <button style={st.btn} onClick={()=>{setEditPr(null);setErroEditPr("");}}>Cancelar</button>
                       </div>
                     </td>
                   </tr>
@@ -613,6 +661,29 @@ export default function App() {
               );
             })}</tbody>
           </table>
+          </div>
+        )}
+        {!limite&&lista.length>0&&(
+          <div className="bv-paginacao-boletos" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginTop:14,fontSize:13,color:D.muted}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span>Mostrando {inicioPr+1}–{Math.min(inicioPr+porPaginaPr,lista.length)} de {lista.length}</span>
+              <select aria-label="Registros por página" style={{...st.inp,width:"auto",padding:"5px 8px",fontSize:12}} value={porPaginaPr} onChange={e=>filtrarPr(setPorPaginaPr,Number(e.target.value))}>
+                {[20,50,100].map(n=><option key={n} value={n}>{n} por página</option>)}
+              </select>
+            </div>
+            {totalPaginasPr>1&&(
+              <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+                <button style={{...st.btn,padding:"5px 10px",fontSize:12,opacity:paginaAtualPr===1?0.45:1}} disabled={paginaAtualPr===1} onClick={()=>irPaginaPr(paginaAtualPr-1)}>Anterior</button>
+                {/* Primeira, última e até 2 vizinhas da atual; o resto vira "…" (a lista não cresce sem limite). */}
+                {Array.from({length:totalPaginasPr},(_,i)=>i+1).filter(n=>n===1||n===totalPaginasPr||Math.abs(n-paginaAtualPr)<=2).map((n,i,arr)=>(
+                  <Fragment key={n}>
+                    {i>0&&n-arr[i-1]>1&&<span style={{padding:"0 4px",color:D.muted}}>…</span>}
+                    <button aria-current={n===paginaAtualPr?"page":undefined} style={{...(n===paginaAtualPr?st.btnBlue:st.btn),padding:"5px 10px",fontSize:12,minWidth:32,justifyContent:"center"}} onClick={()=>irPaginaPr(n)}>{n}</button>
+                  </Fragment>
+                ))}
+                <button style={{...st.btn,padding:"5px 10px",fontSize:12,opacity:paginaAtualPr===totalPaginasPr?0.45:1}} disabled={paginaAtualPr===totalPaginasPr} onClick={()=>irPaginaPr(paginaAtualPr+1)}>Próxima</button>
+              </div>
+            )}
           </div>
         )}
         {limite&&prorrogacoes.length>limite&&(
@@ -1149,19 +1220,23 @@ export default function App() {
   async function addNF(){
     if(bloqueadoDemo()||bloqueadoSomenteLeitura()) return;
     if(!newPr.fornecedor||!newPr.nf) return;
+    if(!newPr.motivo){ setErroNovoPr("Selecione o motivo do boleto."); return; }
+    setErroNovoPr("");
     const { data, error } = await supabase.from("pendencias").insert({
       fornecedor: newPr.fornecedor,
       numero_nf: newPr.nf,
+      motivo: newPr.motivo,
       vencimento: newPr.vencimento || null,
       estado: newPr.estado,
       situacao: newPr.situacao,
       valor: newPr.valor===""?null:parseMoedaInput(newPr.valor),
       created_by: user?user.id:null,
     }).select().single();
-    if(error||!data) return;
+    if(error||!data){ setErroNovoPr(error&&error.code==="P0001"?error.message:"Não foi possível salvar. Tente novamente."); return; }
     setProrrogacoes(prev=>prev.concat([mapPendenciaRow(data)]));
-    addN("NF incluída: "+newPr.nf); addA("NF incluída",newPr.fornecedor,"NF: "+newPr.nf);
-    setNewPr({fornecedor:"",nf:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno",valor:""}); setShowProrrForm(false);
+    setIrParaPr(data.id);
+    addN("NF incluída: "+newPr.nf); addA("NF incluída",newPr.fornecedor,"NF: "+newPr.nf+" — Motivo: "+newPr.motivo);
+    setNewPr({fornecedor:"",nf:"",motivo:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno",valor:""}); setShowProrrForm(false);
   }
 
   async function mudarSituacaoNF(id,situacao){
@@ -1199,21 +1274,26 @@ export default function App() {
 
   function abrirEditPr(pr){
     setEditPr(pr.id);
-    setEditPrData({fornecedor:pr.fornecedor,nf:pr.nf,vencimento:pr.vencimento,estado:pr.estado,valor:pr.valor!=null?fMoedaInput(pr.valor):""});
+    setEditPrData({fornecedor:pr.fornecedor,nf:pr.nf,motivo:pr.motivo||"",motivoOriginal:pr.motivo||"",vencimento:pr.vencimento,estado:pr.estado,valor:pr.valor!=null?fMoedaInput(pr.valor):""});
+    setErroEditPr("");
   }
 
   async function salvarEditPr(){
     if(bloqueadoDemo()||bloqueadoSomenteLeitura()) return;
     if(!editPrData.fornecedor||!editPrData.nf) return;
+    // Boleto antigo sem motivo pode continuar assim; um motivo já informado não pode ser apagado.
+    if(editPrData.motivoOriginal&&!editPrData.motivo){ setErroEditPr("Selecione o motivo do boleto."); return; }
+    setErroEditPr("");
     const { error } = await supabase.from("pendencias").update({
       fornecedor: editPrData.fornecedor,
       numero_nf: editPrData.nf,
+      motivo: editPrData.motivo || null,
       vencimento: editPrData.vencimento || null,
       estado: editPrData.estado,
       valor: editPrData.valor===""?null:parseMoedaInput(editPrData.valor),
     }).eq("id", editPr);
-    if(error) return;
-    setProrrogacoes(prev=>prev.map(x=>x.id===editPr?{...x,fornecedor:editPrData.fornecedor,nf:editPrData.nf,vencimento:editPrData.vencimento,estado:editPrData.estado,valor:editPrData.valor===""?null:parseMoedaInput(editPrData.valor)}:x));
+    if(error){ setErroEditPr(error.code==="P0001"?error.message:"Não foi possível salvar. Tente novamente."); return; }
+    setProrrogacoes(prev=>prev.map(x=>x.id===editPr?{...x,fornecedor:editPrData.fornecedor,nf:editPrData.nf,motivo:editPrData.motivo,vencimento:editPrData.vencimento,estado:editPrData.estado,valor:editPrData.valor===""?null:parseMoedaInput(editPrData.valor)}:x));
     addA("NF editada",editPrData.fornecedor,"Dados atualizados por "+(user?user.name:""));
     setEditPr(null);
   }
@@ -1320,8 +1400,8 @@ export default function App() {
     }
 
     // "peso" define a largura relativa da coluna (não um "%" fixo), pra
-    // caber em A4 retrato tanto com 8 colunas (aguardando/recusado) quanto
-    // com 9 (aprovado, +Aprovado em) sem sobrar nem faltar largura — o %
+    // caber na página tanto com 9 colunas (aguardando/recusado) quanto
+    // com 10 (aprovado, +Aprovado em) sem sobrar nem faltar largura — o %
     // real de cada uma é peso/somaDosPesos das colunas realmente exibidas.
     // Vencimento/Solicitado em/Aprovado em mostram data "DD/MM/AAAA" —
     // marcadas dataCol pra nunca quebrar linha (ver .data-col no <style>
@@ -1329,6 +1409,8 @@ export default function App() {
     // que os rótulos de situação encurtaram (ver situacaoLabel).
     const colunasBase=[
       {h:"Fornecedor", peso:2.4, get:function(pr){ return pr.fornecedor; }},
+      // Motivo (28/10/2026), na mesma posição da tela; boletos antigos sem motivo saem como "Não informado".
+      {h:"Motivo", peso:1.8, get:function(pr){ return pr.motivo||"Não informado"; }},
       {h:"NF", peso:1.0, get:function(pr){ return pr.nf; }},
       {h:"Valor", peso:1.1, get:function(pr){ return Number(pr.valor)>0?fBRL(pr.valor):"—"; }},
       {h:"Vencimento", peso:1.7, dataCol:true, get:function(pr){ return pr.vencimento?fData(pr.vencimento):"—"; }},

@@ -189,8 +189,12 @@ export function mapTarefaRow(row): Tarefa {
 // pelo banco no insert e nunca reenviado no update — ver addNF/salvarEditPr
 // em App.tsx), usado na coluna "Data de Inclusão" da listagem em tela.
 export function mapPendenciaRow(row){
-  return { id: row.id, fornecedor: row.fornecedor, nf: row.numero_nf, vencimento: row.vencimento || "", estado: row.estado, situacao: row.situacao, valor: row.valor, criadoPor: row.created_by, dataAprovacao: row.data_aprovacao_prorrogacao || "", criadoEm: row.created_at ? row.created_at.split("T")[0] : "", criadoEmHora: row.created_at || "" };
+  return { id: row.id, fornecedor: row.fornecedor, nf: row.numero_nf, vencimento: row.vencimento || "", estado: row.estado, situacao: row.situacao, valor: row.valor, motivo: row.motivo || "", criadoPor: row.created_by, dataAprovacao: row.data_aprovacao_prorrogacao || "", criadoEm: row.created_at ? row.created_at.split("T")[0] : "", criadoEmHora: row.created_at || "" };
 }
+
+// Motivo do boleto (28/10/2026): obrigatório na inclusão; os valores gravados em pendencias.motivo são os
+// próprios rótulos (como estado e situacao). Vazio só em boletos incluídos antes da regra ("Não informado").
+export const MOTIVOS_BOLETO = ["Atraso na entrega", "Prazo diferente do acordado"];
 
 // Converte uma linha da tabela contratos (+ representantes aninhado, via representante_id) para a UI.
 export function mapContratoRow(row): Contrato {
