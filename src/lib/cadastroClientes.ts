@@ -1,7 +1,7 @@
 // Cadastro de Clientes — regras compartilhadas pela lista, pelo detalhe e pela ficha impressa.
 // O banco é a proteção real (20261022000100_cadastro_clientes.sql); as funções de permissão
 // abaixo só espelham cadastro_clientes_pode_ver/editar/administrar para esconder o que falharia.
-import { fData, fDataHoraBR } from "./helpers";
+import { fData, fDataHoraBR, fBRL, parseMoedaInput } from "./helpers";
 
 const ID_BARBARA = "6db64d55-bca1-49d0-b789-dabdbc646463";
 const ID_ARIANA = "95dd833e-db0e-4e65-b7fe-1188ed8ee5a3";
@@ -43,8 +43,22 @@ export const ALVARAS = [
 // Controlados: vazio = "Não informado" (pendência); NAO_CADASTRADO = o cliente não trabalha com controlados (regular).
 export const ROTULO_NAO_CADASTRADO = "Não cadastrado (não trabalha com controlados)";
 export const OPCOES_CONTROLADOS = [{v:"",l:"Não informado"},{v:"OK",l:"OK"},{v:"NAO_CADASTRADO",l:ROTULO_NAO_CADASTRADO}];
-export const OPCOES_SINTEGRA = [{v:"",l:"Não verificado"},{v:"HABILITADO",l:"Habilitado"},{v:"NAO_HABILITADO",l:"Não habilitado"}];
+// Sintegra (23/10/2026): sem "Não verificado" na seleção — o vazio só existe em registros antigos.
+export const OPCOES_SINTEGRA = [{v:"HABILITADO",l:"Habilitado"},{v:"NAO_HABILITADO",l:"Não habilitado"},{v:"HABILITADO_COM_RESTRICAO",l:"Habilitado com restrição"}];
 export const OPCOES_SERASA = [{v:"",l:"Não verificado"},{v:"SEM_PENDENCIAS",l:"Sem pendências"},{v:"COM_PENDENCIAS",l:"Com pendências"}];
+export const OPCOES_ORIGEM = [{v:"TELEVENDAS",l:"Televendas"},{v:"VENDEDOR",l:"Vendedor"},{v:"SUPERVISOR",l:"Supervisor"},{v:"REPRESENTANTE",l:"Representante"}];
+// Representante da nossa empresa (lista oficial) ou de outra empresa (só o nome, nunca na lista oficial).
+export const TIPOS_REPRESENTANTE = [{v:"INTERNO",l:"Da nossa empresa"},{v:"EXTERNO",l:"De outra empresa"}];
+export const FILTRO_REP_EXTERNO = "__externo__";
+export function nomeRepresentante(c){
+  if(c.representanteTipo==="EXTERNO") return c.representanteExternoNome ? c.representanteExternoNome+" (outra empresa)" : "";
+  return c.representanteNome||"";
+}
+export function rotuloOrigem(v){ const o = OPCOES_ORIGEM.find(x=>x.v===v); return o ? o.l : ""; }
+// Serasa com pendências: "Total: R$ 15.800,00" ou aviso de valor ausente (registros antigos).
+export function textoSerasaTotal(c){
+  return c.serasaValorPendencias!=null ? "Total: "+fBRL(c.serasaValorPendencias) : "valor não informado";
+}
 
 export function mapClienteRow(r){
   return {
@@ -57,6 +71,8 @@ export function mapClienteRow(r){
     docFotos:r.doc_fotos||"PENDENTE", docNotas:r.doc_notas||"PENDENTE", docControlados:r.doc_controlados||"",
     alvaraPrefeituraVencimento:r.alvara_prefeitura_vencimento||"", alvaraSanitarioVencimento:r.alvara_sanitario_vencimento||"",
     sintegra:r.sintegra||"", serasa:r.serasa||"",
+    serasaValorPendencias: r.serasa_valor_pendencias==null||r.serasa_valor_pendencias==="" ? null : Number(r.serasa_valor_pendencias),
+    origemCadastro:r.origem_cadastro||"", representanteTipo:r.representante_tipo||"INTERNO", representanteExternoNome:r.representante_externo_nome||"",
     createdByNome:r.created_by_nome||"", createdAt:r.created_at||"", updatedByNome:r.updated_by_nome||"", updatedAt:r.updated_at||"",
     excluidoEm:r.excluido_em||"", excluidoPorNome:r.excluido_por_nome||"",
   };
@@ -68,10 +84,16 @@ export function payloadCliente(f, incluirSituacao){
   const p: Record<string, unknown> = {
     razao_social:f.razaoSocial, codigo_razao_social:vazio(f.codigoRazaoSocial), cnpj:vazio(soDigitos(f.cnpj)),
     grupo:vazio(f.grupo), televendas:vazio(f.televendas), responsavel_nome:vazio(f.responsavelNome),
-    telefone:vazio(f.telefone), email:vazio(f.email), representante_id:vazio(f.representanteId), supervisor_id:vazio(f.supervisorId),
+    telefone:vazio(f.telefone), email:vazio(f.email), supervisor_id:vazio(f.supervisorId),
     data_inclusao_target:vazio(f.dataInclusaoTarget), observacoes:vazio(f.observacoes),
     doc_controlados:vazio(f.docControlados), sintegra:vazio(f.sintegra), serasa:vazio(f.serasa),
+    origem_cadastro:vazio(f.origemCadastro), representante_codigo:vazio((f.representanteCodigo||"").trim()),
+    serasa_valor_pendencias: f.serasa==="COM_PENDENCIAS" ? parseMoedaInput(f.serasaValor) : null,
   };
+  const externo = f.representanteTipo==="EXTERNO";
+  p.representante_tipo = externo ? "EXTERNO" : "INTERNO";
+  p.representante_id = externo ? null : vazio(f.representanteId);
+  p.representante_externo_nome = externo ? vazio((f.representanteExternoNome||"").trim()) : null;
   DOCS_OK_PENDENTE.forEach(d=>{ p[d.coluna]=f[d.campo]||"PENDENTE"; });
   ALVARAS.forEach(a=>{ p[a.coluna]=vazio(f[a.campo]); });
   if(incluirSituacao) p.situacao = f.situacao;
@@ -105,16 +127,19 @@ export function alvaraInfo(s, D){
 }
 
 // Documentos faltantes: os OK/PENDENTE marcados como Pendente, os alvarás sem data, Controlados não
-// informado e Sintegra não verificado (regra de 23/10/2026). Controlados "Não cadastrado", Sintegra
-// "Não habilitado" (alerta) e Serasa nunca entram aqui.
+// informado, Sintegra "Habilitado com restrição" e Sintegra vazio (só registros antigos). Controlados
+// "Não cadastrado", Sintegra "Não habilitado" (alerta) e Serasa nunca entram aqui.
+// PENDENCIAS_EXTRAS alimenta o filtro "Documento pendente" (um item por campo).
 export const PENDENCIAS_EXTRAS = [
   {campo:"docControlados", label:"Controlados (não informado)"},
-  {campo:"sintegra", label:"Sintegra (não verificado)"},
+  {campo:"sintegra", label:"Sintegra (com restrição ou não verificado)"},
 ];
 export function documentosPendentes(c){
   const lista = DOCS_OK_PENDENTE.filter(d=>c[d.campo]!=="OK").map(d=>({campo:d.campo, label:d.label}));
   ALVARAS.forEach(a=>{ if(!c[a.campo]) lista.push({campo:a.campo, label:a.label+" (sem data)"}); });
-  PENDENCIAS_EXTRAS.forEach(p=>{ if(!c[p.campo]) lista.push({campo:p.campo, label:p.label}); });
+  if(!c.docControlados) lista.push({campo:"docControlados", label:"Controlados (não informado)"});
+  if(c.sintegra==="HABILITADO_COM_RESTRICAO") lista.push({campo:"sintegra", label:"Sintegra (habilitado com restrição)"});
+  else if(!c.sintegra) lista.push({campo:"sintegra", label:"Sintegra (não verificado)"});
   return lista;
 }
 export function alertasCliente(c, hoje){
@@ -127,7 +152,7 @@ export function alertasCliente(c, hoje){
   // Sintegra não verificado agora é pendência (documentosPendentes), então não se repete aqui.
   // Serasa vazio continua como alerta "não verificado" (alternativa C, 22/10/2026).
   if(c.sintegra==="NAO_HABILITADO") lista.push({tipo:"ALERTA", texto:"Sintegra não habilitado"});
-  if(c.serasa==="COM_PENDENCIAS") lista.push({tipo:"ALERTA", texto:"Serasa com pendências"});
+  if(c.serasa==="COM_PENDENCIAS") lista.push({tipo:"ALERTA", texto:"Serasa com pendências — "+textoSerasaTotal(c)});
   if(!c.serasa) lista.push({tipo:"ALERTA", texto:"Serasa não verificado"});
   if(c.situacao==="EFETIVADO" && documentosPendentes(c).length>0) lista.push({tipo:"ALERTA", texto:"Efetivado com documento pendente"});
   return lista;
@@ -176,14 +201,16 @@ export function mensagemErroCliente(error){
     return error.message || "Já existe um cadastro ativo com estes dados.";
   }
   if(error.code==="23514") return /cnpj/i.test(m) ? "O CNPJ precisa ter 14 dígitos." : "Um dos valores informados não é válido.";
-  if(error.code==="P0002") return error.message;
+  if(error.code==="P0002" || error.code==="P0001") return error.message;
   return "Não foi possível concluir"+(error.code?" (código "+error.code+")":"")+". Se o problema continuar, informe esse código ao suporte.";
 }
 
 // Histórico: rótulos dos campos e valores legíveis.
 export const ROTULO_CAMPO = {
   razao_social:"Razão social", codigo_razao_social:"Código da razão social", cnpj:"CNPJ", grupo:"Grupo", televendas:"Televendas",
-  responsavel_nome:"Responsável pelo cliente", telefone:"Telefone", email:"E-mail", representante:"Representante", supervisor:"Supervisor",
+  responsavel_nome:"Responsável pela farmácia", telefone:"Telefone", email:"E-mail", representante:"Representante", supervisor:"Supervisor",
+  origem_cadastro:"Origem do cadastro", representante_tipo:"Tipo de representante", representante_externo_nome:"Representante de outra empresa",
+  representante_codigo:"Código", serasa_valor_pendencias:"Serasa — valor total das pendências",
   data_inclusao_target:"Data de inclusão na TARGET", observacoes:"Observações", situacao:"Situação",
   doc_contrato_social:"Contrato social", doc_cnpj:"CNPJ (documento)", doc_crf:"CRF", doc_fotos:"Fotos", doc_notas:"Notas",
   doc_controlados:"Controlados", alvara_prefeitura_vencimento:"Alvará da Prefeitura", alvara_sanitario_vencimento:"Alvará Sanitário",
@@ -192,11 +219,19 @@ export const ROTULO_CAMPO = {
 const ROTULO_VALOR = {
   OK:"OK", PENDENTE:"Pendente", NAO_CADASTRADO:ROTULO_NAO_CADASTRADO, HABILITADO:"Habilitado", NAO_HABILITADO:"Não habilitado",
   SEM_PENDENCIAS:"Sem pendências", COM_PENDENCIAS:"Com pendências", EM_ANALISE:"Em análise", AGUARDANDO_CLIENTE:"Aguardando cliente", EFETIVADO:"Efetivado",
+  HABILITADO_COM_RESTRICAO:"Habilitado com restrição",
+};
+// Valores de um único campo (evita confundir, por exemplo, a origem "SUPERVISOR" com outro uso).
+const ROTULO_VALOR_CAMPO = {
+  origem_cadastro: Object.fromEntries(OPCOES_ORIGEM.map(o=>[o.v,o.l])),
+  representante_tipo: Object.fromEntries(TIPOS_REPRESENTANTE.map(o=>[o.v,o.l])),
 };
 // Estados vazios com nome próprio (em vez de "—") no histórico.
-const ROTULO_VAZIO = { doc_controlados:"Não informado", sintegra:"Não verificado", serasa:"Não verificado" };
+const ROTULO_VAZIO = { doc_controlados:"Não informado", sintegra:"Não verificado", serasa:"Não verificado", origem_cadastro:"Não informado", serasa_valor_pendencias:"Não informado" };
 export function valorLegivel(campo, v){
   if(v==null || v==="") return ROTULO_VAZIO[campo] || "—";
+  if(ROTULO_VALOR_CAMPO[campo] && ROTULO_VALOR_CAMPO[campo][v]) return ROTULO_VALOR_CAMPO[campo][v];
+  if(campo==="serasa_valor_pendencias") return fBRL(v);
   if(campo==="situacao" && v==="PENDENTE") return "Pendente";
   if(ROTULO_VALOR[v]) return ROTULO_VALOR[v];
   if(campo==="cnpj") return formatarCnpj(v);
@@ -205,7 +240,8 @@ export function valorLegivel(campo, v){
 }
 
 // --- Ficha para impressão (A4 retrato, janela própria, sem nada da interface) ---
-// Grupo e Televendas ficam de fora da ficha por decisão de 23/10/2026; continuam no cadastro e na tela.
+// Grupo, Televendas e o Código ficam de fora da ficha por decisão de 23/10/2026; continuam no cadastro
+// e na tela.
 function esc(v){
   return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
@@ -240,16 +276,16 @@ tr{page-break-inside:avoid}
 <div class="cab"><div><h1>Ficha de Cadastro de Cliente</h1><div class="sub">BP-Visionn · Cadastro de Clientes</div></div><div class="sit">${esc(sit)}</div></div>
 <h2>Informações gerais</h2>
 <table><tr>${linha("Cliente / Razão social", v(c.razaoSocial), 3)}${linha("Código da razão social", v(c.codigoRazaoSocial))}</tr>
-<tr>${linha("CNPJ", v(c.cnpj?formatarCnpj(c.cnpj):""), 2)}${linha("Responsável pelo cliente", v(c.responsavelNome), 2)}</tr>
-<tr>${linha("Representante / Vendedor", v(c.representanteNome), 2)}${linha("Código do representante", v(c.representanteCodigo))}${linha("Supervisor", v(c.supervisorNome))}</tr>
+<tr>${linha("CNPJ", v(c.cnpj?formatarCnpj(c.cnpj):""), 2)}${linha("Responsável pela farmácia", v(c.responsavelNome), 2)}</tr>
+<tr>${linha("Representante / Vendedor", v(nomeRepresentante(c)), 2)}${linha("Supervisor", v(c.supervisorNome), 2)}</tr>
 <tr>${linha("Telefone", v(c.telefone), 2)}${linha("E-mail", v(c.email), 2)}</tr>
 <tr>${linha("Data de inclusão na TARGET", v(c.dataInclusaoTarget?fData(c.dataInclusaoTarget):""), 2)}${linha("Registrado no BP-Visionn", v(c.createdAt?fDataHoraBR(c.createdAt)+(c.createdByNome?" — "+c.createdByNome:""):""), 2)}</tr></table>
 <h2>Documentos</h2>
 <table class="docs">${docsOk}
 <tr><td class="dn">Controlados</td><td>${marca(c.docControlados==="OK","OK")} ${marca(c.docControlados==="NAO_CADASTRADO","NÃO CADASTRADO (não trabalha com controlados)")} ${marca(!c.docControlados,"NÃO INFORMADO")}</td></tr>
 ${alv}
-<tr><td class="dn">Sintegra</td><td>${marca(c.sintegra==="HABILITADO","HABILITADO")} ${marca(c.sintegra==="NAO_HABILITADO","NÃO HABILITADO")} ${marca(!c.sintegra,"NÃO VERIFICADO")}</td></tr>
-<tr><td class="dn">Serasa</td><td>${marca(c.serasa==="COM_PENDENCIAS","COM PENDÊNCIAS")} ${marca(c.serasa==="SEM_PENDENCIAS","SEM PENDÊNCIAS")}</td></tr></table>
+<tr><td class="dn">Sintegra</td><td>${marca(c.sintegra==="HABILITADO","HABILITADO")} ${marca(c.sintegra==="NAO_HABILITADO","NÃO HABILITADO")} ${marca(c.sintegra==="HABILITADO_COM_RESTRICAO","HABILITADO COM RESTRIÇÃO")}${!c.sintegra?" "+marca(true,"NÃO VERIFICADO"):""}</td></tr>
+<tr><td class="dn">Serasa</td><td>${marca(c.serasa==="COM_PENDENCIAS","COM PENDÊNCIAS")}${c.serasa==="COM_PENDENCIAS"?`<b> — ${esc(textoSerasaTotal(c))}</b>`:""} ${marca(c.serasa==="SEM_PENDENCIAS","SEM PENDÊNCIAS")}</td></tr></table>
 <div class="box"><b>Documentos pendentes:</b> ${pend.length?pend.map(p=>esc(p.label)).join(" · "):"nenhum"}</div>
 ${alertas.length?`<div class="box"><b>Alertas:</b> ${alertas.map(a=>esc(a.texto)).join(" · ")}</div>`:""}
 <div class="box"><b>Observações:</b> ${c.observacoes?esc(c.observacoes):""}</div>

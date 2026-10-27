@@ -5,6 +5,7 @@ import { fData, fDataHoraBR } from "../lib/helpers";
 import {
   situacaoInfo, DOCS_OK_PENDENTE, ALVARAS, statusAlvara, alvaraInfo, documentosPendentes, alertasCliente,
   formatarCnpj, ROTULO_CAMPO, valorLegivel, mensagemErroCliente, ROTULO_NAO_CADASTRADO,
+  nomeRepresentante, rotuloOrigem, textoSerasaTotal,
 } from "../lib/cadastroClientes";
 
 const TIPO_HIST = {
@@ -94,8 +95,9 @@ export default function CadastroClienteDetalhe(p) {
             {campo("Cliente / Razão social", c.razaoSocial)}
             {campo("Código da razão social", c.codigoRazaoSocial)}
             {campo("CNPJ", c.cnpj?formatarCnpj(c.cnpj):"")}
+            {campo("Origem do cadastro", rotuloOrigem(c.origemCadastro)||"Não informado")}
             {campo("Grupo", c.grupo)}
-            {campo("Responsável pelo cliente", c.responsavelNome)}
+            {campo("Responsável pela farmácia", c.responsavelNome)}
             {campo("Telefone", c.telefone)}
             {campo("E-mail", c.email)}
             {campo("Data de inclusão na TARGET", c.dataInclusaoTarget?fData(c.dataInclusaoTarget):"")}
@@ -108,8 +110,8 @@ export default function CadastroClienteDetalhe(p) {
         <div className="bv-card" style={st.card}>
           {titulo(Users,"Representação")}
           <div style={grade}>
-            {campo("Representante / vendedor", c.representanteNome)}
-            {campo("Código do representante", c.representanteCodigo)}
+            {campo("Representante / vendedor", nomeRepresentante(c))}
+            {campo("Código", c.representanteCodigo)}
             {campo("Supervisor", c.supervisorNome)}
             {campo("Televendas", c.televendas)}
           </div>
@@ -125,8 +127,8 @@ export default function CadastroClienteDetalhe(p) {
           {linhaDoc("Controlados", c.docControlados==="OK"?chip("OK",okInfo):c.docControlados==="NAO_CADASTRADO"?chip(ROTULO_NAO_CADASTRADO,neutro):chip("Não informado",pendInfo))}
           {ALVARAS.map(a=>{ const s = statusAlvara(c[a.campo], hoje), info = alvaraInfo(s,D);
             return <div key={a.campo}>{linhaDoc(a.label, <span style={{display:"flex",gap:8,alignItems:"center"}}>{c[a.campo]&&<span style={{fontSize:12.5,color:D.muted}}>vence {fData(c[a.campo])}</span>}{chip(info.label,info)}</span>)}</div>; })}
-          {linhaDoc("Sintegra", c.sintegra==="HABILITADO"?chip("Habilitado",okInfo):c.sintegra==="NAO_HABILITADO"?chip("Não habilitado",alertaInfo):chip("Não verificado",pendInfo))}
-          {linhaDoc("Serasa", c.serasa==="SEM_PENDENCIAS"?chip("Sem pendências",okInfo):c.serasa==="COM_PENDENCIAS"?chip("Com pendências",alertaInfo):chip("Não verificado",alertaInfo))}
+          {linhaDoc("Sintegra", c.sintegra==="HABILITADO"?chip("Habilitado",okInfo):c.sintegra==="NAO_HABILITADO"?chip("Não habilitado",alertaInfo):c.sintegra==="HABILITADO_COM_RESTRICAO"?chip("Habilitado com restrição",pendInfo):chip("Não verificado",pendInfo))}
+          {linhaDoc("Serasa", c.serasa==="SEM_PENDENCIAS"?chip("Sem pendências",okInfo):c.serasa==="COM_PENDENCIAS"?chip("Com pendências — "+textoSerasaTotal(c),alertaInfo):chip("Não verificado",alertaInfo))}
         </div>
 
         <div className="bv-card" style={{...st.card,gridColumn:"1/-1"}}>

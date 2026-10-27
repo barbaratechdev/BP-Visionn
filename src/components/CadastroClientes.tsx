@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Plus, Search, AlertCircle, AlertTriangle, Save, Contact, Clock, CheckCircle, Hourglass, FileSearch, CalendarX, CalendarClock, Printer, Eye, Pencil, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { fDataHoraBR, nomeVisivel } from "../lib/helpers";
+import { fDataHoraBR, nomeVisivel, fMoedaInput, fMoedaInputLive, parseMoedaInput } from "../lib/helpers";
 import { useDraggable } from "../lib/useDraggable";
 import {
   SITUACOES, situacaoInfo, DOCS_OK_PENDENTE, ALVARAS, OPCOES_CONTROLADOS, OPCOES_SINTEGRA, OPCOES_SERASA,
   mapClienteRow, payloadCliente, hojeBelem, statusAlvara, alvaraInfo, documentosPendentes, alertasCliente, PENDENCIAS_EXTRAS,
+  OPCOES_ORIGEM, TIPOS_REPRESENTANTE, FILTRO_REP_EXTERNO, nomeRepresentante,
   formatarCnpj, soDigitos, cnpjDigitosOk, razoesParecidas, mensagemErroCliente, imprimirFicha,
 } from "../lib/cadastroClientes";
 import MCard from "./MCard";
@@ -16,7 +17,14 @@ const FORM_VAZIO = {
   representanteId:"", supervisorId:"", dataInclusaoTarget:"", observacoes:"", situacao:"PENDENTE",
   docContratoSocial:"PENDENTE", docCnpj:"PENDENTE", docCrf:"PENDENTE", docFotos:"PENDENTE", docNotas:"PENDENTE",
   docControlados:"", alvaraPrefeituraVencimento:"", alvaraSanitarioVencimento:"", sintegra:"", serasa:"",
+  origemCadastro:"", representanteTipo:"INTERNO", representanteExternoNome:"", representanteCodigo:"", serasaValor:"",
+  supervisorIdOriginal:"",
 };
+// Até esta largura a janela do formulário ocupa a tela inteira e não é arrastada (ver estilo no modal).
+const CSS_MODAL_CADASTRO = `@media (max-width:640px){
+  .bv-cadastro-backdrop{padding:0!important;align-items:stretch!important}
+  .bv-cadastro-modal{max-width:none!important;width:100vw!important;height:100dvh!important;max-height:none!important;border-radius:0!important;transform:none!important;padding:1rem!important}
+}`;
 
 // Cadastro de Clientes — fichas de cadastro enviadas pelos representantes. Um registro por cliente:
 // quando um documento chega, o mesmo registro é atualizado. Autor, datas e histórico ficam a cargo do
@@ -76,10 +84,11 @@ export default function CadastroClientes(p) {
   const buscaN = busca.trim().toLowerCase();
   const base = lista.filter(c=>{
     if(c.excluidoEm && !(podeAdministrar&&mostrarExcluidos)) return false;
-    if(buscaN && !(c.razaoSocial.toLowerCase().includes(buscaN) || c.responsavelNome.toLowerCase().includes(buscaN) || c.grupo.toLowerCase().includes(buscaN))) return false;
+    if(buscaN && !(c.razaoSocial.toLowerCase().includes(buscaN) || c.responsavelNome.toLowerCase().includes(buscaN) || c.grupo.toLowerCase().includes(buscaN) || c.representanteExternoNome.toLowerCase().includes(buscaN))) return false;
     if(fCodigo.trim() && !c.codigoRazaoSocial.toLowerCase().includes(fCodigo.trim().toLowerCase())) return false;
     if(soDigitos(fCnpj) && !c.cnpj.includes(soDigitos(fCnpj))) return false;
-    if(fRep && c.representanteId!==fRep) return false;
+    if(fRep===FILTRO_REP_EXTERNO){ if(c.representanteTipo!=="EXTERNO") return false; }
+    else if(fRep && c.representanteId!==fRep) return false;
     if(fSup && c.supervisorId!==fSup) return false;
     const inclusao = c.createdAt ? new Intl.DateTimeFormat("en-CA",{timeZone:"America/Belem"}).format(new Date(c.createdAt)) : "";
     if(fDe && inclusao<fDe) return false;
@@ -106,16 +115,26 @@ export default function CadastroClientes(p) {
   // --- Formulário
   function abrirNovo(){ setForm(FORM_VAZIO); setFormErr(""); resetDrag(); setShowForm(true); }
   function abrirEditar(c){
-    setForm({...FORM_VAZIO, ...c, cnpj:formatarCnpj(c.cnpj)});
+    setForm({...FORM_VAZIO, ...c, cnpj:formatarCnpj(c.cnpj),
+      serasaValor: c.serasaValorPendencias!=null ? fMoedaInput(c.serasaValorPendencias) : "", supervisorIdOriginal:c.supervisorId});
     setFormErr(""); resetDrag(); setShowForm(true);
   }
+  // Fecha sem salvar — mesmo comportamento do X e do Cancelar.
   function fecharForm(){ setShowForm(false); setFormErr(""); }
+  // Só supervisores ativos podem ser vinculados agora; o vínculo antigo a um inativo continua aparecendo
+  // na edição (e o nome gravado no cadastro nunca muda).
+  const supervisoresAtivos = opcoes.supervisores.filter(s=>s.status==="Ativo");
+  const supervisorVinculadoInativo = form.supervisorIdOriginal ? opcoes.supervisores.find(s=>s.id===form.supervisorIdOriginal&&s.status!=="Ativo") : null;
   function escolherRepresentante(id){
     const r = opcoes.representantes.find(x=>x.id===id);
-    // Supervisor vinculado ao representante vem preenchido; pode ser trocado depois.
-    setForm(f=>({...f, representanteId:id, supervisorId: r&&r.supervisor_id ? r.supervisor_id : f.supervisorId}));
+    // Supervisor vinculado ao representante vem preenchido (se estiver ativo); pode ser trocado depois.
+    const sup = r&&r.supervisor_id ? supervisoresAtivos.find(s=>s.id===r.supervisor_id) : null;
+    setForm(f=>({...f, representanteId:id, supervisorId: sup ? sup.id : f.supervisorId}));
   }
-  const repSelecionado = opcoes.representantes.find(x=>x.id===form.representanteId);
+  function escolherTipoRepresentante(tipo){
+    setForm(f=>({...f, representanteTipo:tipo, representanteId: tipo==="EXTERNO" ? "" : f.representanteId}));
+    setFormErr("");
+  }
   const parecidos = showForm ? razoesParecidas(lista, form.razaoSocial, form.id) : [];
   const cnpjDig = soDigitos(form.cnpj);
   const dupCnpj = showForm && cnpjDig.length===14 ? lista.find(c=>c.id!==form.id&&!c.excluidoEm&&c.cnpj===cnpjDig) : null;
@@ -126,6 +145,12 @@ export default function CadastroClientes(p) {
     if(cnpjDig && cnpjDig.length!==14){ setFormErr("O CNPJ precisa ter 14 dígitos (ou deixe em branco)."); return; }
     if(dupCnpj){ setFormErr("Já existe um cadastro ativo com este CNPJ: "+dupCnpj.razaoSocial+"."); return; }
     if(dupCodigo){ setFormErr("Já existe um cadastro ativo com este código: "+dupCodigo.razaoSocial+"."); return; }
+    // Obrigatórios desde 23/10/2026 — em cadastros antigos, pedidos na próxima edição.
+    if(!form.origemCadastro){ setFormErr("Informe a origem do cadastro."); return; }
+    if(form.representanteTipo==="EXTERNO" && !form.representanteExternoNome.trim()){ setFormErr("Informe o nome do representante de outra empresa."); return; }
+    if(!form.sintegra){ setFormErr("Informe a situação do Sintegra."); return; }
+    if(form.serasa==="COM_PENDENCIAS" && !(parseMoedaInput(form.serasaValor)>0)){ setFormErr("Informe o valor total das pendências do Serasa."); return; }
+    if(form.supervisorId && form.supervisorId!==form.supervisorIdOriginal && !supervisoresAtivos.some(s=>s.id===form.supervisorId)){ setFormErr("Escolha um supervisor ativo."); return; }
     setSalvando(true); setFormErr("");
     const payload = payloadCliente(form, !!form.id);
     const q = form.id
@@ -195,8 +220,8 @@ export default function CadastroClientes(p) {
         </div>
         <div style={{flex:"1 1 140px"}}><label style={st.lbl}>Código da razão social</label><input style={st.inp} value={fCodigo} onChange={e=>setFCodigo(e.target.value)}/></div>
         <div style={{flex:"1 1 160px"}}><label style={st.lbl}>CNPJ</label><input style={st.inp} inputMode="numeric" value={fCnpj} onChange={e=>setFCnpj(formatarCnpj(e.target.value))}/></div>
-        <div style={{flex:"1 1 180px"}}><label style={st.lbl}>Representante / vendedor</label>{sel(fRep,setFRep,opcoes.representantes.map(r=>({v:r.id,l:r.nome+(r.status!=="Ativo"?" (inativo)":"")})),"Todos")}</div>
-        <div style={{flex:"1 1 180px"}}><label style={st.lbl}>Supervisor</label>{sel(fSup,setFSup,opcoes.supervisores.map(s=>({v:s.id,l:s.nome+(s.status!=="Ativo"?" (inativo)":"")})),"Todos")}</div>
+        <div style={{flex:"1 1 180px"}}><label style={st.lbl}>Representante / vendedor</label>{sel(fRep,setFRep,[...opcoes.representantes.map(r=>({v:r.id,l:r.nome+(r.status!=="Ativo"?" (inativo)":"")})),{v:FILTRO_REP_EXTERNO,l:"Representantes de outras empresas"}],"Todos")}</div>
+        <div style={{flex:"1 1 180px"}}><label style={st.lbl}>Supervisor</label>{sel(fSup,setFSup,supervisoresAtivos.map(s=>({v:s.id,l:s.nome})),"Todos")}</div>
       </div>
       <div className="bv-card" style={{...st.card,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
         <div style={{flex:"1 1 160px"}}><label style={st.lbl}>Situação</label>
@@ -236,7 +261,7 @@ export default function CadastroClientes(p) {
                   <div style={{fontSize:11.5,color:D.muted}}>{[c.codigoRazaoSocial&&"Cód. "+c.codigoRazaoSocial, c.cnpj&&formatarCnpj(c.cnpj)].filter(Boolean).join(" · ")||"Sem código / CNPJ"}</div>
                   {c.excluidoEm&&<div style={{fontSize:11,color:D.redText,fontWeight:600}}>Excluído em {fDataHoraBR(c.excluidoEm)}</div>}
                 </div></td>
-                <td data-label="Representante" style={{padding:"10px 8px",color:D.text}}><span>{c.representanteNome||"—"}{c.representanteCodigo&&<span style={{color:D.muted}}> ({c.representanteCodigo})</span>}</span></td>
+                <td data-label="Representante" style={{padding:"10px 8px",color:D.text}}><span>{nomeRepresentante(c)||"—"}</span></td>
                 <td data-label="Supervisor" style={{padding:"10px 8px",color:D.muted}}>{c.supervisorNome||"—"}</td>
                 <td data-label="Inclusão" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{c.createdAt?fDataHoraBR(c.createdAt).split(" às ")[0]:"—"}</td>
                 <td data-label="Situação" style={{padding:"10px 8px"}}>{chip(si.label, si)}</td>
@@ -269,8 +294,14 @@ export default function CadastroClientes(p) {
 
       {/* MODAL: novo cadastro / editar cadastro */}
       {showForm&&(
-        <div className="bv-modal-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}}>
-          <div className="bv-modal-card" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:760,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",...dragStyle}} onClick={e=>e.stopPropagation()}>
+        <div className="bv-modal-backdrop bv-cadastro-backdrop" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,padding:"1rem"}}>
+          <style>{CSS_MODAL_CADASTRO}</style>
+          <div className="bv-modal-card bv-cadastro-modal" style={{background:D.white,borderRadius:18,padding:"2rem",maxWidth:760,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",boxSizing:"border-box",...dragStyle}} onClick={e=>e.stopPropagation()}>
+            {/* X: fixo no canto superior direito mesmo com rolagem; fecha sem salvar, igual ao Cancelar. */}
+            <div style={{position:"sticky",top:16,height:0,zIndex:3}}>
+              <button type="button" aria-label="Fechar" title="Fechar" onClick={fecharForm} onPointerDown={e=>e.stopPropagation()}
+                style={{position:"absolute",right:-16,top:-16,width:34,height:34,borderRadius:9,border:"1px solid "+D.border,background:D.white,color:D.muted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><X size={17}/></button>
+            </div>
             <div {...dragHandleProps}>
               <div style={{width:48,height:48,borderRadius:12,background:D.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}><Contact size={22} color={D.blue}/></div>
               <div style={{fontWeight:700,fontSize:17,color:D.text,textAlign:"center",marginBottom:4}}>{form.id?"Atualizar cadastro":"Novo cadastro de cliente"}</div>
@@ -293,24 +324,39 @@ export default function CadastroClientes(p) {
               <div><label style={st.lbl}>CNPJ</label><input style={st.inp} inputMode="numeric" placeholder="00.000.000/0000-00" value={form.cnpj} onChange={e=>{setForm(f=>({...f,cnpj:formatarCnpj(e.target.value)}));setFormErr("");}}/>
                 {dupCnpj&&<div style={{fontSize:11.5,color:D.redText,marginTop:3}}>Já usado por {dupCnpj.razaoSocial}</div>}
                 {!dupCnpj&&cnpjDig.length===14&&!cnpjDigitosOk(cnpjDig)&&<div style={{fontSize:11.5,color:D.orangeText,marginTop:3}}>Confira o CNPJ: os dígitos verificadores não conferem.</div>}</div>
-              <div><label style={st.lbl}>Grupo</label><input style={st.inp} value={form.grupo} onChange={e=>setForm(f=>({...f,grupo:e.target.value}))}/></div>
-              <div><label style={st.lbl}>Nome do responsável pelo cliente</label><input style={st.inp} value={form.responsavelNome} onChange={e=>setForm(f=>({...f,responsavelNome:e.target.value}))}/></div>
+              <div><label style={st.lbl}>Origem do cadastro *</label>{sel(form.origemCadastro,v=>{setForm(f=>({...f,origemCadastro:v}));setFormErr("");},OPCOES_ORIGEM,"Selecione...")}
+                {form.id&&!form.origemCadastro&&<div style={{fontSize:11.5,color:D.orangeText,marginTop:3}}>Cadastro antigo sem origem — selecione para salvar.</div>}</div>
+              {/* Grupo: fora do Novo Cadastro (23/10/2026); continua na edição de cadastros existentes. */}
+              {form.id&&<div><label style={st.lbl}>Grupo</label><input style={st.inp} value={form.grupo} onChange={e=>setForm(f=>({...f,grupo:e.target.value}))}/></div>}
+              <div><label style={st.lbl}>Nome do responsável pela farmácia</label><input style={st.inp} value={form.responsavelNome} onChange={e=>setForm(f=>({...f,responsavelNome:e.target.value}))}/></div>
               <div><label style={st.lbl}>Telefone</label><input style={st.inp} inputMode="tel" value={form.telefone} onChange={e=>setForm(f=>({...f,telefone:e.target.value}))}/></div>
               <div><label style={st.lbl}>E-mail</label><input style={st.inp} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}/></div>
               <div><label style={st.lbl}>Data de inclusão na TARGET</label><input type="date" style={st.inp} value={form.dataInclusaoTarget} onChange={e=>setForm(f=>({...f,dataInclusaoTarget:e.target.value}))}/></div>
 
               {secao("Representação")}
-              <div><label style={st.lbl}>Representante / vendedor</label>
-                <select style={st.inp} value={form.representanteId} onChange={e=>escolherRepresentante(e.target.value)}>
-                  <option value="">Selecione...</option>
-                  {opcoes.representantes.map(r=><option key={r.id} value={r.id}>{r.nome}{r.status!=="Ativo"?" (inativo)":""}</option>)}
-                </select>
+              <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Representante</label>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {TIPOS_REPRESENTANTE.map(t=>{
+                    const on = form.representanteTipo===t.v;
+                    return <button key={t.v} type="button" onClick={()=>escolherTipoRepresentante(t.v)} style={{flex:"1 1 160px",padding:"8px 6px",borderRadius:9,cursor:"pointer",fontSize:12.5,fontWeight:on?700:500,border:"1px solid "+(on?D.blue:D.border),background:on?D.blueSoft:D.white,color:on?D.blueText:D.muted}}>{t.l}</button>;
+                  })}
+                </div>
               </div>
-              <div><label style={st.lbl}>Código do representante</label><input style={{...st.inp,background:D.bg,color:D.muted}} readOnly value={repSelecionado?(repSelecionado.codigo||"Sem código cadastrado"):""} placeholder="Preenchido pelo representante"/></div>
+              {form.representanteTipo==="EXTERNO"
+                ? <div><label style={st.lbl}>Representante de outra empresa *</label><input style={st.inp} value={form.representanteExternoNome} onChange={e=>{setForm(f=>({...f,representanteExternoNome:e.target.value}));setFormErr("");}}/>
+                    <div style={{fontSize:11.5,color:D.muted,marginTop:3}}>Fica só neste cadastro — não entra na lista de representantes.</div></div>
+                : <div><label style={st.lbl}>Representante / vendedor</label>
+                    <select style={st.inp} value={form.representanteId} onChange={e=>escolherRepresentante(e.target.value)}>
+                      <option value="">Selecione...</option>
+                      {opcoes.representantes.map(r=><option key={r.id} value={r.id}>{r.nome}{r.status!=="Ativo"?" (inativo)":""}</option>)}
+                    </select>
+                  </div>}
+              <div><label style={st.lbl}>Código</label><input style={st.inp} value={form.representanteCodigo} onChange={e=>setForm(f=>({...f,representanteCodigo:e.target.value}))}/></div>
               <div><label style={st.lbl}>Supervisor</label>
-                <select style={st.inp} value={form.supervisorId} onChange={e=>setForm(f=>({...f,supervisorId:e.target.value}))}>
+                <select style={st.inp} value={form.supervisorId} onChange={e=>{setForm(f=>({...f,supervisorId:e.target.value}));setFormErr("");}}>
                   <option value="">Selecione...</option>
-                  {opcoes.supervisores.map(s=><option key={s.id} value={s.id}>{s.nome}{s.status!=="Ativo"?" (inativo)":""}</option>)}
+                  {supervisorVinculadoInativo&&<option value={supervisorVinculadoInativo.id}>{supervisorVinculadoInativo.nome} (inativo — vínculo atual)</option>}
+                  {supervisoresAtivos.map(s=><option key={s.id} value={s.id}>{s.nome}</option>)}
                 </select>
               </div>
               <div><label style={st.lbl}>Televendas</label><input style={st.inp} value={form.televendas} onChange={e=>setForm(f=>({...f,televendas:e.target.value}))}/></div>
@@ -332,8 +378,12 @@ export default function CadastroClientes(p) {
                 return <div key={a.campo}><label style={st.lbl}>{a.label} — vencimento</label><input type="date" style={st.inp} value={form[a.campo]} onChange={e=>setForm(f=>({...f,[a.campo]:e.target.value}))}/>
                   <div style={{marginTop:4}}>{chip(info.label, info)}</div></div>;
               })}
-              <div><label style={st.lbl}>Sintegra</label>{sel(form.sintegra,v=>setForm(f=>({...f,sintegra:v})),OPCOES_SINTEGRA)}</div>
-              <div><label style={st.lbl}>Serasa</label>{sel(form.serasa,v=>setForm(f=>({...f,serasa:v})),OPCOES_SERASA)}</div>
+              <div><label style={st.lbl}>Sintegra *</label>{sel(form.sintegra,v=>{setForm(f=>({...f,sintegra:v}));setFormErr("");},OPCOES_SINTEGRA,"Selecione...")}
+                {form.id&&!form.sintegra&&<div style={{fontSize:11.5,color:D.orangeText,marginTop:3}}>Cadastro antigo sem verificação — selecione para salvar.</div>}</div>
+              <div><label style={st.lbl}>Serasa</label>{sel(form.serasa,v=>{setForm(f=>({...f,serasa:v}));setFormErr("");},OPCOES_SERASA)}</div>
+              {form.serasa==="COM_PENDENCIAS"&&<div><label style={st.lbl}>Valor total das pendências (R$) *</label>
+                <input style={st.inp} inputMode="decimal" placeholder="0,00" value={form.serasaValor} onChange={e=>{setForm(f=>({...f,serasaValor:fMoedaInputLive(e.target.value)}));setFormErr("");}}/>
+                <div style={{fontSize:11.5,color:D.muted,marginTop:3}}>Soma de todas as pendências.</div></div>}
 
               {secao("Situação e observações")}
               <div><label style={st.lbl}>Situação do cadastro</label>
