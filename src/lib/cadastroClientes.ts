@@ -40,6 +40,9 @@ export const ALVARAS = [
   {campo:"alvaraPrefeituraVencimento", coluna:"alvara_prefeitura_vencimento", label:"Alvará da Prefeitura"},
   {campo:"alvaraSanitarioVencimento", coluna:"alvara_sanitario_vencimento", label:"Alvará Sanitário"},
 ];
+// SUFRAMA (27/10/2026): opcional para todos (usada sobretudo no Pará). Fica fora de ALVARAS de propósito —
+// vazio é "Não informado", nunca pendência, e não entra nos indicadores, filtros e alertas dos alvarás.
+export const SUFRAMA = {campo:"suframaVencimento", coluna:"suframa_vencimento", label:"SUFRAMA"};
 // Controlados: vazio = "Não informado" (pendência); NAO_CADASTRADO = o cliente não trabalha com controlados (regular).
 export const ROTULO_NAO_CADASTRADO = "Não cadastrado (não trabalha com controlados)";
 export const OPCOES_CONTROLADOS = [{v:"",l:"Não informado"},{v:"OK",l:"OK"},{v:"NAO_CADASTRADO",l:ROTULO_NAO_CADASTRADO}];
@@ -70,7 +73,7 @@ export function mapClienteRow(r){
     docContratoSocial:r.doc_contrato_social||"PENDENTE", docCnpj:r.doc_cnpj||"PENDENTE", docCrf:r.doc_crf||"PENDENTE",
     docFotos:r.doc_fotos||"PENDENTE", docNotas:r.doc_notas||"PENDENTE", docControlados:r.doc_controlados||"",
     alvaraPrefeituraVencimento:r.alvara_prefeitura_vencimento||"", alvaraSanitarioVencimento:r.alvara_sanitario_vencimento||"",
-    sintegra:r.sintegra||"", serasa:r.serasa||"",
+    suframaVencimento:r.suframa_vencimento||"", sintegra:r.sintegra||"", serasa:r.serasa||"",
     serasaValorPendencias: r.serasa_valor_pendencias==null||r.serasa_valor_pendencias==="" ? null : Number(r.serasa_valor_pendencias),
     origemCadastro:r.origem_cadastro||"", representanteTipo:r.representante_tipo||"INTERNO", representanteExternoNome:r.representante_externo_nome||"",
     createdByNome:r.created_by_nome||"", createdAt:r.created_at||"", updatedByNome:r.updated_by_nome||"", updatedAt:r.updated_at||"",
@@ -96,6 +99,7 @@ export function payloadCliente(f, incluirSituacao){
   p.representante_externo_nome = externo ? vazio((f.representanteExternoNome||"").trim()) : null;
   DOCS_OK_PENDENTE.forEach(d=>{ p[d.coluna]=f[d.campo]||"PENDENTE"; });
   ALVARAS.forEach(a=>{ p[a.coluna]=vazio(f[a.campo]); });
+  p[SUFRAMA.coluna] = vazio(f[SUFRAMA.campo]);
   if(incluirSituacao) p.situacao = f.situacao;
   return p;
 }
@@ -125,10 +129,22 @@ export function alvaraInfo(s, D){
     EM_DIA: {label:"Em dia", bg:D.greenSoft, c:D.greenText, dot:D.green},
   })[s];
 }
+// SUFRAMA: NAO_INFORMADO (neutro, sem data) ou o mesmo cálculo de vencimento dos alvarás, só para exibir.
+export function statusSuframa(vencimento, hoje){
+  return vencimento ? statusAlvara(vencimento, hoje) : "NAO_INFORMADO";
+}
+export function suframaInfo(s, D){
+  return ({
+    NAO_INFORMADO: {label:"Não informado", bg:D.bg, c:D.muted, dot:D.muted},
+    VENCIDO: {label:"Vencida", bg:D.redSoft, c:D.redText, dot:D.red},
+    A_VENCER: {label:"A vencer", bg:D.orangeSoft, c:D.orangeText, dot:D.orange},
+    EM_DIA: {label:"Em dia", bg:D.greenSoft, c:D.greenText, dot:D.green},
+  })[s];
+}
 
 // Documentos faltantes: os OK/PENDENTE marcados como Pendente, os alvarás sem data, Controlados não
 // informado, Sintegra "Habilitado com restrição" e Sintegra vazio (só registros antigos). Controlados
-// "Não cadastrado", Sintegra "Não habilitado" (alerta) e Serasa nunca entram aqui.
+// "Não cadastrado", Sintegra "Não habilitado" (alerta), Serasa e SUFRAMA nunca entram aqui.
 // PENDENCIAS_EXTRAS alimenta o filtro "Documento pendente" (um item por campo).
 export const PENDENCIAS_EXTRAS = [
   {campo:"docControlados", label:"Controlados (não informado)"},
@@ -214,7 +230,7 @@ export const ROTULO_CAMPO = {
   data_inclusao_target:"Data de inclusão na TARGET", observacoes:"Observações", situacao:"Situação",
   doc_contrato_social:"Contrato social", doc_cnpj:"CNPJ (documento)", doc_crf:"CRF", doc_fotos:"Fotos", doc_notas:"Notas",
   doc_controlados:"Controlados", alvara_prefeitura_vencimento:"Alvará da Prefeitura", alvara_sanitario_vencimento:"Alvará Sanitário",
-  sintegra:"Sintegra", serasa:"Serasa",
+  suframa_vencimento:"SUFRAMA", sintegra:"Sintegra", serasa:"Serasa",
 };
 const ROTULO_VALOR = {
   OK:"OK", PENDENTE:"Pendente", NAO_CADASTRADO:ROTULO_NAO_CADASTRADO, HABILITADO:"Habilitado", NAO_HABILITADO:"Não habilitado",
@@ -227,7 +243,7 @@ const ROTULO_VALOR_CAMPO = {
   representante_tipo: Object.fromEntries(TIPOS_REPRESENTANTE.map(o=>[o.v,o.l])),
 };
 // Estados vazios com nome próprio (em vez de "—") no histórico.
-const ROTULO_VAZIO = { doc_controlados:"Não informado", sintegra:"Não verificado", serasa:"Não verificado", origem_cadastro:"Não informado", serasa_valor_pendencias:"Não informado" };
+const ROTULO_VAZIO = { doc_controlados:"Não informado", sintegra:"Não verificado", serasa:"Não verificado", origem_cadastro:"Não informado", serasa_valor_pendencias:"Não informado", suframa_vencimento:"Não informado" };
 export function valorLegivel(campo, v){
   if(v==null || v==="") return ROTULO_VAZIO[campo] || "—";
   if(ROTULO_VALOR_CAMPO[campo] && ROTULO_VALOR_CAMPO[campo][v]) return ROTULO_VALOR_CAMPO[campo][v];
@@ -254,6 +270,11 @@ export function imprimirFicha(c, hoje, impressoPor){
   const docsOk = DOCS_OK_PENDENTE.map(d=>`<tr><td class="dn">${esc(d.label)}</td><td>${marca(c[d.campo]==="OK","OK")} ${marca(c[d.campo]!=="OK","PENDENTE")}</td></tr>`).join("");
   const alv = ALVARAS.map(a=>{ const s = statusAlvara(c[a.campo], hoje); const t = ({SEM_DATA:"Sem data",VENCIDO:"VENCIDO",A_VENCER:"A vencer",EM_DIA:"Em dia"})[s];
     return `<tr><td class="dn">${esc(a.label)}</td><td>Vencimento: <b>${c[a.campo]?esc(fData(c[a.campo])):"____/____/______"}</b> <span class="st st-${s}">${t}</span></td></tr>`; }).join("");
+  // SUFRAMA vazia: "NÃO INFORMADO", sem linha para preencher nem data fictícia.
+  const sSuf = statusSuframa(c[SUFRAMA.campo], hoje);
+  const suf = c[SUFRAMA.campo]
+    ? `Vencimento: <b>${esc(fData(c[SUFRAMA.campo]))}</b> <span class="st st-${sSuf}">${({VENCIDO:"VENCIDA",A_VENCER:"A vencer",EM_DIA:"Em dia"})[sSuf]}</span>`
+    : `<b>NÃO INFORMADO</b>`;
   const pend = documentosPendentes(c);
   const alertas = alertasCliente(c, hoje);
   const sit = ({PENDENTE:"PENDENTE",EM_ANALISE:"EM ANÁLISE",AGUARDANDO_CLIENTE:"AGUARDANDO CLIENTE",EFETIVADO:"EFETIVADO"})[c.situacao] || c.situacao;
@@ -284,6 +305,7 @@ tr{page-break-inside:avoid}
 <table class="docs">${docsOk}
 <tr><td class="dn">Controlados</td><td>${marca(c.docControlados==="OK","OK")} ${marca(c.docControlados==="NAO_CADASTRADO","NÃO CADASTRADO (não trabalha com controlados)")} ${marca(!c.docControlados,"NÃO INFORMADO")}</td></tr>
 ${alv}
+<tr><td class="dn">${esc(SUFRAMA.label)}</td><td>${suf}</td></tr>
 <tr><td class="dn">Sintegra</td><td>${marca(c.sintegra==="HABILITADO","HABILITADO")} ${marca(c.sintegra==="NAO_HABILITADO","NÃO HABILITADO")} ${marca(c.sintegra==="HABILITADO_COM_RESTRICAO","HABILITADO COM RESTRIÇÃO")}${!c.sintegra?" "+marca(true,"NÃO VERIFICADO"):""}</td></tr>
 <tr><td class="dn">Serasa</td><td>${marca(c.serasa==="COM_PENDENCIAS","COM PENDÊNCIAS")}${c.serasa==="COM_PENDENCIAS"?`<b> — ${esc(textoSerasaTotal(c))}</b>`:""} ${marca(c.serasa==="SEM_PENDENCIAS","SEM PENDÊNCIAS")}</td></tr></table>
 <div class="box"><b>Documentos pendentes:</b> ${pend.length?pend.map(p=>esc(p.label)).join(" · "):"nenhum"}</div>
