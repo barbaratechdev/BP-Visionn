@@ -6,7 +6,7 @@ import { useDraggable } from "../lib/useDraggable";
 import {
   SITUACOES, situacaoInfo, DOCS_OK_PENDENTE, ALVARAS, OPCOES_CONTROLADOS, OPCOES_SINTEGRA, OPCOES_SERASA,
   mapClienteRow, payloadCliente, hojeBelem, statusAlvara, alvaraInfo, documentosPendentes, alertasCliente, PENDENCIAS_EXTRAS,
-  OPCOES_ORIGEM, TIPOS_REPRESENTANTE, FILTRO_REP_EXTERNO, nomeRepresentante,
+  SUFRAMA, statusSuframa, suframaInfo, OPCOES_ORIGEM, TIPOS_REPRESENTANTE, FILTRO_REP_EXTERNO, nomeRepresentante,
   formatarCnpj, soDigitos, cnpjDigitosOk, razoesParecidas, mensagemErroCliente, imprimirFicha,
 } from "../lib/cadastroClientes";
 import MCard from "./MCard";
@@ -16,7 +16,7 @@ const FORM_VAZIO = {
   id:null, razaoSocial:"", codigoRazaoSocial:"", cnpj:"", grupo:"", televendas:"", responsavelNome:"", telefone:"", email:"",
   representanteId:"", supervisorId:"", dataInclusaoTarget:"", observacoes:"", situacao:"PENDENTE",
   docContratoSocial:"PENDENTE", docCnpj:"PENDENTE", docCrf:"PENDENTE", docFotos:"PENDENTE", docNotas:"PENDENTE",
-  docControlados:"", alvaraPrefeituraVencimento:"", alvaraSanitarioVencimento:"", sintegra:"", serasa:"",
+  docControlados:"", alvaraPrefeituraVencimento:"", alvaraSanitarioVencimento:"", suframaVencimento:"", sintegra:"", serasa:"",
   origemCadastro:"", representanteTipo:"INTERNO", representanteExternoNome:"", representanteCodigo:"", serasaValor:"",
   supervisorIdOriginal:"",
 };
@@ -378,7 +378,10 @@ export default function CadastroClientes(p) {
                 return <div key={a.campo}><label style={st.lbl}>{a.label} — vencimento</label><input type="date" style={st.inp} value={form[a.campo]} onChange={e=>setForm(f=>({...f,[a.campo]:e.target.value}))}/>
                   <div style={{marginTop:4}}>{chip(info.label, info)}</div></div>;
               })}
-              <div><label style={st.lbl}>Sintegra *</label>{sel(form.sintegra,v=>{setForm(f=>({...f,sintegra:v}));setFormErr("");},OPCOES_SINTEGRA,"Selecione...")}
+              {(()=>{ const info = suframaInfo(statusSuframa(form[SUFRAMA.campo], hoje),D);
+                return <div><label style={st.lbl}>{SUFRAMA.label} — vencimento</label><input type="date" style={st.inp} value={form[SUFRAMA.campo]} onChange={e=>setForm(f=>({...f,[SUFRAMA.campo]:e.target.value}))}/>
+                  <div style={{marginTop:4,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>{chip(info.label, info)}<span style={{fontSize:11.5,color:D.muted}}>Opcional — informe o vencimento se o cliente tiver.</span></div></div>; })()}
+              <div style={{gridColumn:"1/2"}}><label style={st.lbl}>Sintegra *</label>{sel(form.sintegra,v=>{setForm(f=>({...f,sintegra:v}));setFormErr("");},OPCOES_SINTEGRA,"Selecione...")}
                 {form.id&&!form.sintegra&&<div style={{fontSize:11.5,color:D.orangeText,marginTop:3}}>Cadastro antigo sem verificação — selecione para salvar.</div>}</div>
               <div><label style={st.lbl}>Serasa</label>{sel(form.serasa,v=>{setForm(f=>({...f,serasa:v}));setFormErr("");},OPCOES_SERASA)}</div>
               {form.serasa==="COM_PENDENCIAS"&&<div><label style={st.lbl}>Valor total das pendências (R$) *</label>
