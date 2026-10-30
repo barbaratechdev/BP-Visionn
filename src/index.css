@@ -362,6 +362,24 @@ button:focus-visible {
   }
 }
 
+/* --- Prorrogação de Boletos: larguras fixas por coluna (colgroup em App.tsx) só fora do modo cartão.
+   Abaixo de 860 px de largura útil a tabela rola dentro do cartão em vez de espremer Fornecedor e Motivo;
+   a hora da inclusão vai para a linha de baixo para a data não ser cortada. --- */
+@media (min-width: 681px) {
+  .bv-tabela-boletos {
+    table-layout: fixed;
+    min-width: 860px;
+  }
+  .bv-tabela-boletos .bv-hora-inclusao {
+    display: block;
+    font-size: 11.5px;
+  }
+  .bv-tabela-boletos th, .bv-tabela-boletos td:not([colspan]) {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+}
+
 /* --- Tabelas: viram cartões empilhados em telas estreitas, sem scroll horizontal --- */
 @media (max-width: 680px) {
   .bv-table thead {
