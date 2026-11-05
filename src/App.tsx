@@ -1342,7 +1342,7 @@ export default function App() {
   // crescente, concluídas por data de aprovação decrescente — como as
   // datas são "YYYY-MM-DD", a comparação de string já respeita a ordem
   // cronológica sem precisar converter pra Date.
-  // filtros: {tipo:"todos"|"pendente"|"solicitado"|"aprovado"|"recusado", de, ate, cliente, responsavel,
+  // filtros: {tipo:"todos"|"abertas"|"pendente"|"solicitado"|"aprovado"|"recusado", de, ate, cliente, responsavel,
   // estados:string[]}. "estados" é uma seleção múltipla (lógica OR/IN) sobre a coluna
   // pendencias.estado (pr.estado), que guarda o nome por extenso (CHECK: Pará/Piauí/Maranhão),
   // não a sigla. Lista vazia = "Todos" (sem filtro: os 3 estados).
@@ -1374,6 +1374,9 @@ export default function App() {
     });
     // 4 grupos mutuamente exclusivos — cada NF cai em exatamente um.
     const pendente=base.filter(function(pr){ return ehPendente(pr.situacao); }).sort((a,b)=>cmpVencimento(a.vencimento,b.vencimento));
+    // "abertas" = Pendente + Solicitado numa lista só, pelo vencimento mais antigo primeiro
+    // (a mais atrasada no topo) — pra ver de uma vez o que está vencido ou perto de vencer.
+    const abertas=base.filter(function(pr){ return ehPendente(pr.situacao)||ehSolicitado(pr.situacao); }).sort((a,b)=>cmpVencimento(a.vencimento,b.vencimento));
     const solicitado=base.filter(function(pr){ return ehSolicitado(pr.situacao); }).sort((a,b)=>cmpVencimento(a.vencimento,b.vencimento));
     const aprovado=base.filter(function(pr){ return pr.situacao==="Prorrogação Aprovada"; }).sort((a,b)=>{
       if(!a.dataAprovacao) return 1;
@@ -1385,14 +1388,14 @@ export default function App() {
       if(!b.vencimento) return -1;
       return a.vencimento<b.vencimento?-1:a.vencimento>b.vencimento?1:0;
     });
-    const porTipo = {pendente:pendente,solicitado:solicitado,aprovado:aprovado,recusado:recusado};
+    const porTipo = {abertas:abertas,pendente:pendente,solicitado:solicitado,aprovado:aprovado,recusado:recusado};
     const totalExibido = porTipo[f.tipo] ? porTipo[f.tipo].length : base.length;
-    const tituloTipo = {todos:"Todos",pendente:"Pendente",solicitado:"Solicitado",aprovado:"Aprovado",recusado:"Recusado"}[f.tipo]||"Todos";
+    const tituloTipo = {todos:"Todos",abertas:"Pendente e Solicitado",pendente:"Pendente",solicitado:"Solicitado",aprovado:"Aprovado",recusado:"Recusado"}[f.tipo]||"Todos";
 
     const w=window.open("","_blank");
     if(!w) return;
     w.opener=null;
-    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:landscape;margin:1.2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111}h1{font-size:14pt;margin:0 0 4px}h2{font-size:12pt;margin:20px 0 8px;padding-top:12px;border-top:1px solid #ccc}h2:first-of-type{margin-top:16px;padding-top:0;border-top:none}.sub{font-size:9pt;color:#555;margin:2px 0}.meta{margin-bottom:14px}.status{display:inline-block;font-size:10.5pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:4px 11px;margin:8px 0 14px}.status-aguardando{background:#FFFBEB;color:#B45309}.status-solicitado{background:#EFF6FF;color:#1D4ED8}.status-pendente{background:#FFFBEB;color:#B45309}.status-aprovado{background:#F0FDF4;color:#15803D}.status-recusado{background:#FEF2F2;color:#B91C1C}.vazio{font-size:9.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;table-layout:fixed;border-collapse:collapse}th,td{padding:5px 6px;text-align:left;border-bottom:1px solid #ddd;font-size:8.5pt;word-break:break-word;overflow-wrap:break-word}th{background:#f2f2f2;font-weight:600}td.data-col{white-space:nowrap;overflow:visible;word-break:normal;overflow-wrap:normal}thead{display:table-header-group}tr{page-break-inside:avoid}.r{margin-top:22px;font-size:8.5pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:8px}@media print{button{display:none}}</style></head><body></body></html>");
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:landscape;margin:1.2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111}h1{font-size:14pt;margin:0 0 4px}h2{font-size:12pt;margin:20px 0 8px;padding-top:12px;border-top:1px solid #ccc}h2:first-of-type{margin-top:16px;padding-top:0;border-top:none}.sub{font-size:9pt;color:#555;margin:2px 0}.meta{margin-bottom:14px}.status{display:inline-block;font-size:10.5pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:4px 11px;margin:8px 0 14px}.status-aguardando{background:#FFFBEB;color:#B45309}.status-solicitado{background:#EFF6FF;color:#1D4ED8}.status-pendente{background:#FFFBEB;color:#B45309}.status-abertas{background:#FFFBEB;color:#B45309}.status-aprovado{background:#F0FDF4;color:#15803D}.status-recusado{background:#FEF2F2;color:#B91C1C}.vazio{font-size:9.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;table-layout:fixed;border-collapse:collapse}th,td{padding:5px 6px;text-align:left;border-bottom:1px solid #ddd;font-size:8.5pt;word-break:break-word;overflow-wrap:break-word}th{background:#f2f2f2;font-weight:600}td.data-col{white-space:nowrap;overflow:visible;word-break:normal;overflow-wrap:normal}thead{display:table-header-group}tr{page-break-inside:avoid}.r{margin-top:22px;font-size:8.5pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:8px}@media print{button{display:none}}</style></head><body></body></html>");
     w.document.close();
     w.document.title="Relatório de Boletos Prorrogados";
     const h1=w.document.createElement("h1");
@@ -1420,7 +1423,7 @@ export default function App() {
     });
     w.document.body.appendChild(meta);
 
-    if(f.tipo==="pendente"||f.tipo==="solicitado"||f.tipo==="aprovado"||f.tipo==="recusado"){
+    if(f.tipo==="abertas"||f.tipo==="pendente"||f.tipo==="solicitado"||f.tipo==="aprovado"||f.tipo==="recusado"){
       const badge=w.document.createElement("div");
       badge.className="status status-"+f.tipo;
       badge.textContent="STATUS: "+tituloTipo.toUpperCase();
@@ -1447,6 +1450,12 @@ export default function App() {
       {h:"Incluso por", peso:1.8, get:function(pr){ const u=users.find(function(x){return x.id===pr.criadoPor;}); return u?nomeVisivel(u):"—"; }},
       {h:"Situação", peso:1.6, get:function(pr){ return situacaoLabel(pr.situacao); }},
     ];
+    // Coluna "Prazo": mesmo alerta da tela (Vencida há N dias / Vence hoje / Vence em N dias),
+    // com cor de fundo forçada pra sair colorida na impressão.
+    const CORES_PRAZO = {vencida:["#DC2626","#FFFFFF"], hoje:["#EA580C","#FFFFFF"], breve:["#FACC15","#422006"]};
+    const colunaPrazo={h:"Prazo", peso:1.7,
+      get:function(pr){ const al=alertaVencimento(pr); return al?al.texto:"—"; },
+      estilo:function(pr){ const al=alertaVencimento(pr); if(!al) return ""; const c=CORES_PRAZO[al.nivel]; return "background:"+c[0]+";color:"+c[1]+";font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact;"; }};
     const colunaAprovacao={h:"Aprovado em", peso:1.7, dataCol:true, get:function(pr){ return pr.dataAprovacao?fData(pr.dataAprovacao):"—"; }};
 
     function criarTabela(lista, colunas){
@@ -1467,6 +1476,7 @@ export default function App() {
         colunas.forEach(function(c){
           const td=w.document.createElement("td");
           if(c.dataCol) td.className="data-col";
+          if(c.estilo){ const css=c.estilo(pr); if(css) td.setAttribute("style",css); }
           td.textContent=c.get(pr)||"—";
           tr.appendChild(td);
         });
@@ -1493,7 +1503,9 @@ export default function App() {
       }
     }
 
-    if(f.tipo==="pendente"){
+    if(f.tipo==="abertas"){
+      criarSecao(null, abertas, colunasBase.concat([colunaPrazo]), "Nenhuma NF pendente ou solicitada no momento.");
+    } else if(f.tipo==="pendente"){
       criarSecao(null, pendente, colunasBase, "Nenhuma NF pendente no momento.");
     } else if(f.tipo==="solicitado"){
       criarSecao(null, solicitado, colunasBase, "Nenhuma NF solicitada no momento.");
@@ -2398,6 +2410,7 @@ export default function App() {
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Tipo de relatório</label>
                 <select style={st.inp} value={filtroImp.tipo} onChange={e=>setFiltroImp(p=>({...p,tipo:e.target.value}))}>
                   <option value="todos">Todos</option>
+                  <option value="abertas">Pendente e Solicitado</option>
                   <option value="pendente">Pendente</option>
                   <option value="solicitado">Solicitado</option>
                   <option value="aprovado">Aprovado</option>
