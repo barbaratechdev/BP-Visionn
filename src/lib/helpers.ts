@@ -7,24 +7,22 @@ export function getIn(n){ return n.split(" ").map(w=>w[0]).slice(0,2).join("").t
 export function nomeVisivel(u){ return (u&&u.nomeExibicao)||(u&&u.name)||""; }
 // Texto exibido pra situação de uma NF em Prorrogação de Boletos — só
 // traduz o rótulo na tela; o valor salvo em pendencias.situacao NUNCA
-// muda por causa disso — continua exatamente "Aguardando retorno" /
-// "Em negociação" / "Prorrogação Aprovada" / "Recusado". Só 3 rótulos
-// aparecem pro usuário: "Em negociação" funde visualmente em
-// "Aguardando" (mesmo texto, mesma cor, mesmo filtro/contagem — decisão
-// explícita, pra não ter uma 4ª categoria confusa na tela nem duplicar
-// "Aguardando" com dois valores internos diferentes por baixo).
-const SITUACAO_LABEL = { "Aguardando retorno":"Aguardando", "Em negociação":"Aguardando", "Prorrogação Aprovada":"Aprovado" };
+// muda por causa disso. Só 3 rótulos aparecem pro usuário: Solicitado,
+// Aprovado e Recusado. Os valores antigos "Aguardando retorno" e "Em
+// negociação" (já convertidos pra "Solicitado" no banco em 05/11/2026)
+// continuam sendo tratados como Solicitado, caso ainda exista algum.
+const SITUACAO_LABEL = { "Aguardando retorno":"Solicitado", "Em negociação":"Solicitado", "Prorrogação Aprovada":"Aprovado" };
 export function situacaoLabel(s){ return SITUACAO_LABEL[s]||s; }
-// Situações que devem contar/filtrar junto de "Aguardando" (ver acima).
-export function ehAguardando(s){ return s==="Aguardando retorno"||s==="Em negociação"; }
+// "Solicitado" (inclui os valores antigos "Aguardando retorno"/"Em negociação").
+export function ehSolicitado(s){ return s==="Solicitado"||s==="Aguardando retorno"||s==="Em negociação"; }
 // Prioridade de exibição da listagem/relatório de Prorrogação de Boletos:
-// Aguardando (0) → Recusado (1) → Aprovado (2), nunca por fornecedor/NF/
+// Solicitado (0) → Recusado (1) → Aprovado (2), nunca por fornecedor/NF/
 // data. Um valor de situação fora dos 4 conhecidos vai pro fim (3) em vez
 // de cair silenciosamente num dos 3 baldes existentes.
-// "Em aberto" = NF ainda sem resposta final do fornecedor: Aguardando (inclui
-// o valor interno "Em negociação") ou Solicitado. Só esses entram na ordem
-// por vencimento e nos alertas de prazo — Aprovado/Recusado já foram resolvidos.
-export function ehEmAberto(s){ return ehAguardando(s)||s==="Solicitado"; }
+// "Em aberto" = NF Solicitada, ainda sem resposta final do fornecedor. Só
+// essas entram na ordem por vencimento e nos alertas de prazo — Aprovado e
+// Recusado já foram resolvidos.
+export function ehEmAberto(s){ return ehSolicitado(s); }
 export function ordemSituacao(s){ return ehEmAberto(s)?0:s==="Recusado"?1:s==="Prorrogação Aprovada"?2:3; }
 // Compara dois vencimentos "YYYY-MM-DD" do mais antigo pro mais novo (a
 // string já respeita a ordem cronológica). Sem vencimento vai pro fim.

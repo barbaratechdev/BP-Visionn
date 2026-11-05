@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent, ClipboardCheck, Contact } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, SIDEBAR, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, MOTIVOS_BOLETO, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao, cmpVencimento, alertaVencimento } from "./lib/helpers";
+import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, MOTIVOS_BOLETO, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehSolicitado, ordemSituacao, cmpVencimento, alertaVencimento } from "./lib/helpers";
 import { useDraggable } from "./lib/useDraggable";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
@@ -116,7 +116,7 @@ export default function App() {
   // Filtro por Estado da página Prorrogação de Boletos (só visualização — não altera registros).
   const [filtroEstadoPr, setFiltroEstadoPr] = useState("todos");
   const [buscaPr, setBuscaPr] = useState("");   // busca própria (fornecedor ou nº da NF) — não é a busca geral do topo
-  // Filtro por Situação: chaves só da tela; "pendente" = ehAguardando ("Aguardando retorno" + legado "Em negociação").
+  // Filtro por Situação: chaves só da tela; "solicitado" = ehSolicitado (inclui os valores antigos "Aguardando retorno"/"Em negociação").
   const [filtroSituacaoPr, setFiltroSituacaoPr] = useState("todas");
   // Filtro por Motivo ("todos" ou um dos MOTIVOS_BOLETO) e paginação da página própria (20 por página por padrão).
   const [filtroMotivoPr, setFiltroMotivoPr] = useState("todos");
@@ -139,7 +139,7 @@ export default function App() {
   const respFiltroRef = useRef<HTMLDivElement | null>(null);
   const [newT, setNewT] = useState({fornecedor:"",valor:"",vencimento:"",responsavel:"",obs:""});
   const [newC, setNewC] = useState({representanteId:"",cpfCnpj:"",porcentagem:"",email:"",telefone:"",dataInicio:hoje,tipo:"vendedor"});
-  const [newPr, setNewPr] = useState({fornecedor:"",nf:"",motivo:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno",valor:"" as number | string});
+  const [newPr, setNewPr] = useState({fornecedor:"",nf:"",motivo:"",vencimento:"",estado:"Pará",situacao:"Solicitado",valor:"" as number | string});
   const [editPr, setEditPr] = useState<string | null>(null);
   const [editPrData, setEditPrData] = useState({fornecedor:"",nf:"",motivo:"",motivoOriginal:"",vencimento:"",estado:"Pará",valor:"" as number | string});
   const [showAprovarPr, setShowAprovarPr] = useState<string | null>(null);
@@ -472,10 +472,10 @@ export default function App() {
       });
     }
   }
-  // "Em negociação" recebe a mesma cor de "Aguardando retorno" — as duas
-  // aparecem pro usuário como "Aguardando" (ver situacaoLabel), então
+  // Os valores antigos "Aguardando retorno"/"Em negociação" têm a mesma cor de
+  // "Solicitado" — aparecem pro usuário como "Solicitado" (ver situacaoLabel), então
   // precisam da mesma cor pra não parecer duas coisas diferentes.
-  function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.orangeSoft,c:D.orangeText},"Solicitado":{bg:D.blueSoft,c:D.blueText},"Prorrogação Aprovada":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
+  function eCor(e){ return ({"Aguardando retorno":{bg:D.blueSoft,c:D.blueText},"Em negociação":{bg:D.blueSoft,c:D.blueText},"Solicitado":{bg:D.blueSoft,c:D.blueText},"Prorrogação Aprovada":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
   // Perfil/setor é exibido de forma neutra (nunca "Supervisor"/"Supervisora")
   // — pra role admin, o "perfil" é o próprio setor da pessoa (hoje sempre
   // "Supervisão", já que só existe uma conta admin). Gênero só entra pra
@@ -488,7 +488,7 @@ export default function App() {
   // Com "limite" definido, mostra só os N mais recentes e um link "Ver
   // todas"; sem limite (página própria), mostra a lista completa.
   function renderProrrogacoesCard(limite?:number){
-    // Listagem sempre agrupada por status — Em aberto (Pendente/Solicitado,
+    // Listagem sempre agrupada por status — Em aberto (Solicitado,
     // por vencimento mais antigo primeiro) → Recusado → Aprovado — nunca por
     // fornecedor/NF/data de cadastro.
     // Dentro de Aprovado, ordena pela data de conclusão (dataAprovacao)
@@ -498,7 +498,7 @@ export default function App() {
     const ordenadas = prorrogacoes.slice().sort((a,b)=>{
       const oa=ordemSituacao(a.situacao), ob=ordemSituacao(b.situacao);
       if(oa!==ob) return oa-ob;
-      // Em aberto (Pendente/Solicitado): vencimento mais antigo no topo — a
+      // Em aberto (Solicitado): vencimento mais antigo no topo — a
       // NF mais atrasada é a primeira que aparece.
       if(oa===0) return cmpVencimento(a.vencimento,b.vencimento);
       if(a.situacao==="Prorrogação Aprovada"&&b.situacao==="Prorrogação Aprovada"){
@@ -514,9 +514,9 @@ export default function App() {
     const filtrando = !limite && (filtroEstadoPr!=="todos" || filtroSituacaoPr!=="todas" || filtroMotivoPr!=="todos" || !!termoPr);
     const doEstado = !limite && filtroEstadoPr!=="todos" ? ordenadas.filter(pr=>pr.estado===filtroEstadoPr) : ordenadas;
     // Situação: compara o valor salvo (pendencias.situacao), sem alterá-lo.
-    const naSituacao = pr => filtroSituacaoPr==="pendente" ? ehAguardando(pr.situacao) : filtroSituacaoPr==="solicitado" ? pr.situacao==="Solicitado" : filtroSituacaoPr==="aprovado" ? pr.situacao==="Prorrogação Aprovada" : filtroSituacaoPr==="recusado" ? pr.situacao==="Recusado" : true;
+    const naSituacao = pr => filtroSituacaoPr==="solicitado" ? ehSolicitado(pr.situacao) : filtroSituacaoPr==="aprovado" ? pr.situacao==="Prorrogação Aprovada" : filtroSituacaoPr==="recusado" ? pr.situacao==="Recusado" : true;
     const doSituacao = !limite && filtroSituacaoPr!=="todas" ? doEstado.filter(naSituacao) : doEstado;
-    const rotuloSituacaoPr = ({pendente:"Pendente",solicitado:"Solicitado",aprovado:"Aprovado",recusado:"Recusado"})[filtroSituacaoPr];
+    const rotuloSituacaoPr = ({solicitado:"Solicitado",aprovado:"Aprovado",recusado:"Recusado"})[filtroSituacaoPr];
     // Motivo: compara o valor salvo (pendencias.motivo); boletos antigos sem motivo só aparecem em "Todos".
     const doMotivo = !limite && filtroMotivoPr!=="todos" ? doSituacao.filter(pr=>pr.motivo===filtroMotivoPr) : doSituacao;
     const lista = limite ? ordenadas.slice(0,limite) : termoPr ? doMotivo.filter(pr=>(pr.fornecedor||"").toLowerCase().includes(termoPr)||(pr.nf||"").toLowerCase().includes(termoPr)) : doMotivo;
@@ -540,7 +540,7 @@ export default function App() {
     return (
       <div className="bv-card" style={{...st.card,marginBottom:20}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-          <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs aguardando prorrogação</div></div>
+          <div><div style={{fontWeight:600,fontSize:14,color:D.text}}>📋 Prorrogação de Boletos</div><div style={{fontSize:12,color:D.muted,marginTop:2}}>NFs solicitadas para prorrogação</div></div>
           <div style={{display:"flex",gap:8}}>
             <button style={{...st.btn,padding:"7px 14px",fontSize:12}} onClick={()=>{setFiltroImp({tipo:"todos",de:"",ate:"",cliente:"",responsavel:"",estados:[]});setShowFiltroImpressao(true);}}><Printer size={13}/>Imprimir</button>
             {!somenteLeitura&&<button style={{...st.btnBlue,padding:"7px 14px",fontSize:12}} onClick={()=>setShowProrrForm(p=>!p)}><Plus size={13}/>Incluir NF</button>}
@@ -565,7 +565,7 @@ export default function App() {
               </div>
               <div><label style={st.lbl}>Situação</label>
                 <select style={st.inp} value={newPr.situacao} onChange={e=>setNewPr(p=>({...p,situacao:e.target.value}))}>
-                  <option value="Aguardando retorno">Aguardando</option><option value="Solicitado">Solicitado</option><option value="Recusado">Recusado</option>
+                  <option value="Solicitado">Solicitado</option><option value="Recusado">Recusado</option>
                 </select>
               </div>
             </div>
@@ -585,7 +585,7 @@ export default function App() {
             </div>
             <div style={{minWidth:160}}><label style={st.lbl}>Situação</label>
               <select style={st.inp} value={filtroSituacaoPr} onChange={e=>filtrarPr(setFiltroSituacaoPr,e.target.value)}>
-                <option value="todas">Todas</option><option value="pendente">Pendente</option><option value="solicitado">Solicitado</option><option value="aprovado">Aprovado</option><option value="recusado">Recusado</option>
+                <option value="todas">Todas</option><option value="solicitado">Solicitado</option><option value="aprovado">Aprovado</option><option value="recusado">Recusado</option>
               </select>
             </div>
             <div style={{minWidth:210}}><label style={st.lbl}>Motivo</label>
@@ -645,9 +645,7 @@ export default function App() {
                   <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
                   <td data-label="Data de Inclusão" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{diaInclusao}{horaInclusao&&<span className="bv-hora-inclusao"> às {horaInclusao}</span>}</td>
                   <td data-label="Situação" style={{padding:"10px 8px"}}>
-                    <select value={pr.situacao} disabled={somenteLeitura} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:somenteLeitura?"default":"pointer",outline:"none",maxWidth:"100%"}}>
-                      <option value="Aguardando retorno">Pendente</option>
-                      {pr.situacao==="Em negociação"&&<option value="Em negociação" style={{display:"none"}}>Pendente</option>}
+                    <select value={ehSolicitado(pr.situacao)?"Solicitado":pr.situacao} disabled={somenteLeitura} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:somenteLeitura?"default":"pointer",outline:"none",maxWidth:"100%"}}>
                       <option value="Solicitado">Solicitado</option>
                       <option value="Prorrogação Aprovada">✓ Aprovado</option><option value="Recusado">✕ Recusado</option>
                     </select>
@@ -1268,7 +1266,7 @@ export default function App() {
     setProrrogacoes(prev=>prev.concat([mapPendenciaRow(data)]));
     setIrParaPr(data.id);
     addN("NF incluída: "+newPr.nf); addA("NF incluída",newPr.fornecedor,"NF: "+newPr.nf+" — Motivo: "+newPr.motivo);
-    setNewPr({fornecedor:"",nf:"",motivo:"",vencimento:"",estado:"Pará",situacao:"Aguardando retorno",valor:""}); setShowProrrForm(false);
+    setNewPr({fornecedor:"",nf:"",motivo:"",vencimento:"",estado:"Pará",situacao:"Solicitado",valor:""}); setShowProrrForm(false);
   }
 
   async function mudarSituacaoNF(id,situacao){
@@ -1343,13 +1341,13 @@ export default function App() {
   // crescente, concluídas por data de aprovação decrescente — como as
   // datas são "YYYY-MM-DD", a comparação de string já respeita a ordem
   // cronológica sem precisar converter pra Date.
-  // filtros: {tipo:"todos"|"aguardando"|"aprovado"|"recusado", de, ate, cliente, responsavel,
+  // filtros: {tipo:"todos"|"solicitado"|"aprovado"|"recusado", de, ate, cliente, responsavel,
   // estados:string[]}. "estados" é uma seleção múltipla (lógica OR/IN) sobre a coluna
   // pendencias.estado (pr.estado), que guarda o nome por extenso (CHECK: Pará/Piauí/Maranhão),
   // não a sigla. Lista vazia = "Todos" (sem filtro: os 3 estados).
   // Os 3 tipos são mutuamente exclusivos e batem 1:1 com o que aparece na
-  // tela (ver situacaoLabel/ehAguardando em lib/helpers): um registro
-  // "Em negociação" conta como "aguardando" — nunca aparece junto de
+  // tela (ver situacaoLabel/ehSolicitado em lib/helpers): um registro
+  // com valor antigo "Aguardando retorno"/"Em negociação" conta como "solicitado" — nunca aparece junto de
   // "recusado" nem é ignorado. "Cliente" no pedido do relatório
   // corresponde ao campo "Fornecedor" já existente (a NF é negociada com
   // um fornecedor, não há cadastro de cliente nessa tela). "Responsável"
@@ -1373,9 +1371,8 @@ export default function App() {
         && (!f.estados||f.estados.length===0||f.estados.includes(pr.estado))
         && dentroPeriodo(pr);
     });
-    // 4 grupos mutuamente exclusivos — cada NF cai em exatamente um.
-    const aguardando=base.filter(function(pr){ return ehAguardando(pr.situacao); }).sort((a,b)=>cmpVencimento(a.vencimento,b.vencimento));
-    const solicitado=base.filter(function(pr){ return pr.situacao==="Solicitado"; }).sort((a,b)=>cmpVencimento(a.vencimento,b.vencimento));
+    // 3 grupos mutuamente exclusivos — cada NF cai em exatamente um.
+    const solicitado=base.filter(function(pr){ return ehSolicitado(pr.situacao); }).sort((a,b)=>cmpVencimento(a.vencimento,b.vencimento));
     const aprovado=base.filter(function(pr){ return pr.situacao==="Prorrogação Aprovada"; }).sort((a,b)=>{
       if(!a.dataAprovacao) return 1;
       if(!b.dataAprovacao) return -1;
@@ -1386,9 +1383,9 @@ export default function App() {
       if(!b.vencimento) return -1;
       return a.vencimento<b.vencimento?-1:a.vencimento>b.vencimento?1:0;
     });
-    const porTipo = {aguardando:aguardando,solicitado:solicitado,aprovado:aprovado,recusado:recusado};
+    const porTipo = {solicitado:solicitado,aprovado:aprovado,recusado:recusado};
     const totalExibido = porTipo[f.tipo] ? porTipo[f.tipo].length : base.length;
-    const tituloTipo = {todos:"Todos",aguardando:"Aguardando",solicitado:"Solicitado",aprovado:"Aprovado",recusado:"Recusado"}[f.tipo]||"Todos";
+    const tituloTipo = {todos:"Todos",solicitado:"Solicitado",aprovado:"Aprovado",recusado:"Recusado"}[f.tipo]||"Todos";
 
     const w=window.open("","_blank");
     if(!w) return;
@@ -1421,7 +1418,7 @@ export default function App() {
     });
     w.document.body.appendChild(meta);
 
-    if(f.tipo==="aguardando"||f.tipo==="solicitado"||f.tipo==="aprovado"||f.tipo==="recusado"){
+    if(f.tipo==="solicitado"||f.tipo==="aprovado"||f.tipo==="recusado"){
       const badge=w.document.createElement("div");
       badge.className="status status-"+f.tipo;
       badge.textContent="STATUS: "+tituloTipo.toUpperCase();
@@ -1429,7 +1426,7 @@ export default function App() {
     }
 
     // "peso" define a largura relativa da coluna (não um "%" fixo), pra
-    // caber na página tanto com 9 colunas (aguardando/recusado) quanto
+    // caber na página tanto com 9 colunas (solicitado/recusado) quanto
     // com 10 (aprovado, +Aprovado em) sem sobrar nem faltar largura — o %
     // real de cada uma é peso/somaDosPesos das colunas realmente exibidas.
     // Vencimento/Solicitado em/Aprovado em mostram data "DD/MM/AAAA" —
@@ -1494,16 +1491,13 @@ export default function App() {
       }
     }
 
-    if(f.tipo==="aguardando"){
-      criarSecao(null, aguardando, colunasBase, "Nenhuma NF aguardando no momento.");
-    } else if(f.tipo==="solicitado"){
+    if(f.tipo==="solicitado"){
       criarSecao(null, solicitado, colunasBase, "Nenhuma NF solicitada no momento.");
     } else if(f.tipo==="aprovado"){
       criarSecao(null, aprovado, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
     } else if(f.tipo==="recusado"){
       criarSecao(null, recusado, colunasBase, "Nenhuma NF recusada no momento.");
     } else {
-      criarSecao("Aguardando", aguardando, colunasBase, "Nenhuma NF aguardando no momento.");
       criarSecao("Solicitado", solicitado, colunasBase, "Nenhuma NF solicitada no momento.");
       criarSecao("Recusado", recusado, colunasBase, "Nenhuma NF recusada no momento.");
       criarSecao("Aprovado", aprovado, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
@@ -2509,7 +2503,6 @@ export default function App() {
               <div style={{gridColumn:"1/-1"}}><label style={st.lbl}>Tipo de relatório</label>
                 <select style={st.inp} value={filtroImp.tipo} onChange={e=>setFiltroImp(p=>({...p,tipo:e.target.value}))}>
                   <option value="todos">Todos</option>
-                  <option value="aguardando">Aguardando</option>
                   <option value="solicitado">Solicitado</option>
                   <option value="aprovado">Aprovado</option>
                   <option value="recusado">Recusado</option>
