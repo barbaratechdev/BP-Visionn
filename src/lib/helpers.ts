@@ -21,7 +21,46 @@ export function ehAguardando(s){ return s==="Aguardando retorno"||s==="Em negoci
 // Aguardando (0) → Recusado (1) → Aprovado (2), nunca por fornecedor/NF/
 // data. Um valor de situação fora dos 4 conhecidos vai pro fim (3) em vez
 // de cair silenciosamente num dos 3 baldes existentes.
-export function ordemSituacao(s){ return ehAguardando(s)?0:s==="Recusado"?1:s==="Prorrogação Aprovada"?2:3; }
+// "Em aberto" = NF ainda sem resposta final do fornecedor: Aguardando (inclui
+// o valor interno "Em negociação") ou Solicitado. Só esses entram na ordem
+// por vencimento e nos alertas de prazo — Aprovado/Recusado já foram resolvidos.
+export function ehEmAberto(s){ return ehAguardando(s)||s==="Solicitado"; }
+export function ordemSituacao(s){ return ehEmAberto(s)?0:s==="Recusado"?1:s==="Prorrogação Aprovada"?2:3; }
+// Compara dois vencimentos "YYYY-MM-DD" do mais antigo pro mais novo (a
+// string já respeita a ordem cronológica). Sem vencimento vai pro fim.
+export function cmpVencimento(a,b){
+  if(!a&&!b) return 0;
+  if(!a) return 1;
+  if(!b) return -1;
+  return a<b?-1:a>b?1:0;
+}
+// Data de hoje no fuso do navegador ("YYYY-MM-DD"). Não usa toISOString()
+// porque ele devolve a data em UTC — à noite em Belém (UTC-3) já viraria
+// "amanhã" e o alerta de "Vence hoje" erraria o dia.
+export function hojeLocalISO(){
+  const d=new Date();
+  const p=function(n){ return String(n).padStart(2,"0"); };
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());
+}
+// Dias entre hoje e o vencimento: negativo = já venceu, 0 = vence hoje.
+export function diasParaVencer(venc){
+  if(!venc) return null;
+  const a=venc.split("-").map(Number), b=hojeLocalISO().split("-").map(Number);
+  return Math.round((Date.UTC(a[0],a[1]-1,a[2])-Date.UTC(b[0],b[1]-1,b[2]))/86400000);
+}
+// Quantos dias antes do vencimento a NF passa a ser "Vence em breve".
+export const DIAS_ALERTA_VENCIMENTO = 3;
+// Alerta de prazo de uma NF em Prorrogação de Boletos. Só devolve algo para
+// NFs em aberto (ver ehEmAberto) e dentro do prazo de alerta; senão null.
+// nivel: "vencida" | "hoje" | "breve".
+export function alertaVencimento(pr){
+  if(!pr||!ehEmAberto(pr.situacao)) return null;
+  const n=diasParaVencer(pr.vencimento);
+  if(n===null||n>DIAS_ALERTA_VENCIMENTO) return null;
+  if(n<0) return {nivel:"vencida", texto:"Vencida há "+(-n)+(n===-1?" dia":" dias")};
+  if(n===0) return {nivel:"hoje", texto:"Vence hoje"};
+  return {nivel:"breve", texto:n===1?"Vence amanhã":"Vence em "+n+" dias"};
+}
 export function fBRL(v){ return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
 
 // Converte o texto de um campo de valor (ex.: "10.543,33", "10543,33" ou

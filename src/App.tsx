@@ -3,7 +3,7 @@ import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent, ClipboardCheck, Contact } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
 import { LIGHT, DARK, SIDEBAR, hoje, TIPO_MOD, MODELOS_INIT, AUDIT_IC } from "./constants";
-import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, MOTIVOS_BOLETO, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao } from "./lib/helpers";
+import { getIn, fBRL, fData, fDataHoraBR, fTempoDeEmpresa, fillTpl, nowT, nowF, mapProfileRow, fallbackProfile, mapTarefaRow, mapPendenciaRow, MOTIVOS_BOLETO, mapContratoRow, mapRepresentanteRow, mapSupervisorRow, mapAuditoriaRow, validarImagem, lerComoDataURL, parseMoedaInput, fMoedaInput, sanitizarMoedaInput, nomeVisivel, situacaoLabel, ehAguardando, ordemSituacao, cmpVencimento, alertaVencimento } from "./lib/helpers";
 import { useDraggable } from "./lib/useDraggable";
 import Badge from "./components/Badge";
 import Av from "./components/Av";
@@ -26,7 +26,7 @@ import { podeVerCadastroClientes, podeEditarCadastroClientes, podeAdministrarCad
 // Colunas da tabela de Prorrogação de Boletos (28/10/2026): Motivo entre Fornecedor e NF. As colunas curtas têm
 // a largura do conteúdo medido a 13 px (+ 12 px de espaçamento e folga); o Fornecedor (w vazio) fica com o resto.
 const COLUNAS_BOLETOS = [
-  {h:"Fornecedor", w:""}, {h:"Motivo", w:"14%"}, {h:"NF", w:"82px"}, {h:"Valor", w:"100px"}, {h:"Vencimento", w:"84px"},
+  {h:"Fornecedor", w:""}, {h:"Motivo", w:"14%"}, {h:"NF", w:"82px"}, {h:"Valor", w:"100px"}, {h:"Vencimento", w:"124px"},
   {h:"Estado", w:"76px"}, {h:"Data de Inclusão", w:"84px"}, {h:"Situação", w:"118px"}, {h:"", w:"80px"},
 ];
 
@@ -475,7 +475,7 @@ export default function App() {
   // "Em negociação" recebe a mesma cor de "Aguardando retorno" — as duas
   // aparecem pro usuário como "Aguardando" (ver situacaoLabel), então
   // precisam da mesma cor pra não parecer duas coisas diferentes.
-  function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.orangeSoft,c:D.orangeText},"Prorrogação Aprovada":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
+  function eCor(e){ return ({"Aguardando retorno":{bg:D.orangeSoft,c:D.orangeText},"Em negociação":{bg:D.orangeSoft,c:D.orangeText},"Solicitado":{bg:D.blueSoft,c:D.blueText},"Prorrogação Aprovada":{bg:D.greenSoft,c:D.greenText},"Recusado":{bg:D.redSoft,c:D.redText}})[e]||{bg:D.bg,c:D.muted}; }
   // Perfil/setor é exibido de forma neutra (nunca "Supervisor"/"Supervisora")
   // — pra role admin, o "perfil" é o próprio setor da pessoa (hoje sempre
   // "Supervisão", já que só existe uma conta admin). Gênero só entra pra
@@ -488,8 +488,9 @@ export default function App() {
   // Com "limite" definido, mostra só os N mais recentes e um link "Ver
   // todas"; sem limite (página própria), mostra a lista completa.
   function renderProrrogacoesCard(limite?:number){
-    // Listagem sempre agrupada por status — Aguardando → Recusado →
-    // Aprovado — nunca por fornecedor/NF/vencimento/data de cadastro.
+    // Listagem sempre agrupada por status — Em aberto (Pendente/Solicitado,
+    // por vencimento mais antigo primeiro) → Recusado → Aprovado — nunca por
+    // fornecedor/NF/data de cadastro.
     // Dentro de Aprovado, ordena pela data de conclusão (dataAprovacao)
     // decrescente — mais recente no topo — igual ao relatório impresso
     // (ver imprimirProrrogacoes). Nos demais grupos, sort estável: mantém
@@ -497,6 +498,9 @@ export default function App() {
     const ordenadas = prorrogacoes.slice().sort((a,b)=>{
       const oa=ordemSituacao(a.situacao), ob=ordemSituacao(b.situacao);
       if(oa!==ob) return oa-ob;
+      // Em aberto (Pendente/Solicitado): vencimento mais antigo no topo — a
+      // NF mais atrasada é a primeira que aparece.
+      if(oa===0) return cmpVencimento(a.vencimento,b.vencimento);
       if(a.situacao==="Prorrogação Aprovada"&&b.situacao==="Prorrogação Aprovada"){
         if(!a.dataAprovacao) return 1;
         if(!b.dataAprovacao) return -1;
@@ -510,9 +514,9 @@ export default function App() {
     const filtrando = !limite && (filtroEstadoPr!=="todos" || filtroSituacaoPr!=="todas" || filtroMotivoPr!=="todos" || !!termoPr);
     const doEstado = !limite && filtroEstadoPr!=="todos" ? ordenadas.filter(pr=>pr.estado===filtroEstadoPr) : ordenadas;
     // Situação: compara o valor salvo (pendencias.situacao), sem alterá-lo.
-    const naSituacao = pr => filtroSituacaoPr==="pendente" ? ehAguardando(pr.situacao) : filtroSituacaoPr==="aprovado" ? pr.situacao==="Prorrogação Aprovada" : filtroSituacaoPr==="recusado" ? pr.situacao==="Recusado" : true;
+    const naSituacao = pr => filtroSituacaoPr==="pendente" ? ehAguardando(pr.situacao) : filtroSituacaoPr==="solicitado" ? pr.situacao==="Solicitado" : filtroSituacaoPr==="aprovado" ? pr.situacao==="Prorrogação Aprovada" : filtroSituacaoPr==="recusado" ? pr.situacao==="Recusado" : true;
     const doSituacao = !limite && filtroSituacaoPr!=="todas" ? doEstado.filter(naSituacao) : doEstado;
-    const rotuloSituacaoPr = ({pendente:"Pendente",aprovado:"Aprovado",recusado:"Recusado"})[filtroSituacaoPr];
+    const rotuloSituacaoPr = ({pendente:"Pendente",solicitado:"Solicitado",aprovado:"Aprovado",recusado:"Recusado"})[filtroSituacaoPr];
     // Motivo: compara o valor salvo (pendencias.motivo); boletos antigos sem motivo só aparecem em "Todos".
     const doMotivo = !limite && filtroMotivoPr!=="todos" ? doSituacao.filter(pr=>pr.motivo===filtroMotivoPr) : doSituacao;
     const lista = limite ? ordenadas.slice(0,limite) : termoPr ? doMotivo.filter(pr=>(pr.fornecedor||"").toLowerCase().includes(termoPr)||(pr.nf||"").toLowerCase().includes(termoPr)) : doMotivo;
@@ -524,6 +528,15 @@ export default function App() {
     const listaPagina = limite ? lista : lista.slice(inicioPr, inicioPr+porPaginaPr);
     const irPaginaPr = n => { setPaginaPr(n); setIrParaPr(null); };
     const filtrarPr = (set, v) => { set(v); irPaginaPr(1); };
+    // Alertas de prazo (só NFs em aberto). A contagem do resumo considera
+    // todas as NFs, não só as da página/filtro atual.
+    const CORES_ALERTA = {
+      vencida:{bg:D.red, fg:"#FFFFFF", linha:dark?"#3A171A":"#FEF2F2", rotulo:"Vencidas"},
+      hoje:{bg:"#EA580C", fg:"#FFFFFF", linha:dark?"#3B1D0A":"#FFEDD5", rotulo:"Vencem hoje"},
+      breve:{bg:"#FACC15", fg:"#422006", linha:dark?"#3A3210":"#FEF9C3", rotulo:"Vencem em breve"},
+    };
+    const contAlerta = {vencida:0,hoje:0,breve:0};
+    prorrogacoes.forEach(function(x){ const al=alertaVencimento(x); if(al) contAlerta[al.nivel]++; });
     return (
       <div className="bv-card" style={{...st.card,marginBottom:20}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -552,7 +565,7 @@ export default function App() {
               </div>
               <div><label style={st.lbl}>Situação</label>
                 <select style={st.inp} value={newPr.situacao} onChange={e=>setNewPr(p=>({...p,situacao:e.target.value}))}>
-                  <option value="Aguardando retorno">Aguardando</option><option value="Recusado">Recusado</option>
+                  <option value="Aguardando retorno">Aguardando</option><option value="Solicitado">Solicitado</option><option value="Recusado">Recusado</option>
                 </select>
               </div>
             </div>
@@ -572,7 +585,7 @@ export default function App() {
             </div>
             <div style={{minWidth:160}}><label style={st.lbl}>Situação</label>
               <select style={st.inp} value={filtroSituacaoPr} onChange={e=>filtrarPr(setFiltroSituacaoPr,e.target.value)}>
-                <option value="todas">Todas</option><option value="pendente">Pendente</option><option value="aprovado">Aprovado</option><option value="recusado">Recusado</option>
+                <option value="todas">Todas</option><option value="pendente">Pendente</option><option value="solicitado">Solicitado</option><option value="aprovado">Aprovado</option><option value="recusado">Recusado</option>
               </select>
             </div>
             <div style={{minWidth:210}}><label style={st.lbl}>Motivo</label>
@@ -589,6 +602,19 @@ export default function App() {
             {filtrando&&<div style={{fontSize:12,color:D.muted,paddingBottom:10}}>{lista.length} de {prorrogacoes.length} NF(s)</div>}
           </div>
         )}
+        {(contAlerta.vencida+contAlerta.hoje+contAlerta.breve)>0&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+            {["vencida","hoje","breve"].map(function(nv){
+              const c=CORES_ALERTA[nv];
+              return (
+                <div key={nv} style={{background:c.linha,borderLeft:"5px solid "+c.bg,borderRadius:10,padding:"10px 14px"}}>
+                  <div style={{fontSize:26,fontWeight:700,lineHeight:1,color:D.text}}>{contAlerta[nv]}</div>
+                  <div style={{fontSize:12,color:D.muted,marginTop:4,fontWeight:500}}>{c.rotulo}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         {prorrogacoes.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>Nenhuma NF cadastrada.</div>:lista.length===0?<div style={{textAlign:"center",padding:"1rem 0",color:D.muted,fontSize:13}}>{doEstado.length===0?<>Nenhum registro encontrado para {filtroEstadoPr}.</>:doSituacao.length===0?<>Nenhuma NF com situação {rotuloSituacaoPr}{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>:doMotivo.length===0?<>Nenhuma NF com motivo "{filtroMotivoPr}"{rotuloSituacaoPr?<> e situação {rotuloSituacaoPr}</>:null}{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>:<>Nenhuma NF encontrada para "{buscaPr.trim()}"{rotuloSituacaoPr?<> com situação {rotuloSituacaoPr}</>:null}{filtroMotivoPr!=="todos"?<> e motivo "{filtroMotivoPr}"</>:null}{filtroEstadoPr!=="todos"?<> em {filtroEstadoPr}</>:null}.</>}</div>:(
           <div style={{overflowX:"auto"}}>
           {/* Larguras fixas por coluna (bv-tabela-boletos, só a partir de 681 px): o Fornecedor deixa de
@@ -600,23 +626,29 @@ export default function App() {
               const ec=eCor(pr.situacao);
               const criador=users.find(u=>u.id===pr.criadoPor);
               const [diaInclusao, horaInclusao] = pr.criadoEmHora ? fDataHoraBR(pr.criadoEmHora).split(" às ") : ["—", ""];
+              const al=alertaVencimento(pr);
+              const ca=al?CORES_ALERTA[al.nivel]:null;
               return (
                 <Fragment key={pr.id}>
-                <tr style={{borderBottom:"1px solid "+D.border}}>
-                  <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text,overflowWrap:"anywhere"}}>
+                <tr style={{borderBottom:"1px solid "+D.border,background:ca?ca.linha:undefined}}>
+                  <td data-label="Fornecedor" style={{padding:"10px 8px",fontWeight:500,color:D.text,overflowWrap:"anywhere",boxShadow:ca?"inset 5px 0 0 "+ca.bg:undefined}}>
                     {pr.fornecedor}
                     <div style={{fontSize:10,color:D.muted,fontWeight:400,marginTop:2}}>Incluído por {criador?nomeVisivel(criador):"—"}</div>
                   </td>
                   <td data-label="Motivo" style={{padding:"10px 8px",color:pr.motivo?D.text:D.muted,fontStyle:pr.motivo?"normal":"italic"}}>{pr.motivo||"Não informado"}</td>
                   <td data-label="NF" style={{padding:"10px 8px",color:D.muted,fontFamily:"monospace",overflowWrap:"anywhere"}}>{pr.nf}</td>
                   <td data-label="Valor" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{Number(pr.valor)>0?fBRL(pr.valor):"—"}</td>
-                  <td data-label="Vencimento" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{pr.vencimento?fData(pr.vencimento):"—"}</td>
+                  <td data-label="Vencimento" style={{padding:"10px 8px",color:ca?D.text:D.muted,fontWeight:ca?600:400,whiteSpace:"nowrap"}}>
+                    {pr.vencimento?fData(pr.vencimento):"—"}
+                    {al&&ca&&<div style={{marginTop:4}}><span style={{display:"inline-block",fontSize:10.5,fontWeight:700,background:ca.bg,color:ca.fg,borderRadius:20,padding:"2px 8px",whiteSpace:"nowrap"}}>{al.texto}</span></div>}
+                  </td>
                   <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{pr.estado}</td>
                   <td data-label="Data de Inclusão" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{diaInclusao}{horaInclusao&&<span className="bv-hora-inclusao"> às {horaInclusao}</span>}</td>
                   <td data-label="Situação" style={{padding:"10px 8px"}}>
                     <select value={pr.situacao} disabled={somenteLeitura} onChange={e=>{const v=e.target.value; if(v==="Prorrogação Aprovada"){abrirAprovarProrrogacao(pr.id);} else {mudarSituacaoNF(pr.id,v);}}} style={{fontSize:11,fontWeight:600,background:ec.bg,color:ec.c,border:"none",borderRadius:20,padding:"3px 10px",cursor:somenteLeitura?"default":"pointer",outline:"none",maxWidth:"100%"}}>
                       <option value="Aguardando retorno">Pendente</option>
                       {pr.situacao==="Em negociação"&&<option value="Em negociação" style={{display:"none"}}>Pendente</option>}
+                      <option value="Solicitado">Solicitado</option>
                       <option value="Prorrogação Aprovada">✓ Aprovado</option><option value="Recusado">✕ Recusado</option>
                     </select>
                     {pr.situacao==="Prorrogação Aprovada"&&pr.dataAprovacao&&<div style={{fontSize:10,color:D.muted,marginTop:3}}>· {fData(pr.dataAprovacao)}</div>}
@@ -1341,12 +1373,9 @@ export default function App() {
         && (!f.estados||f.estados.length===0||f.estados.includes(pr.estado))
         && dentroPeriodo(pr);
     });
-    // 3 grupos mutuamente exclusivos — cada NF cai em exatamente um.
-    const aguardando=base.filter(function(pr){ return ehAguardando(pr.situacao); }).sort((a,b)=>{
-      if(!a.vencimento) return 1;
-      if(!b.vencimento) return -1;
-      return a.vencimento<b.vencimento?-1:a.vencimento>b.vencimento?1:0;
-    });
+    // 4 grupos mutuamente exclusivos — cada NF cai em exatamente um.
+    const aguardando=base.filter(function(pr){ return ehAguardando(pr.situacao); }).sort((a,b)=>cmpVencimento(a.vencimento,b.vencimento));
+    const solicitado=base.filter(function(pr){ return pr.situacao==="Solicitado"; }).sort((a,b)=>cmpVencimento(a.vencimento,b.vencimento));
     const aprovado=base.filter(function(pr){ return pr.situacao==="Prorrogação Aprovada"; }).sort((a,b)=>{
       if(!a.dataAprovacao) return 1;
       if(!b.dataAprovacao) return -1;
@@ -1357,14 +1386,14 @@ export default function App() {
       if(!b.vencimento) return -1;
       return a.vencimento<b.vencimento?-1:a.vencimento>b.vencimento?1:0;
     });
-    const porTipo = {aguardando:aguardando,aprovado:aprovado,recusado:recusado};
+    const porTipo = {aguardando:aguardando,solicitado:solicitado,aprovado:aprovado,recusado:recusado};
     const totalExibido = porTipo[f.tipo] ? porTipo[f.tipo].length : base.length;
-    const tituloTipo = {todos:"Todos",aguardando:"Aguardando",aprovado:"Aprovado",recusado:"Recusado"}[f.tipo]||"Todos";
+    const tituloTipo = {todos:"Todos",aguardando:"Aguardando",solicitado:"Solicitado",aprovado:"Aprovado",recusado:"Recusado"}[f.tipo]||"Todos";
 
     const w=window.open("","_blank");
     if(!w) return;
     w.opener=null;
-    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:landscape;margin:1.2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111}h1{font-size:14pt;margin:0 0 4px}h2{font-size:12pt;margin:20px 0 8px;padding-top:12px;border-top:1px solid #ccc}h2:first-of-type{margin-top:16px;padding-top:0;border-top:none}.sub{font-size:9pt;color:#555;margin:2px 0}.meta{margin-bottom:14px}.status{display:inline-block;font-size:10.5pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:4px 11px;margin:8px 0 14px}.status-aguardando{background:#FFFBEB;color:#B45309}.status-aprovado{background:#F0FDF4;color:#15803D}.status-recusado{background:#FEF2F2;color:#B91C1C}.vazio{font-size:9.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;table-layout:fixed;border-collapse:collapse}th,td{padding:5px 6px;text-align:left;border-bottom:1px solid #ddd;font-size:8.5pt;word-break:break-word;overflow-wrap:break-word}th{background:#f2f2f2;font-weight:600}td.data-col{white-space:nowrap;overflow:visible;word-break:normal;overflow-wrap:normal}thead{display:table-header-group}tr{page-break-inside:avoid}.r{margin-top:22px;font-size:8.5pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:8px}@media print{button{display:none}}</style></head><body></body></html>");
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'/><style>@page{size:landscape;margin:1.2cm}body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;color:#111}h1{font-size:14pt;margin:0 0 4px}h2{font-size:12pt;margin:20px 0 8px;padding-top:12px;border-top:1px solid #ccc}h2:first-of-type{margin-top:16px;padding-top:0;border-top:none}.sub{font-size:9pt;color:#555;margin:2px 0}.meta{margin-bottom:14px}.status{display:inline-block;font-size:10.5pt;font-weight:700;letter-spacing:0.03em;border-radius:6px;padding:4px 11px;margin:8px 0 14px}.status-aguardando{background:#FFFBEB;color:#B45309}.status-solicitado{background:#EFF6FF;color:#1D4ED8}.status-aprovado{background:#F0FDF4;color:#15803D}.status-recusado{background:#FEF2F2;color:#B91C1C}.vazio{font-size:9.5pt;color:#777;font-style:italic;padding:6px 0 4px}table{width:100%;table-layout:fixed;border-collapse:collapse}th,td{padding:5px 6px;text-align:left;border-bottom:1px solid #ddd;font-size:8.5pt;word-break:break-word;overflow-wrap:break-word}th{background:#f2f2f2;font-weight:600}td.data-col{white-space:nowrap;overflow:visible;word-break:normal;overflow-wrap:normal}thead{display:table-header-group}tr{page-break-inside:avoid}.r{margin-top:22px;font-size:8.5pt;color:#555;text-align:center;border-top:1px solid #ccc;padding-top:8px}@media print{button{display:none}}</style></head><body></body></html>");
     w.document.close();
     w.document.title="Relatório de Boletos Prorrogados";
     const h1=w.document.createElement("h1");
@@ -1392,7 +1421,7 @@ export default function App() {
     });
     w.document.body.appendChild(meta);
 
-    if(f.tipo==="aguardando"||f.tipo==="aprovado"||f.tipo==="recusado"){
+    if(f.tipo==="aguardando"||f.tipo==="solicitado"||f.tipo==="aprovado"||f.tipo==="recusado"){
       const badge=w.document.createElement("div");
       badge.className="status status-"+f.tipo;
       badge.textContent="STATUS: "+tituloTipo.toUpperCase();
@@ -1467,12 +1496,15 @@ export default function App() {
 
     if(f.tipo==="aguardando"){
       criarSecao(null, aguardando, colunasBase, "Nenhuma NF aguardando no momento.");
+    } else if(f.tipo==="solicitado"){
+      criarSecao(null, solicitado, colunasBase, "Nenhuma NF solicitada no momento.");
     } else if(f.tipo==="aprovado"){
       criarSecao(null, aprovado, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
     } else if(f.tipo==="recusado"){
       criarSecao(null, recusado, colunasBase, "Nenhuma NF recusada no momento.");
     } else {
       criarSecao("Aguardando", aguardando, colunasBase, "Nenhuma NF aguardando no momento.");
+      criarSecao("Solicitado", solicitado, colunasBase, "Nenhuma NF solicitada no momento.");
       criarSecao("Recusado", recusado, colunasBase, "Nenhuma NF recusada no momento.");
       criarSecao("Aprovado", aprovado, colunasBase.concat([colunaAprovacao]), "Nenhuma prorrogação aprovada até o momento.");
     }
@@ -2478,6 +2510,7 @@ export default function App() {
                 <select style={st.inp} value={filtroImp.tipo} onChange={e=>setFiltroImp(p=>({...p,tipo:e.target.value}))}>
                   <option value="todos">Todos</option>
                   <option value="aguardando">Aguardando</option>
+                  <option value="solicitado">Solicitado</option>
                   <option value="aprovado">Aprovado</option>
                   <option value="recusado">Recusado</option>
                 </select>
