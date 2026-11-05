@@ -415,7 +415,7 @@ export default function App() {
         setUser(logado);
         setTab(logado.role==="admin"?"painel":"tarefas");
         carregarTarefas();
-        if(podeLerOperacao(logado)){ carregarPendencias(); carregarContratos(); }
+        if(podeLerOperacao(logado)){ carregarPendencias(); }
         if(podeLerCadastros(logado)){ carregarRepresentantes(); carregarSupervisoresCadastro(); }
         carregarAuditoria();
         carregarDemoResponsavelPermitido(logado);
@@ -444,7 +444,7 @@ export default function App() {
           const perfil = logado||fallbackProfile(novaSessao.user);
           if(!logado) setUser(perfil);
           if(ehLoginNovo) setTab(perfil.role==="admin"?"painel":"tarefas");
-          if(ehLoginNovo&&podeLerOperacao(perfil)){ carregarPendencias(); carregarContratos(); }
+          if(ehLoginNovo&&podeLerOperacao(perfil)){ carregarPendencias(); }
           if(ehLoginNovo&&podeLerCadastros(perfil)){ carregarRepresentantes(); carregarSupervisoresCadastro(); }
           carregarDemoResponsavelPermitido(perfil);
           carregarDemoFuncionariosTeste(perfil);
@@ -1689,7 +1689,6 @@ export default function App() {
     {id:"aprovacoes",label:"Aprovações de Cancelamento",Icon:ClipboardCheck,show:isAprovadorCancelamento},
     {id:"mensagens",label:"Mensagens",Icon:MessageCircle,show:!isDemo},
     {id:"rh",label:"RH",Icon:Briefcase,show:verRH},
-    {id:"contratos",label:"Contratos",Icon:FileText,show:verOperacao},
     {id:"clientes",label:"Cadastro de Clientes",Icon:Contact,show:verCadastroClientes},
     {id:"representantes",label:"Representantes",Icon:Users,show:verRepresentantes},
     {id:"supervisores",label:"Supervisores",Icon:UserCog,show:verSupervisores},
@@ -2104,115 +2103,6 @@ export default function App() {
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-
-          {/* CONTRATOS */}
-          {tab==="contratos"&&verOperacao&&(
-            <div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-                <div><div style={{fontSize:20,fontWeight:700,color:D.text}}>Contratos</div><div style={{fontSize:13,color:D.muted}}>{contratos.length} representante(s)</div></div>
-                {podeContratos&&<button style={st.btnBlue} onClick={()=>setShowCForm(p=>!p)}><Plus size={15}/>Novo contrato</button>}
-              </div>
-              <div style={{display:"flex",gap:4,marginBottom:20,background:D.bg,borderRadius:10,padding:4,width:"fit-content"}}>
-                {[{id:"lista",label:"📋 Lista"},{id:"modelos",label:"📄 Modelos"}].map(a=>(
-                  <button key={a.id} onClick={()=>setAbaC(a.id)} style={{padding:"7px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:abaC===a.id?600:400,background:abaC===a.id?D.white:"transparent",color:abaC===a.id?D.text:D.muted}}>{a.label}</button>
-                ))}
-              </div>
-              {abaC==="lista"&&(
-                <div>
-                  {showCForm&&(
-                    <div className="bv-card" style={{...st.card,borderColor:D.blue,marginBottom:16}}>
-                      <div style={{fontWeight:600,fontSize:14,color:D.text,marginBottom:14}}>Novo contrato</div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
-                        <div><label style={st.lbl}>Tipo</label><select style={st.inp} value={newC.tipo} onChange={e=>setNewC(p=>({...p,tipo:e.target.value}))}>{Object.keys(TIPO_MOD).map(k=><option key={k} value={k}>{TIPO_MOD[k].emoji} {TIPO_MOD[k].label}</option>)}</select></div>
-                        <div><label style={st.lbl}>Representante</label>
-                          <div style={{display:"flex",gap:6}}>
-                            <select style={st.inp} value={newC.representanteId} onChange={e=>setNewC(p=>({...p,representanteId:e.target.value}))}>
-                              <option value="">Selecione...</option>
-                              {representantesAtivos.map(r=><option key={r.id} value={r.id}>{r.nome} — {r.regiao}</option>)}
-                            </select>
-                            <button type="button" style={st.btn} onClick={abrirNovoRep}>+ Novo</button>
-                          </div>
-                        </div>
-                        <div><label style={st.lbl}>CPF/CNPJ</label><input style={st.inp} value={newC.cpfCnpj} onChange={e=>setNewC(p=>({...p,cpfCnpj:e.target.value}))}/></div>
-                        <div><label style={st.lbl}>% Comissão</label><input type="number" style={st.inp} value={newC.porcentagem} onChange={e=>setNewC(p=>({...p,porcentagem:e.target.value}))}/></div>
-                        <div><label style={st.lbl}>E-mail</label><input style={st.inp} value={newC.email} onChange={e=>setNewC(p=>({...p,email:e.target.value}))}/></div>
-                        <div><label style={st.lbl}>Telefone</label><input style={st.inp} value={newC.telefone} onChange={e=>setNewC(p=>({...p,telefone:e.target.value}))}/></div>
-                        <div><label style={st.lbl}>Data de início</label><input type="date" style={st.inp} value={newC.dataInicio} onChange={e=>setNewC(p=>({...p,dataInicio:e.target.value}))}/></div>
-                      </div>
-                      <div style={{display:"flex",gap:8,marginTop:14}}><button type="button" style={st.btnBlue} onClick={addContrato}><CheckCircle size={14}/>Salvar</button><button type="button" style={st.btn} onClick={()=>setShowCForm(false)}>Cancelar</button></div>
-                    </div>
-                  )}
-                  {contratos.length===0&&<div style={{textAlign:"center",padding:"2rem",color:D.muted}}>Nenhum contrato.</div>}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12}}>
-                    {contratos.map(c=>(
-                      <div className="bv-card" key={c.id} style={st.card}>
-                        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-                          <Av name={c.representante} initials={getIn(c.representante)} color={D.purple} size={42}/>
-                          <div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,color:D.text}}>{c.representante}</div><div style={{fontSize:11,color:D.muted,marginTop:2}}>{TIPO_MOD[c.tipo]?TIPO_MOD[c.tipo].emoji:""} {TIPO_MOD[c.tipo]?TIPO_MOD[c.tipo].label:""}</div></div>
-                          <span style={{background:D.greenSoft,color:D.greenText,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}>Ativo</span>
-                        </div>
-                        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:8,marginBottom:14}}>
-                          {[["Comissão",c.porcentagem+"%"],["Início",c.dataInicio],["E-mail",c.email],["Telefone",c.telefone]].map(function(kv){ return <div key={kv[0]} style={{background:D.bg,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:11,color:D.muted,marginBottom:2}}>{kv[0]}</div><div style={{fontSize:12,fontWeight:600,color:D.text}}>{kv[1]}</div></div>; })}
-                        </div>
-                        <button style={{...st.btn,width:"100%",justifyContent:"center"}} onClick={()=>{setShowContrato(c);setDocEdit(c.documentoTexto||"");setEditDoc(false);}}><FileText size={14}/>Ver / Editar</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {abaC==="modelos"&&(
-                <div>
-                  <div style={{fontSize:13,color:D.muted,marginBottom:16}}>Use <code style={{background:D.bg,padding:"1px 6px",borderRadius:4,color:D.blue}}>{"{{nome}}"}</code> etc. como variáveis.</div>
-                  {Object.keys(TIPO_MOD).map(key=>(
-                    <div className="bv-card" key={key} style={st.card}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                        <div style={{fontWeight:600,fontSize:15,color:D.text}}>{TIPO_MOD[key].emoji} {TIPO_MOD[key].label}</div>
-                        {podeContratos&&(editMod===key?(
-                          <div style={{display:"flex",gap:8}}>
-                            <button style={st.btnBlue} onClick={()=>{setModelos(p=>({...p,[key]:modEdit}));setEditMod(null);addA("Edição de informações","Modelo",TIPO_MOD[key].label+" editado");}}><Save size={13}/>Salvar</button>
-                            <button style={st.btn} onClick={()=>setEditMod(null)}>Cancelar</button>
-                          </div>
-                        ):(
-                          <button style={st.btn} onClick={()=>{setEditMod(key);setModEdit(modelos[key]);}}><Edit3 size={13}/>Editar</button>
-                        ))}
-                      </div>
-                      {editMod===key?<textarea value={modEdit} onChange={e=>setModEdit(e.target.value)} style={{...st.inp,minHeight:240,fontFamily:"monospace",fontSize:13,lineHeight:1.6,resize:"vertical"}}/>:<pre style={{fontSize:12,color:D.muted,background:D.bg,borderRadius:8,padding:"1rem",lineHeight:1.7,margin:0,whiteSpace:"pre-wrap",overflow:"auto"}}>{modelos[key]}</pre>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {showContrato&&(
-                <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:300}} onClick={()=>{setShowContrato(null);setEditDoc(false);}}>
-                  <div style={{background:D.white,borderRadius:16,padding:"2rem",maxWidth:560,width:"90%",maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-                      <div style={{fontWeight:700,fontSize:16,color:D.text}}>{TIPO_MOD[showContrato.tipo]?TIPO_MOD[showContrato.tipo].emoji:""} {TIPO_MOD[showContrato.tipo]?TIPO_MOD[showContrato.tipo].label:""}</div>
-                      <button style={{...st.btn,padding:"4px 8px",border:"none"}} onClick={()=>{setShowContrato(null);setEditDoc(false);}}><X size={16}/></button>
-                    </div>
-                    {editDoc?(
-                      <>
-                        <textarea value={docEdit} onChange={e=>setDocEdit(e.target.value)} style={{...st.inp,minHeight:320,fontFamily:"'Times New Roman',serif",fontSize:13,lineHeight:1.8,resize:"vertical",marginBottom:16}}/>
-                        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                          <button style={st.btnBlue} onClick={()=>{salvarDocumento(showContrato.id,docEdit);setEditDoc(false);}}><Save size={14}/>Salvar revisão</button>
-                          <button style={{...st.btnBlue,background:D.green}} onClick={()=>{salvarDocumento(showContrato.id,docEdit);exportPDF(showContrato,docEdit);}}><Save size={14}/>Exportar PDF</button>
-                          <button style={st.btn} onClick={()=>{setDocEdit(showContrato.documentoTexto||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato));setEditDoc(false);}}>Descartar</button>
-                        </div>
-                      </>
-                    ):(
-                      <>
-                        <pre style={{fontSize:13,color:D.text,background:D.bg,borderRadius:10,padding:"1.25rem",lineHeight:1.8,whiteSpace:"pre-wrap",margin:"0 0 16px",fontFamily:"'Times New Roman',serif"}}>{docEdit||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato)}</pre>
-                        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                          {podeContratos&&<button style={st.btn} onClick={()=>{setDocEdit(docEdit||fillTpl(modelos[showContrato.tipo||"vendedor"],showContrato));setEditDoc(true);}}><Edit3 size={14}/>Editar</button>}
-                          <button style={st.btnBlue} onClick={()=>window.print()}><Printer size={14}/>Imprimir</button>
-                          <button style={{...st.btnBlue,background:D.green}} onClick={()=>{if(docEdit) salvarDocumento(showContrato.id,docEdit); exportPDF(showContrato,docEdit||undefined);}}><Save size={14}/>Exportar PDF</button>
-                          <button style={st.btn} onClick={()=>{setShowContrato(null);setEditDoc(false);setDocEdit("");}}>Fechar</button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
