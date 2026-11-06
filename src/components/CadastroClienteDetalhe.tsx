@@ -113,6 +113,7 @@ export default function CadastroClienteDetalhe(p) {
             {campo("Representante / vendedor", nomeRepresentante(c))}
             {campo("Código", c.representanteCodigo)}
             {campo("Supervisor", c.supervisorNome)}
+            {campo("Estado", c.estado)}
             {campo("Televendas", c.televendas)}
           </div>
           <div style={{marginTop:18}}>

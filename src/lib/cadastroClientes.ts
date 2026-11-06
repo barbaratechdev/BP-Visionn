@@ -68,7 +68,7 @@ export function mapClienteRow(r){
     id:r.id, razaoSocial:r.razao_social||"", codigoRazaoSocial:r.codigo_razao_social||"", cnpj:r.cnpj||"",
     grupo:r.grupo||"", televendas:r.televendas||"", responsavelNome:r.responsavel_nome||"", telefone:r.telefone||"", email:r.email||"",
     representanteId:r.representante_id||"", representanteNome:r.representante_nome||"", representanteCodigo:r.representante_codigo||"",
-    supervisorId:r.supervisor_id||"", supervisorNome:r.supervisor_nome||"",
+    supervisorId:r.supervisor_id||"", supervisorNome:r.supervisor_nome||"", estado:r.estado||"",
     dataInclusaoTarget:r.data_inclusao_target||"", observacoes:r.observacoes||"", situacao:r.situacao||"PENDENTE",
     docContratoSocial:r.doc_contrato_social||"PENDENTE", docCnpj:r.doc_cnpj||"PENDENTE", docCrf:r.doc_crf||"PENDENTE",
     docFotos:r.doc_fotos||"PENDENTE", docNotas:r.doc_notas||"PENDENTE", docControlados:r.doc_controlados||"",
@@ -87,7 +87,7 @@ export function payloadCliente(f, incluirSituacao){
   const p: Record<string, unknown> = {
     razao_social:f.razaoSocial, codigo_razao_social:vazio(f.codigoRazaoSocial), cnpj:vazio(soDigitos(f.cnpj)),
     grupo:vazio(f.grupo), televendas:vazio(f.televendas), responsavel_nome:vazio(f.responsavelNome),
-    telefone:vazio(f.telefone), email:vazio(f.email), supervisor_id:vazio(f.supervisorId),
+    telefone:vazio(f.telefone), email:vazio(f.email), supervisor_id:vazio(f.supervisorId), estado:vazio(f.estado),
     data_inclusao_target:vazio(f.dataInclusaoTarget), observacoes:vazio(f.observacoes),
     doc_controlados:vazio(f.docControlados), sintegra:vazio(f.sintegra), serasa:vazio(f.serasa),
     origem_cadastro:vazio(f.origemCadastro), representante_codigo:vazio((f.representanteCodigo||"").trim()),
@@ -224,7 +224,7 @@ export function mensagemErroCliente(error){
 // Histórico: rótulos dos campos e valores legíveis.
 export const ROTULO_CAMPO = {
   razao_social:"Razão social", codigo_razao_social:"Código da razão social", cnpj:"CNPJ", grupo:"Grupo", televendas:"Televendas",
-  responsavel_nome:"Responsável pela farmácia", telefone:"Telefone", email:"E-mail", representante:"Representante", supervisor:"Supervisor",
+  responsavel_nome:"Responsável pela farmácia", estado:"Estado", telefone:"Telefone", email:"E-mail", representante:"Representante", supervisor:"Supervisor",
   origem_cadastro:"Origem do cadastro", representante_tipo:"Tipo de representante", representante_externo_nome:"Representante de outra empresa",
   representante_codigo:"Código", serasa_valor_pendencias:"Serasa — valor total das pendências",
   data_inclusao_target:"Data de inclusão na TARGET", observacoes:"Observações", situacao:"Situação",
@@ -299,6 +299,7 @@ tr{page-break-inside:avoid}
 <table><tr>${linha("Cliente / Razão social", v(c.razaoSocial), 3)}${linha("Código da razão social", v(c.codigoRazaoSocial))}</tr>
 <tr>${linha("CNPJ", v(c.cnpj?formatarCnpj(c.cnpj):""), 2)}${linha("Responsável pela farmácia", v(c.responsavelNome), 2)}</tr>
 <tr>${linha("Representante / Vendedor", v(nomeRepresentante(c)), 2)}${linha("Supervisor", v(c.supervisorNome), 2)}</tr>
+<tr>${linha("Estado", v(c.estado), 4)}</tr>
 <tr>${linha("Telefone", v(c.telefone), 2)}${linha("E-mail", v(c.email), 2)}</tr>
 <tr>${linha("Data de inclusão na TARGET", v(c.dataInclusaoTarget?fData(c.dataInclusaoTarget):""), 2)}${linha("Registrado no BP-Visionn", v(c.createdAt?fDataHoraBR(c.createdAt)+(c.createdByNome?" — "+c.createdByNome:""):""), 2)}</tr></table>
 <h2>Documentos</h2>

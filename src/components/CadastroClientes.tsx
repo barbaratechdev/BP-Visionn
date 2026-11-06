@@ -14,7 +14,7 @@ import CadastroClienteDetalhe from "./CadastroClienteDetalhe";
 
 const FORM_VAZIO = {
   id:null, razaoSocial:"", codigoRazaoSocial:"", cnpj:"", grupo:"", televendas:"", responsavelNome:"", telefone:"", email:"",
-  representanteId:"", supervisorId:"", dataInclusaoTarget:"", observacoes:"", situacao:"PENDENTE",
+  representanteId:"", supervisorId:"", estado:"", dataInclusaoTarget:"", observacoes:"", situacao:"PENDENTE",
   docContratoSocial:"PENDENTE", docCnpj:"PENDENTE", docCrf:"PENDENTE", docFotos:"PENDENTE", docNotas:"PENDENTE",
   docControlados:"", alvaraPrefeituraVencimento:"", alvaraSanitarioVencimento:"", suframaVencimento:"", sintegra:"", serasa:"",
   origemCadastro:"", representanteTipo:"INTERNO", representanteExternoNome:"", representanteCodigo:"", serasaValor:"",
@@ -46,6 +46,7 @@ export default function CadastroClientes(p) {
   const [fCnpj, setFCnpj] = useState("");
   const [fRep, setFRep] = useState("");
   const [fSup, setFSup] = useState("");
+  const [fEstado, setFEstado] = useState("");
   const [fSit, setFSit] = useState("todas");
   const [fDe, setFDe] = useState("");
   const [fAte, setFAte] = useState("");
@@ -90,6 +91,7 @@ export default function CadastroClientes(p) {
     if(fRep===FILTRO_REP_EXTERNO){ if(c.representanteTipo!=="EXTERNO") return false; }
     else if(fRep && c.representanteId!==fRep) return false;
     if(fSup && c.supervisorId!==fSup) return false;
+    if(fEstado==="__sem"){ if(c.estado) return false; } else if(fEstado && c.estado!==fEstado) return false;
     const inclusao = c.createdAt ? new Intl.DateTimeFormat("en-CA",{timeZone:"America/Belem"}).format(new Date(c.createdAt)) : "";
     if(fDe && inclusao<fDe) return false;
     if(fAte && inclusao>fAte) return false;
@@ -109,8 +111,8 @@ export default function CadastroClientes(p) {
     vencidos: contaAlvaras("VENCIDO"),
     aVencer: contaAlvaras("A_VENCER"),
   };
-  const filtrosAtivos = !!(busca||fCodigo||fCnpj||fRep||fSup||fSit!=="todas"||fDe||fAte||fDoc||fAlvara);
-  function limparFiltros(){ setBusca(""); setFCodigo(""); setFCnpj(""); setFRep(""); setFSup(""); setFSit("todas"); setFDe(""); setFAte(""); setFDoc(""); setFAlvara(""); }
+  const filtrosAtivos = !!(busca||fCodigo||fCnpj||fRep||fSup||fEstado||fSit!=="todas"||fDe||fAte||fDoc||fAlvara);
+  function limparFiltros(){ setBusca(""); setFCodigo(""); setFCnpj(""); setFRep(""); setFSup(""); setFEstado(""); setFSit("todas"); setFDe(""); setFAte(""); setFDoc(""); setFAlvara(""); }
 
   // --- Formulário
   function abrirNovo(){ setForm(FORM_VAZIO); setFormErr(""); resetDrag(); setShowForm(true); }
@@ -222,6 +224,7 @@ export default function CadastroClientes(p) {
         <div style={{flex:"1 1 160px"}}><label style={st.lbl}>CNPJ</label><input style={st.inp} inputMode="numeric" value={fCnpj} onChange={e=>setFCnpj(formatarCnpj(e.target.value))}/></div>
         <div style={{flex:"1 1 180px"}}><label style={st.lbl}>Representante / vendedor</label>{sel(fRep,setFRep,[...opcoes.representantes.map(r=>({v:r.id,l:r.nome+(r.status!=="Ativo"?" (inativo)":"")})),{v:FILTRO_REP_EXTERNO,l:"Representantes de outras empresas"}],"Todos")}</div>
         <div style={{flex:"1 1 180px"}}><label style={st.lbl}>Supervisor</label>{sel(fSup,setFSup,supervisoresAtivos.map(s=>({v:s.id,l:s.nome})),"Todos")}</div>
+        <div style={{flex:"1 1 150px"}}><label style={st.lbl}>Estado</label>{sel(fEstado,setFEstado,[{v:"Pará",l:"Pará"},{v:"Piauí",l:"Piauí"},{v:"Maranhão",l:"Maranhão"},{v:"__sem",l:"Não informado"}],"Todos")}</div>
       </div>
       <div className="bv-card" style={{...st.card,display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
         <div style={{flex:"1 1 160px"}}><label style={st.lbl}>Situação</label>
@@ -248,7 +251,7 @@ export default function CadastroClientes(p) {
           <div style={{fontSize:12,color:D.muted,marginBottom:8}}>{visiveis.length} cadastro(s)</div>
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Cliente","Representante","Supervisor","Inclusão","Situação","Documentos pendentes","Última atualização","Ações"].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
+            <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Cliente","Representante","Supervisor","Estado","Inclusão","Situação","Documentos pendentes","Última atualização","Ações"].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
             <tbody>{visiveis.map(c=>{
               const si = situacaoInfo(c.situacao,D);
               const pend = documentosPendentes(c);
@@ -263,6 +266,7 @@ export default function CadastroClientes(p) {
                 </div></td>
                 <td data-label="Representante" style={{padding:"10px 8px",color:D.text}}><span>{nomeRepresentante(c)||"—"}</span></td>
                 <td data-label="Supervisor" style={{padding:"10px 8px",color:D.muted}}>{c.supervisorNome||"—"}</td>
+                <td data-label="Estado" style={{padding:"10px 8px",color:D.muted}}>{c.estado||"—"}</td>
                 <td data-label="Inclusão" style={{padding:"10px 8px",color:D.muted,whiteSpace:"nowrap"}}>{c.createdAt?fDataHoraBR(c.createdAt).split(" às ")[0]:"—"}</td>
                 <td data-label="Situação" style={{padding:"10px 8px"}}>{chip(si.label, si)}</td>
                 <td data-label="Documentos pendentes" style={{padding:"10px 8px"}}>
@@ -357,6 +361,12 @@ export default function CadastroClientes(p) {
                   <option value="">Selecione...</option>
                   {supervisorVinculadoInativo&&<option value={supervisorVinculadoInativo.id}>{supervisorVinculadoInativo.nome} (inativo — vínculo atual)</option>}
                   {supervisoresAtivos.map(s=><option key={s.id} value={s.id}>{s.nome}</option>)}
+                </select>
+              </div>
+              <div><label style={st.lbl}>Estado</label>
+                <select style={st.inp} value={form.estado} onChange={e=>setForm(f=>({...f,estado:e.target.value}))}>
+                  <option value="">Selecione...</option>
+                  <option value="Pará">Pará</option><option value="Piauí">Piauí</option><option value="Maranhão">Maranhão</option>
                 </select>
               </div>
               <div><label style={st.lbl}>Televendas</label><input style={st.inp} value={form.televendas} onChange={e=>setForm(f=>({...f,televendas:e.target.value}))}/></div>
