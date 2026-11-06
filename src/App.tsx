@@ -1193,13 +1193,13 @@ export default function App() {
     };
     if(repForm.id){
       const { data, error } = await supabase.from("representantes").update(payload).eq("id",repForm.id).select("*").single();
-      if(error||!data){ setRepFormErr("Não foi possível salvar as alterações."); return; }
+      if(error||!data){ setRepFormErr("Não foi possível salvar as alterações."+(error?(error.code==="42501"?" Seu usuário não tem permissão para editar representantes (só Financeiro/Admin).":" Motivo: "+error.message):"")); return; }
       const atualizado = mapRepresentanteRow(data);
       setRepresentantes(prev=>prev.map(r=>r.id===atualizado.id?atualizado:r).sort((a,b)=>a.nome.localeCompare(b.nome)));
       addA("Edição de informações",nome,"Representante atualizado por "+(user?user.name:""));
     } else {
       const { data, error } = await supabase.from("representantes").insert(payload).select("*").single();
-      if(error||!data){ setRepFormErr("Não foi possível criar o representante."); return; }
+      if(error||!data){ setRepFormErr("Não foi possível criar o representante."+(error?(error.code==="42501"?" Seu usuário não tem permissão para cadastrar representantes (só Financeiro/Admin).":" Motivo: "+error.message):"")); return; }
       const novo = mapRepresentanteRow(data);
       setRepresentantes(prev=>[...prev, novo].sort((a,b)=>a.nome.localeCompare(b.nome)));
       setNewC(p=>({...p, representanteId:novo.id}));
