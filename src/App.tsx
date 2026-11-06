@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, Fragment } from "react";
+import Paginacao, { usePaginacao } from "./components/Paginacao";
 import { supabase } from "./lib/supabase";
 import { LayoutDashboard, Receipt, Clock, FileText, Bell, Search, LogOut, Plus, ChevronRight, ChevronDown, CheckCircle, AlertCircle, Calendar, User, Settings, X, Printer, ArrowRight, Pencil, Check, Zap, Eye, EyeOff, Lock, Edit3, Save, Moon, Sun, ClipboardList, Users, Mail, Menu, Trash2, MessageCircle, UserCog, CalendarClock, Briefcase, ShieldAlert, Percent, ClipboardCheck, Contact } from "lucide-react";
 import type { User as UserType, Tarefa, Contrato, AuditEntry, AppStyles } from "./types";
@@ -266,6 +267,7 @@ export default function App() {
     (!repSearch || r.nome.toLowerCase().includes(repSearch.toLowerCase()) || (r.cpf&&r.cpf.includes(repSearch)))
   );
   const representantesVisiveis = [...representantesFiltrados.filter(r=>r.status==="Ativo"), ...representantesFiltrados.filter(r=>r.status!=="Ativo")];
+  const pagRep = usePaginacao(representantesVisiveis, [repFiltroRegiao,repFiltroStatus,repFiltroSupervisor,repSearch].join("|"));
 
   useEffect(()=>{
     function h(e){ if(notifRef.current&&!notifRef.current.contains(e.target)) setShowNotif(false); }
@@ -2166,7 +2168,7 @@ export default function App() {
                   <div style={{overflowX:"auto"}}>
                   <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                     <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Nome","CPF ou CNPJ","Região","Supervisor","Status","Vínculo","Entrada","Tempo de casa","Saída",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-                    <tbody>{representantesVisiveis.map(r=>{
+                    <tbody>{pagRep.itens.map(r=>{
                       const sup = supervisoresCadastro.find(s=>s.id===r.supervisorCadastroId);
                       const diasVinculo = diasParaVencerVinculo(r);
                       const venceEmBreve = diasVinculo!==null && diasVinculo<=LIMITE_ALERTA_VINCULO_DIAS;
@@ -2200,6 +2202,7 @@ export default function App() {
                   </table>
                   </div>
                 )}
+                <Paginacao p={pagRep} D={D} st={st}/>
               </div>
             </div>
           )}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Paginacao, { usePaginacao } from "./Paginacao";
 import { Plus, Search, Pencil, Eye, Save, AlertCircle, Briefcase, AlertTriangle, Trash2, Download, CheckCircle2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { fData, mapFuncionarioRow, mapFeriasRow, mapExameRow, nomeVisivel } from "../lib/helpers";
@@ -180,6 +181,7 @@ export default function RH(p) {
     (!filtroIds||filtroIds.includes(f.id)) &&
     (!busca || f.nome.toLowerCase().includes(busca.toLowerCase()) || f.telefone.includes(busca) || (f.cargo||"").toLowerCase().includes(busca.toLowerCase()))
   );
+  const pag = usePaginacao(visiveis, [busca,filtroStatus,filtroVinculo,filtroEstado,filtroIds?filtroIds.join(","):""].join("|"));
 
   const funcionarioAberto = funcionarioAbertoId ? lista.find(f=>f.id===funcionarioAbertoId) : null;
 
@@ -316,7 +318,7 @@ export default function RH(p) {
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Funcionário","Cargo","Setor","Status","Admissão","Próx. exame","Férias",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-            <tbody>{visiveis.map(f=>{
+            <tbody>{pag.itens.map(f=>{
               const r = resumoDoFuncionario(f.id);
               return (
               <tr key={f.id} style={{borderBottom:"1px solid "+D.border,cursor:"pointer"}} onClick={()=>setFuncionarioAbertoId(f.id)}>
@@ -345,6 +347,7 @@ export default function RH(p) {
           </table>
           </div>
         )}
+        <Paginacao p={pag} D={D} st={st}/>
       </div>
       </>
       )}

@@ -5,6 +5,7 @@ import { fData, fTempoDeEmpresa, mapSupervisorRow, validarImagem, lerComoDataURL
 import { hoje } from "../constants";
 import { useDraggable } from "../lib/useDraggable";
 import Av from "./Av";
+import Paginacao, { usePaginacao } from "./Paginacao";
 
 const FORM_VAZIO = {id:null,nome:"",cpf:"",email:"",telefone:"",dataNascimento:"",cargo:"",regiao:"Pará",dataInicio:hoje,dataFim:"",status:"Ativo",observacoes:""};
 
@@ -115,6 +116,8 @@ export default function Supervisores(p) {
     (!busca || s.nome.toLowerCase().includes(busca.toLowerCase()) || s.cpf.includes(busca) || s.email.toLowerCase().includes(busca.toLowerCase()))
   );
 
+  const pag = usePaginacao(visiveis, [busca,filtroStatus,filtroRegiao].join("|"));
+
   if(loading) return <div style={{textAlign:"center",padding:"2rem",color:D.muted,fontSize:13}}>Carregando supervisores...</div>;
 
   return (
@@ -158,7 +161,7 @@ export default function Supervisores(p) {
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Supervisor","CPF ou CNPJ","Telefone","Região","Data de início","Tempo de casa","Status",""].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-            <tbody>{visiveis.map(s=>(
+            <tbody>{pag.itens.map(s=>(
               <tr key={s.id} style={{borderBottom:"1px solid "+D.border}}>
                 <td data-label="Supervisor" style={{padding:"10px 8px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -187,6 +190,7 @@ export default function Supervisores(p) {
           </table>
           </div>
         )}
+        <Paginacao p={pag} D={D} st={st}/>
       </div>
 
       {/* MODAL: cadastro / edição */}

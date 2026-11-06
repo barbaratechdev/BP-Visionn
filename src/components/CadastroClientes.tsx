@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Paginacao, { usePaginacao } from "./Paginacao";
 import { Plus, Search, AlertCircle, AlertTriangle, Save, Contact, Clock, CheckCircle, Hourglass, FileSearch, CalendarX, CalendarClock, Printer, Eye, Pencil, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { fDataHoraBR, nomeVisivel, fMoedaInput, fMoedaInputLive, parseMoedaInput } from "../lib/helpers";
@@ -100,6 +101,7 @@ export default function CadastroClientes(p) {
     return true;
   });
   const visiveis = base.filter(c=>fSit==="todas"||c.situacao===fSit);
+  const pag = usePaginacao(visiveis, [busca,fCodigo,fCnpj,fRep,fSup,fEstado,fSit,fDe,fAte,fDoc,fAlvara,mostrarExcluidos].join("|"));
   const ativosBase = base.filter(c=>!c.excluidoEm);
   const contaAlvaras = s => ativosBase.reduce((n,c)=>n+ALVARAS.filter(a=>statusAlvara(c[a.campo], hoje)===s).length,0);
   const kpi = {
@@ -252,7 +254,7 @@ export default function CadastroClientes(p) {
           <div style={{overflowX:"auto"}}>
           <table className="bv-table" style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
             <thead><tr style={{borderBottom:"1px solid "+D.border}}>{["Cliente","Representante","Supervisor","Estado","Inclusão","Situação","Documentos pendentes","Última atualização","Ações"].map(h=><th key={h} style={{textAlign:"left",padding:"6px 8px",color:D.muted,fontWeight:500,fontSize:12}}>{h}</th>)}</tr></thead>
-            <tbody>{visiveis.map(c=>{
+            <tbody>{pag.itens.map(c=>{
               const si = situacaoInfo(c.situacao,D);
               const pend = documentosPendentes(c);
               const alertas = alertasCliente(c, hoje);
@@ -290,6 +292,7 @@ export default function CadastroClientes(p) {
             })}</tbody>
           </table>
           </div>
+          <Paginacao p={pag} D={D} st={st}/>
           </>
         )}
       </div>
